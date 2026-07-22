@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		257681894B444D2784735B69 /* CanvasHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D48D8C6ACF85E367BFD35260 /* CanvasHostView.swift */; };
+		3AC5D72F0299A596AE1926B9 /* ResearchViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F11456C586746FF698A909A /* ResearchViews.swift */; };
 		50E82C33EBB43877BD0C18EE /* PetableDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5784A5AD0A8680F74738F4F5 /* PetableDocument.swift */; };
 		66ACAE8195976D7C719E5D32 /* CanvasRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C70377BEAC79F596245F8956 /* CanvasRootView.swift */; };
 		82184708D4ACED543534C1D3 /* GraphCore in Frameworks */ = {isa = PBXBuildFile; productRef = 36C73F57FA1089A82679D3FD /* GraphCore */; };
@@ -31,6 +32,7 @@
 
 /* Begin PBXFileReference section */
 		047B9837F8FEFE53EDB0338C /* ProjectStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectStore.swift; sourceTree = "<group>"; };
+		2F11456C586746FF698A909A /* ResearchViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResearchViews.swift; sourceTree = "<group>"; };
 		5784A5AD0A8680F74738F4F5 /* PetableDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetableDocument.swift; sourceTree = "<group>"; };
 		5EB6C462D7DAA6E097ACD327 /* petableUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = petableUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6ECDA5BAE270450B89F06F57 /* petable */ = {isa = PBXFileReference; lastKnownFileType = folder; name = petable; path = .; sourceTree = SOURCE_ROOT; };
@@ -85,6 +87,7 @@
 				5784A5AD0A8680F74738F4F5 /* PetableDocument.swift */,
 				047B9837F8FEFE53EDB0338C /* ProjectStore.swift */,
 				D79E12F8644248968D9CD2C3 /* ProjectsView.swift */,
+				2F11456C586746FF698A909A /* ResearchViews.swift */,
 			);
 			name = Sources;
 			path = App/Sources;
@@ -209,6 +212,7 @@
 				50E82C33EBB43877BD0C18EE /* PetableDocument.swift in Sources */,
 				D0D86A1C5D5226B88F0BC93B /* ProjectStore.swift in Sources */,
 				9D5E004F8ED6D6011C82B12A /* ProjectsView.swift in Sources */,
+				3AC5D72F0299A596AE1926B9 /* ResearchViews.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

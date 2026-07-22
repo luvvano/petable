@@ -44,6 +44,13 @@
     "swift-dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/PerfTests.swiftdeps",
     "diagnostics": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/PerfTests.dia"
   },
+  "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/ResearchTests.swift": {
+    "dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/ResearchTests.d",
+    "object": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/ResearchTests.swift.o",
+    "swiftmodule": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/ResearchTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/ResearchTests.swiftdeps",
+    "diagnostics": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/ResearchTests.dia"
+  },
   "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/RoleParserTests.swift": {
     "dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/RoleParserTests.d",
     "object": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/RoleParserTests.swift.o",

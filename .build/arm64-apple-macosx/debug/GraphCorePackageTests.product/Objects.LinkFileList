@@ -4,6 +4,7 @@
 /Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Job.swift.o
 /Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Layout.swift.o
 /Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/LevelStyle.swift.o
+/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Research.swift.o
 /Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/RoleParser.swift.o
 /Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/WorkGraph.swift.o
 /Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCorePackageTests.build/runner.swift.o
@@ -13,4 +14,5 @@
 /Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/GraphSessionTests.swift.o
 /Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/LayoutTests.swift.o
 /Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/PerfTests.swift.o
+/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/ResearchTests.swift.o
 /Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/RoleParserTests.swift.o

@@ -20,7 +20,19 @@ struct CanvasRootView: View {
     @State private var offset: CGSize = .zero
     /// Курсор в координатах контента — для proximity-reveal кнопок.
     @State private var cursorPosition: CGPoint?
+    /// Выделенное ребро — подсветка + ✕ на линии + Delete.
+    @State private var selectedEdge: JobEdge?
+    /// Активное связывание: drag от плюса узла к другому узлу.
+    @State private var dragLink: DragLink?
     @StateObject private var focusBridge = CanvasFocusBridge()
+
+    private static let contentSpace = "canvas-content"
+
+    private struct DragLink {
+        var from: UUID
+        var fromPoint: CGPoint
+        var current: CGPoint
+    }
 
     private let contentPadding: CGFloat = 90
     private let bandInset: CGFloat = 24
@@ -42,6 +54,7 @@ struct CanvasRootView: View {
                 onClickEmpty: {
                     commitEditingIfNeeded()
                     selection = nil
+                    selectedEdge = nil
                 },
                 onMouseMove: { location in
                     guard let location else {
@@ -83,6 +96,8 @@ struct CanvasRootView: View {
             // сбрасывается без коммита, новый пустой граф сразу в редакторе.
             editingId = nil
             selection = nil
+            selectedEdge = nil
+            dragLink = nil
             autoEditFreshDocument()
         }
     }
@@ -121,8 +136,22 @@ struct CanvasRootView: View {
             ForEach(Array(document.graph.levels.enumerated()), id: \.element.id) { index, level in
                 bandControls(index: index, level: level, positions: positions)
             }
+
+            // Резиновая линия: тянется от плюса к курсору при связывании.
+            if let dragLink {
+                Path { path in
+                    path.move(to: dragLink.fromPoint)
+                    path.addLine(to: dragLink.current)
+                }
+                .stroke(
+                    Color.accentColor.opacity(0.7),
+                    style: StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [5, 4])
+                )
+                .allowsHitTesting(false)
+            }
         }
         .frame(width: size.width, height: size.height, alignment: .topLeading)
+        .coordinateSpace(name: Self.contentSpace)
     }
 
     /// Тонкая точечная сетка на весь контент. Рисуется один раз на Canvas —
@@ -194,15 +223,15 @@ struct CanvasRootView: View {
             .proximityReveal(reveal(near: addJobPoint))
             .position(addJobPoint)
 
-        // Вставка уровня: над самой верхней полосой + под каждой
-        // (кромка между полосами — одна кнопка, тот же индекс).
+        // Вставка уровня: слева на кромке — над самой верхней полосой
+        // + под каждой (кромка между полосами — одна кнопка, тот же индекс).
         if index == 0 {
-            let topPoint = CGPoint(x: bandInset + 52, y: top - 3)
+            let topPoint = CGPoint(x: bandInset - 12, y: top - 3)
             insertLevelButton(at: 0)
                 .proximityReveal(reveal(near: topPoint))
                 .position(topPoint)
         }
-        let bottomPoint = CGPoint(x: bandInset + 52, y: top + bandHeight + 3)
+        let bottomPoint = CGPoint(x: bandInset - 12, y: top + bandHeight + 3)
         insertLevelButton(at: index + 1)
             .proximityReveal(reveal(near: bottomPoint))
             .position(bottomPoint)
@@ -271,22 +300,19 @@ struct CanvasRootView: View {
         .help("Добавить отдельную работу на этот уровень")
     }
 
+    /// Компактный плюс на левой кромке между полосами.
     private func insertLevelButton(at index: Int) -> some View {
         Button {
             commitEditingIfNeeded()
             document.perform(.insertLevel(at: index))
         } label: {
-            HStack(spacing: 5) {
-                Image(systemName: "plus")
-                    .font(.system(size: 9, weight: .bold))
-                Text("уровень")
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(Capsule().fill(.ultraThinMaterial))
-            .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.35), lineWidth: 1))
-            .contentShape(Capsule())
+            Image(systemName: "plus")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.secondary)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(.ultraThinMaterial))
+                .overlay(Circle().strokeBorder(Color.secondary.opacity(0.4), lineWidth: 1))
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .modifier(HoverPulse(idleOpacity: 0.75))
@@ -305,20 +331,41 @@ struct CanvasRootView: View {
             let toR = LevelStyle.style(for: toLevel).diameter / 2
             let vertical = fromLevel != toLevel
             let sign: CGFloat = to.x >= from.x ? 1 : -1
+            let start = vertical
+                ? CGPoint(x: from.x, y: from.y + (toLevel > fromLevel ? fromR : -fromR))
+                : CGPoint(x: from.x + sign * fromR, y: from.y)
+            let end = vertical
+                ? CGPoint(x: to.x, y: to.y - (toLevel > fromLevel ? toR + 3 : -(toR + 3)))
+                : CGPoint(x: to.x - sign * (toR + 3), y: to.y)
+            let shape = EdgeShape(from: start, to: end, vertical: vertical)
+            let isSelected = selectedEdge == edge
 
-            EdgeShape(
-                from: vertical
-                    ? CGPoint(x: from.x, y: from.y + (toLevel > fromLevel ? fromR : -fromR))
-                    : CGPoint(x: from.x + sign * fromR, y: from.y),
-                to: vertical
-                    ? CGPoint(x: to.x, y: to.y - (toLevel > fromLevel ? toR + 3 : -(toR + 3)))
-                    : CGPoint(x: to.x - sign * (toR + 3), y: to.y),
-                vertical: vertical
-            )
-            .stroke(
-                Color.gray.opacity(0.5),
-                style: StrokeStyle(lineWidth: 1.5, lineCap: .round)
-            )
+            shape
+                .stroke(
+                    isSelected ? Color.accentColor : Color.gray.opacity(0.5),
+                    style: StrokeStyle(lineWidth: isSelected ? 2.5 : 1.5, lineCap: .round)
+                )
+                // Хит-зона — сама линия, раздутая до 16pt; клики мимо линии
+                // проходят дальше (пустота, узлы).
+                .contentShape(EdgeHitShape(base: shape))
+                .onTapGesture { selectEdge(edge) }
+
+            if isSelected {
+                // Кубическая кривая с такими контролами проходит через
+                // середину отрезка — ✕ ложится точно на линию.
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 18, height: 18)
+                    .background(Circle().fill(Color.accentColor))
+                    .contentShape(Circle())
+                    .onTapGesture {
+                        document.perform(.toggleEdge(from: edge.from, to: edge.to))
+                        selectedEdge = nil
+                    }
+                    .help("Удалить связь (или Delete)")
+                    .position(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2)
+            }
         }
     }
 
@@ -333,15 +380,21 @@ struct CanvasRootView: View {
         let isHovered = cursorWithin(position, diameter / 2 + 8)
         let plusRight = CGPoint(x: position.x + diameter / 2 + 18, y: position.y)
         let plusBelow = CGPoint(x: position.x - diameter / 2 - 14, y: position.y + diameter / 2 + 14)
-        // Зоны плюсов держат кнопки видимыми по пути от круга до клика.
-        let showsPlus = isSelected || isHovered
+        // Зоны плюсов держат кнопки видимыми по пути от круга до клика;
+        // источник активного связывания не должен исчезнуть посреди drag.
+        let showsPlus = isSelected || isHovered || dragLink?.from == job.id
             || cursorWithin(plusRight, 20) || cursorWithin(plusBelow, 20)
+        // Узел под резиновой линией — подсветка цели связывания.
+        let isLinkTarget = dragLink.map {
+            $0.from != job.id
+                && hypot($0.current.x - position.x, $0.current.y - position.y) <= diameter / 2 + 12
+        } ?? false
 
         Circle()
             .fill(LevelColors.fill(for: level))
             .overlay(Circle().strokeBorder(LevelColors.stroke(for: level), lineWidth: 2))
             .overlay {
-                if isSelected {
+                if isSelected || isLinkTarget {
                     Circle()
                         .strokeBorder(Color.accentColor.opacity(0.8), lineWidth: 2.5)
                         .padding(-5)
@@ -353,14 +406,16 @@ struct CanvasRootView: View {
             .scaleEffect(isHovered ? 1.06 : 1)
             .animation(.spring(duration: 0.25), value: isHovered)
             .position(position)
-            // ⌘-клик — связь с выделенной работой (до обычных tap-жестов).
-            .gesture(
-                TapGesture()
-                    .modifiers(.command)
-                    .onEnded { toggleEdgeWithSelection(job.id) }
-            )
             .onTapGesture(count: 2) { beginEditing(job) }
-            .onTapGesture { select(job.id) }
+            // ⌘ проверяется внутри обычного тапа: отдельный
+            // TapGesture().modifiers(.command) блокирует ВСЕ клики узла.
+            .onTapGesture {
+                if NSEvent.modifierFlags.contains(.command) {
+                    toggleEdgeWithSelection(job.id)
+                } else {
+                    select(job.id)
+                }
+            }
             .contextMenu {
                 Button("Редактировать") { beginEditing(job) }
                 if let selection, selection != job.id {
@@ -379,7 +434,11 @@ struct CanvasRootView: View {
 
         if showsPlus {
             // Связанная работа справа — тот же уровень.
-            nodePlusButton(help: "Связанная работа справа") {
+            nodePlusControl(
+                source: job,
+                nodeCenter: position,
+                help: "Клик — связанная работа справа; потяните до узла — связь"
+            ) {
                 commitEditingIfNeeded()
                 if let newId = document.perform(.addConnectedRight(of: job.id)) {
                     startEditingNew(newId)
@@ -389,7 +448,11 @@ struct CanvasRootView: View {
             .transition(.scale(scale: 0.5).combined(with: .opacity))
 
             // Связанная работа снизу — уровень ниже.
-            nodePlusButton(help: "Связанная работа на уровень ниже") {
+            nodePlusControl(
+                source: job,
+                nodeCenter: position,
+                help: "Клик — связанная работа на уровень ниже; потяните до узла — связь"
+            ) {
                 commitEditingIfNeeded()
                 if let newId = document.perform(.addConnectedBelow(of: job.id)) {
                     startEditingNew(newId)
@@ -434,19 +497,56 @@ struct CanvasRootView: View {
         }
     }
 
-    private func nodePlusButton(help: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: "plus")
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 22, height: 22)
-                .background(Circle().fill(.ultraThinMaterial))
-                .overlay(Circle().strokeBorder(Color.accentColor.opacity(0.5), lineWidth: 1))
-                .contentShape(Circle())
+    /// Плюс у узла: клик — новая связанная работа, drag до другого узла —
+    /// связь с ним (toggle: повторный drag по той же паре убирает).
+    private func nodePlusControl(
+        source job: JobNode,
+        nodeCenter: CGPoint,
+        help: String,
+        onTap: @escaping () -> Void
+    ) -> some View {
+        Image(systemName: "plus")
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(Color.accentColor)
+            .frame(width: 22, height: 22)
+            .background(Circle().fill(.ultraThinMaterial))
+            .overlay(Circle().strokeBorder(Color.accentColor.opacity(0.5), lineWidth: 1))
+            .contentShape(Circle())
+            .modifier(HoverPulse(idleOpacity: 0.85))
+            .help(help)
+            .gesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.contentSpace))
+                    .onChanged { value in
+                        dragLink = DragLink(from: job.id, fromPoint: nodeCenter, current: value.location)
+                    }
+                    .onEnded { value in
+                        defer { dragLink = nil }
+                        let moved = hypot(value.translation.width, value.translation.height)
+                        if moved < 6 {
+                            onTap()
+                        } else if let target = nodeID(at: value.location), target != job.id {
+                            commitEditingIfNeeded()
+                            document.perform(.toggleEdge(from: job.id, to: target))
+                        }
+                        focusBridge.focusCanvas()
+                    }
+            )
+    }
+
+    /// Узел, чей круг (с небольшим допуском) накрывает точку контента.
+    private func nodeID(at pointInContent: CGPoint) -> UUID? {
+        let positions = GraphLayout.layout(document.graph)
+        for (levelIndex, level) in document.graph.levels.enumerated() {
+            let radius = LevelStyle.style(for: levelIndex).diameter / 2 + 12
+            for job in level.jobs {
+                guard let raw = positions[job.id] else { continue }
+                let center = point(raw)
+                if hypot(pointInContent.x - center.x, pointInContent.y - center.y) <= radius {
+                    return job.id
+                }
+            }
         }
-        .buttonStyle(.plain)
-        .modifier(HoverPulse(idleOpacity: 0.85))
-        .help(help)
+        return nil
     }
 
     @ViewBuilder
@@ -534,12 +634,18 @@ struct CanvasRootView: View {
             document.perform(.reorder(selection, direction: .right))
             return true
         case .delete:
+            if let edge = selectedEdge {
+                document.perform(.toggleEdge(from: edge.from, to: edge.to))
+                selectedEdge = nil
+                return true
+            }
             guard let selection else { return false }
             // Без модалки: ⌘Z возвращает работу вместе со связями.
             self.selection = document.perform(.delete(selection))
             return true
         case .escape:
             selection = nil
+            selectedEdge = nil
             return true
         case .left, .right:
             return moveSelectionInLevel(key == .right ? 1 : -1)
@@ -584,8 +690,16 @@ struct CanvasRootView: View {
     private func select(_ id: UUID) {
         commitEditingIfNeeded()
         selection = id
+        selectedEdge = nil
         // Клик по узлу не проходит через NSView канваса — фокус мог остаться
         // у сайдбара/другого поля, и Delete не дошёл бы до канваса.
+        focusBridge.focusCanvas()
+    }
+
+    private func selectEdge(_ edge: JobEdge) {
+        commitEditingIfNeeded()
+        selection = nil
+        selectedEdge = edge
         focusBridge.focusCanvas()
     }
 
@@ -676,6 +790,18 @@ private extension View {
         self
             .opacity(opacity)
             .allowsHitTesting(opacity > 0.1)
+    }
+}
+
+/// Хит-зона ребра: линия, раздутая до кликабельной толщины.
+/// strokedPath превращает обводку в заполняемый контур — contentShape
+/// попадает только по самой линии, а не по её bounding box.
+private struct EdgeHitShape: Shape {
+    var base: EdgeShape
+
+    func path(in rect: CGRect) -> Path {
+        base.path(in: rect)
+            .strokedPath(StrokeStyle(lineWidth: 16, lineCap: .round))
     }
 }
 

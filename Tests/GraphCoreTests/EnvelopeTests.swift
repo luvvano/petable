@@ -56,14 +56,17 @@ struct EnvelopeTests {
 
     @Test("4. Несколько графов: id, имена и порядок стадий переживают round-trip")
     func multiGraphRoundTrip() throws {
+        let modified = Date(timeIntervalSinceReferenceDate: 800_000_000)
         let envelope = Envelope(stages: [
-            Envelope.Stage(name: "Закрытие месяца", graph: Fixtures.closeMonth()),
+            Envelope.Stage(name: "Закрытие месяца", modifiedAt: modified, graph: Fixtures.closeMonth()),
             Envelope.Stage(name: "Онбординг", graph: WorkGraph(levels: [GraphLevel(jobs: [JobNode(verb: "нанять")])])),
         ])
         let decoded = try Envelope.decode(try envelope.encoded())
         #expect(decoded == envelope)
         #expect(decoded.stages.map(\.id) == envelope.stages.map(\.id))
         #expect(decoded.stages.map(\.name) == ["Закрытие месяца", "Онбординг"])
+        #expect(decoded.stages[0].modifiedAt == modified)
+        #expect(decoded.stages[1].modifiedAt == nil)
         #expect(decoded.jobGraphStages.count == 2)
     }
 

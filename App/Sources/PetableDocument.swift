@@ -25,6 +25,16 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
     @Published private(set) var stages: [Envelope.Stage]
     @Published private(set) var selectedGraphID: UUID?
 
+    /// Раздел «Исследования»: шаблоны интервью + интервью.
+    @Published private(set) var research: Research
+    /// Что открыто в detail вместо канваса; nil — показывается граф.
+    @Published private(set) var selectedResearchItem: ResearchSelection?
+
+    enum ResearchSelection: Hashable {
+        case interview(UUID)
+        case template(UUID)
+    }
+
     /// Сессия на каждый граф, к которому прикасались. Живут, пока жив
     /// undoManager окна: undo-события ссылаются на сессию как на target,
     /// выбрасывать её из словаря при живом стеке нельзя.
@@ -39,6 +49,7 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
         let stage = Envelope.Stage(graph: WorkGraph(levels: [GraphLevel(jobs: [JobNode(verb: "")])]))
         stages = [stage]
         selectedGraphID = stage.id
+        research = Research(templates: InterviewTemplate.defaultTemplates())
     }
 
     init(configuration: ReadConfiguration) throws {
@@ -46,15 +57,22 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
             throw CocoaError(.fileReadCorruptFile)
         }
         let envelope = try Envelope.decode(data)
-        guard let first = envelope.jobGraphStages.first else {
+        let graphs = envelope.jobGraphStages
+        guard !graphs.isEmpty else {
             throw CocoaError(.fileReadCorruptFile)
         }
         stages = envelope.stages
-        selectedGraphID = first.id
+        // Файлы до v4 без исследований получают дефолтные шаблоны.
+        research = envelope.research ?? Research(templates: InterviewTemplate.defaultTemplates())
+        // Открывается последний граф по времени изменения;
+        // без отметок (старые файлы) — первый.
+        selectedGraphID = (graphs.max {
+            ($0.modifiedAt ?? .distantPast) < ($1.modifiedAt ?? .distantPast)
+        } ?? graphs[0]).id
     }
 
     func snapshot(contentType: UTType) throws -> Envelope {
-        Envelope(stages: stages)
+        Envelope(stages: stages, research: research)
     }
 
     func fileWrapper(snapshot: Envelope, configuration: WriteConfiguration) throws -> FileWrapper {
@@ -75,8 +93,22 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
 
     @MainActor
     func selectGraph(_ id: UUID) {
-        guard selectedGraphID != id, graphStages.contains(where: { $0.id == id }) else { return }
+        guard graphStages.contains(where: { $0.id == id }) else { return }
+        // Клик по графу возвращает канвас, даже если граф тот же.
+        if selectedResearchItem != nil { selectedResearchItem = nil }
+        guard selectedGraphID != id else { return }
         selectedGraphID = id
+    }
+
+    @MainActor
+    func selectResearch(_ item: ResearchSelection) {
+        switch item {
+        case .interview(let id):
+            guard research.interviews.contains(where: { $0.id == id }) else { return }
+        case .template(let id):
+            guard research.templates.contains(where: { $0.id == id }) else { return }
+        }
+        selectedResearchItem = item
     }
 
     // MARK: - Undo
@@ -116,6 +148,7 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
                   let index = self.stages.firstIndex(where: { $0.id == stageID })
             else { return }
             self.stages[index].graph = newGraph
+            self.stages[index].modifiedAt = Date()
         }
         sessions[stageID] = session
         return session
@@ -129,6 +162,7 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
     func addGraph() -> UUID {
         let stage = Envelope.Stage(
             name: nextGraphName(),
+            modifiedAt: Date(),
             graph: WorkGraph(levels: [GraphLevel(jobs: [JobNode(verb: "")])])
         )
         applyListChange {
@@ -175,10 +209,13 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
         return candidate
     }
 
-    /// Снапшот списка стадий + выбора для undo операций над списком.
+    /// Снапшот списка стадий, исследований и выбора для undo
+    /// структурных операций (вне правок графа через GraphSession).
     private struct ListState {
         var stages: [Envelope.Stage]
+        var research: Research
         var selection: UUID?
+        var researchSelection: ResearchSelection?
     }
 
     /// Меняет список стадий с регистрацией undo. Снапшоты сессий и списка
@@ -186,7 +223,12 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
     /// полные копии списка не конфликтуют с пограничными правками графов.
     @MainActor
     private func applyListChange(_ change: () -> Void) {
-        let before = ListState(stages: stages, selection: selectedGraphID)
+        let before = ListState(
+            stages: stages,
+            research: research,
+            selection: selectedGraphID,
+            researchSelection: selectedResearchItem
+        )
         change()
         registerListUndo(restoring: before)
     }
@@ -205,9 +247,149 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
 
     @MainActor
     private func restoreList(_ state: ListState) {
-        let current = ListState(stages: stages, selection: selectedGraphID)
+        let current = ListState(
+            stages: stages,
+            research: research,
+            selection: selectedGraphID,
+            researchSelection: selectedResearchItem
+        )
         registerListUndo(restoring: current)
         stages = state.stages
+        research = state.research
         selectedGraphID = state.selection
+        selectedResearchItem = state.researchSelection
+    }
+
+    // MARK: - Исследования: интервью
+
+    /// Новое интервью по шаблону (снапшот шаблона копируется внутрь);
+    /// становится выбранным.
+    @MainActor
+    @discardableResult
+    func addInterview(templateID: UUID) -> UUID? {
+        guard let template = research.templates.first(where: { $0.id == templateID }) else { return nil }
+        let interview = Interview(
+            name: nextInterviewName(),
+            template: template,
+            createdAt: Date()
+        )
+        applyListChange {
+            research.interviews.append(interview)
+            selectedResearchItem = .interview(interview.id)
+        }
+        return interview.id
+    }
+
+    @MainActor
+    func renameInterview(_ id: UUID, to rawName: String) {
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty,
+              let index = research.interviews.firstIndex(where: { $0.id == id }),
+              research.interviews[index].name != name
+        else { return }
+        applyListChange {
+            research.interviews[index].name = name
+        }
+    }
+
+    @MainActor
+    func deleteInterview(_ id: UUID) {
+        guard let index = research.interviews.firstIndex(where: { $0.id == id }) else { return }
+        applyListChange {
+            research.interviews.remove(at: index)
+            if selectedResearchItem == .interview(id) {
+                selectedResearchItem = nil
+            }
+        }
+    }
+
+    /// Ответ на поле формы интервью. Вью коммитит по потере фокуса,
+    /// не по символу — одна запись в undo-стеке на правку поля; она же
+    /// помечает документ изменённым для автосохранения. Плейсхолдер,
+    /// который питает это поле, распространяется на все вопросы.
+    @MainActor
+    func setInterviewAnswer(_ interviewID: UUID, fieldID: UUID, text: String) {
+        guard let index = research.interviews.firstIndex(where: { $0.id == interviewID }),
+              research.interviews[index].answers[fieldID] ?? "" != text
+        else { return }
+        applyListChange {
+            research.interviews[index].setAnswer(text, for: fieldID)
+            research.interviews[index].modifiedAt = Date()
+        }
+    }
+
+    /// Ручная правка значения плейсхолдера из панели формы.
+    @MainActor
+    func setInterviewPlaceholder(_ interviewID: UUID, key: String, value: String) {
+        guard let index = research.interviews.firstIndex(where: { $0.id == interviewID }) else { return }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard research.interviews[index].placeholderValues[key] ?? "" != trimmed else { return }
+        applyListChange {
+            research.interviews[index].placeholderValues[key] = trimmed.isEmpty ? nil : trimmed
+            research.interviews[index].modifiedAt = Date()
+        }
+    }
+
+    // MARK: - Исследования: шаблоны
+
+    /// Новый пустой шаблон с одной секцией и одним вопросом; открывается
+    /// в редакторе шаблона.
+    @MainActor
+    @discardableResult
+    func addTemplate() -> UUID {
+        let template = InterviewTemplate(
+            name: nextTemplateName(),
+            sections: [
+                InterviewTemplate.Section(title: "Секция 1", fields: [
+                    InterviewTemplate.Field(title: "Вопрос", question: "")
+                ])
+            ]
+        )
+        applyListChange {
+            research.templates.append(template)
+            selectedResearchItem = .template(template.id)
+        }
+        return template.id
+    }
+
+    /// Полная замена шаблона (редактор отдаёт целиком). Интервью,
+    /// созданные раньше, не трогаются — у них свой снапшот.
+    @MainActor
+    func updateTemplate(_ template: InterviewTemplate) {
+        guard let index = research.templates.firstIndex(where: { $0.id == template.id }),
+              research.templates[index] != template
+        else { return }
+        applyListChange {
+            research.templates[index] = template
+        }
+    }
+
+    @MainActor
+    func deleteTemplate(_ id: UUID) {
+        guard let index = research.templates.firstIndex(where: { $0.id == id }) else { return }
+        applyListChange {
+            research.templates.remove(at: index)
+            if selectedResearchItem == .template(id) {
+                selectedResearchItem = nil
+            }
+        }
+    }
+
+    private func nextInterviewName() -> String {
+        uniqueName(base: "Интервью", existing: Set(research.interviews.map(\.name)))
+    }
+
+    private func nextTemplateName() -> String {
+        uniqueName(base: "Шаблон", existing: Set(research.templates.map(\.name)))
+    }
+
+    private func uniqueName(base: String, existing: Set<String>) -> String {
+        var number = existing.count + 1
+        var candidate = "\(base) \(number)"
+        while existing.contains(candidate) {
+            number += 1
+            candidate = "\(base) \(number)"
+        }
+        return candidate
     }
 }
