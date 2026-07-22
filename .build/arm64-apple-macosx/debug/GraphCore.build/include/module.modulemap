@@ -1,0 +1,3 @@
+module GraphCore {
+    header "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/include/GraphCore-Swift.h"
+}

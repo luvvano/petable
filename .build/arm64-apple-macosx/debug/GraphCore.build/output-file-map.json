@@ -1,0 +1,54 @@
+{
+  "": {
+    "swift-dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/primary.swiftdeps"
+  },
+  "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Envelope.swift": {
+    "dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Envelope.d",
+    "object": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Envelope.swift.o",
+    "swiftmodule": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Envelope~partial.swiftmodule",
+    "swift-dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Envelope.swiftdeps",
+    "diagnostics": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Envelope.dia"
+  },
+  "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/GraphEngine.swift": {
+    "dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/GraphEngine.d",
+    "object": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/GraphEngine.swift.o",
+    "swiftmodule": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/GraphEngine~partial.swiftmodule",
+    "swift-dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/GraphEngine.swiftdeps",
+    "diagnostics": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/GraphEngine.dia"
+  },
+  "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/GraphSession.swift": {
+    "dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/GraphSession.d",
+    "object": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/GraphSession.swift.o",
+    "swiftmodule": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/GraphSession~partial.swiftmodule",
+    "swift-dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/GraphSession.swiftdeps",
+    "diagnostics": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/GraphSession.dia"
+  },
+  "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Job.swift": {
+    "dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Job.d",
+    "object": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Job.swift.o",
+    "swiftmodule": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Job~partial.swiftmodule",
+    "swift-dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Job.swiftdeps",
+    "diagnostics": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Job.dia"
+  },
+  "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Layout.swift": {
+    "dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Layout.d",
+    "object": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Layout.swift.o",
+    "swiftmodule": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Layout~partial.swiftmodule",
+    "swift-dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Layout.swiftdeps",
+    "diagnostics": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Layout.dia"
+  },
+  "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/LevelStyle.swift": {
+    "dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/LevelStyle.d",
+    "object": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/LevelStyle.swift.o",
+    "swiftmodule": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/LevelStyle~partial.swiftmodule",
+    "swift-dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/LevelStyle.swiftdeps",
+    "diagnostics": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/LevelStyle.dia"
+  },
+  "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/RoleParser.swift": {
+    "dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/RoleParser.d",
+    "object": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/RoleParser.swift.o",
+    "swiftmodule": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/RoleParser~partial.swiftmodule",
+    "swift-dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/RoleParser.swiftdeps",
+    "diagnostics": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/RoleParser.dia"
+  }
+}

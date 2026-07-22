@@ -1,0 +1,38 @@
+name: petable
+options:
+  bundleIdPrefix: com.egorproskurin
+  deploymentTarget:
+    macOS: "14.0"
+packages:
+  GraphCore:
+    path: .
+targets:
+  petableUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - App/UITests
+    dependencies:
+      - target: petable
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+        TEST_TARGET_NAME: petable
+        GENERATE_INFOPLIST_FILE: true
+  petable:
+    type: application
+    platform: macOS
+    sources:
+      - App/Sources
+    dependencies:
+      - package: GraphCore
+        product: GraphCore
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: false
+        INFOPLIST_FILE: App/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.egorproskurin.petable
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_HARDENED_RUNTIME: false
