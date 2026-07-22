@@ -102,6 +102,28 @@ struct GraphEngineTests {
         }
     }
 
+    @Test("toggleEdge: нет связи — создаёт, есть (в любом направлении) — удаляет")
+    func toggleEdge() throws {
+        let graph = Fixtures.closeMonth()
+        let a = graph.levels[1].jobs[0]
+        let b = graph.levels[1].jobs[1]
+
+        // Создание: same-level ребро a → b.
+        let created = try #require(GraphEngine.apply(.toggleEdge(from: a.id, to: b.id), to: graph))
+        #expect(created.graph.edges.contains(JobEdge(from: a.id, to: b.id)))
+        #expect(created.focus == b.id)
+
+        // Повторный toggle с ОБРАТНЫМ направлением — ребро удаляется.
+        let removed = try #require(GraphEngine.apply(.toggleEdge(from: b.id, to: a.id), to: created.graph))
+        #expect(!removed.graph.edges.contains(JobEdge(from: a.id, to: b.id)))
+        #expect(!removed.graph.edges.contains(JobEdge(from: b.id, to: a.id)))
+        #expect(removed.graph.edges.count == graph.edges.count)
+
+        // Петля и несуществующие узлы — no-op.
+        #expect(GraphEngine.apply(.toggleEdge(from: a.id, to: a.id), to: graph) == nil)
+        #expect(GraphEngine.apply(.toggleEdge(from: a.id, to: UUID()), to: graph) == nil)
+    }
+
     @Test("setText: парсинг роли")
     func setTextParsesRole() throws {
         let graph = Fixtures.closeMonth()

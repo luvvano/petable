@@ -14,6 +14,7 @@ struct GraphSessionTests {
             .addConnectedBelow(of: source.id),
             .reorder(source.id, direction: .right),
             .delete(source.id),
+            .toggleEdge(from: source.id, to: graph.levels[1].jobs[0].id),
             .setText(source.id, raw: "аудитор: хочу пересчитать"),
         ]
     }

@@ -6,33 +6,67 @@ import Foundation
 /// отдельного поля нет. Lossless round-trip неизвестных типов стадий
 /// отложен до появления второго писателя файла (см. TODOS.md).
 ///
-/// v1: граф — дерево `Job`. v2: граф — `WorkGraph` (уровни + рёбра).
-/// v1 читается и мигрирует на лету; запись всегда в v2.
+/// v1: граф — дерево `Job`. v2: граф — `WorkGraph` (уровни + рёбра),
+/// одна стадия без имени. v3: у стадии появились `id` и `name` —
+/// проект держит несколько именованных графов работ.
+/// v1/v2 читаются и мигрируют на лету; запись всегда в v3.
 public struct Envelope: Codable, Equatable, Sendable {
-    public static let currentVersion = 2
+    public static let currentVersion = 3
     public static let jobGraphStageType = "jobGraph"
+    public static let defaultGraphName = "Граф работ"
 
     public var version: Int
     public var stages: [Stage]
 
-    public struct Stage: Codable, Equatable, Sendable {
+    public struct Stage: Codable, Equatable, Identifiable, Sendable {
+        public var id: UUID
         public var type: String
+        public var name: String
         public var graph: WorkGraph
 
-        public init(type: String = Envelope.jobGraphStageType, graph: WorkGraph) {
+        public init(
+            id: UUID = UUID(),
+            type: String = Envelope.jobGraphStageType,
+            name: String = Envelope.defaultGraphName,
+            graph: WorkGraph
+        ) {
+            self.id = id
             self.type = type
+            self.name = name
             self.graph = graph
+        }
+
+        enum CodingKeys: String, CodingKey { case id, type, name, graph }
+
+        /// v2-стадии не имели `id` и `name` — при чтении подставляются
+        /// значения по умолчанию, сохранение перезапишет файл в v3.
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+            self.type = try container.decode(String.self, forKey: .type)
+            self.name = try container.decodeIfPresent(String.self, forKey: .name)
+                ?? Envelope.defaultGraphName
+            self.graph = try container.decode(WorkGraph.self, forKey: .graph)
         }
     }
 
     public init(graph: WorkGraph) {
-        self.version = Self.currentVersion
-        self.stages = [Stage(graph: graph)]
+        self.init(stages: [Stage(graph: graph)])
     }
 
-    /// Первая стадия jobGraph — единственная, которую рендерит приложение.
+    public init(stages: [Stage]) {
+        self.version = Self.currentVersion
+        self.stages = stages
+    }
+
+    /// Первая стадия jobGraph — граф по умолчанию (для миграций и тестов).
     public var jobGraph: WorkGraph? {
         stages.first(where: { $0.type == Self.jobGraphStageType })?.graph
+    }
+
+    /// Все стадии-графы работ в порядке файла.
+    public var jobGraphStages: [Stage] {
+        stages.filter { $0.type == Self.jobGraphStageType }
     }
 
     public enum EnvelopeError: Error, Equatable, LocalizedError {
@@ -61,14 +95,15 @@ public struct Envelope: Codable, Equatable, Sendable {
             throw EnvelopeError.unsupportedVersion(found: version, supported: Self.currentVersion)
         }
         if version == 1 {
-            // Миграция: дерево → уровни + рёбра; сохранение перезапишет в v2.
+            // Миграция: дерево → уровни + рёбра; сохранение перезапишет в v3.
             let legacy = try container.decode([LegacyStage].self, forKey: .stages)
             self.stages = legacy.map { Stage(type: $0.type, graph: WorkGraph(tree: $0.graph)) }
-            self.version = Self.currentVersion
         } else {
+            // v2 и v3 различаются только полями стадии — их закрывает
+            // decodeIfPresent в Stage.init(from:).
             self.stages = try container.decode([Stage].self, forKey: .stages)
-            self.version = version
         }
+        self.version = Self.currentVersion
     }
 
     public static func decode(_ data: Data) throws -> Envelope {

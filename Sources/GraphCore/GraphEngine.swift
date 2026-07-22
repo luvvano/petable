@@ -23,6 +23,9 @@ public enum GraphIntent: Equatable, Sendable {
     case reorder(UUID, direction: ReorderDirection)
     /// Удаляет работу и все её связи. Уровень остаётся, даже пустой.
     case delete(UUID)
+    /// Связь между существующими работами: есть (в любом направлении) —
+    /// удалить, нет — создать from → to. Петля from == to — no-op.
+    case toggleEdge(from: UUID, to: UUID)
     /// Разбирает `raw` грамматикой role:. Пустая строка на только что
     /// созданном (пустом) узле — удаление, на существующем — no-op.
     case setText(UUID, raw: String)
@@ -105,6 +108,22 @@ public enum GraphEngine {
             copy.levels[levelIndex].jobs.removeAll { $0.id == id }
             copy.edges.removeAll { $0.from == id || $0.to == id }
             return GraphResult(graph: copy, focus: focus)
+
+        case let .toggleEdge(from: fromID, to: toID):
+            guard fromID != toID,
+                  graph.job(fromID) != nil,
+                  graph.job(toID) != nil
+            else { return nil }
+            var copy = graph
+            let existing = copy.edges.filter {
+                ($0.from == fromID && $0.to == toID) || ($0.from == toID && $0.to == fromID)
+            }
+            if existing.isEmpty {
+                copy.edges.append(JobEdge(from: fromID, to: toID))
+            } else {
+                copy.edges.removeAll { edge in existing.contains(edge) }
+            }
+            return GraphResult(graph: copy, focus: toID)
 
         case let .setText(id, raw):
             guard let job = graph.job(id) else { return nil }

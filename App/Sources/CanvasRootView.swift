@@ -14,11 +14,12 @@ struct CanvasRootView: View {
     @State private var editingId: UUID?
     @State private var draft = ""
     @State private var editingIsNewNode = false
-    @State private var hoveredJob: UUID?
     @FocusState private var editorFocused: Bool
 
     @State private var scale: CGFloat = 1
     @State private var offset: CGSize = .zero
+    /// Курсор в координатах контента — для proximity-reveal кнопок.
+    @State private var cursorPosition: CGPoint?
     @StateObject private var focusBridge = CanvasFocusBridge()
 
     private let contentPadding: CGFloat = 90
@@ -42,6 +43,22 @@ struct CanvasRootView: View {
                     commitEditingIfNeeded()
                     selection = nil
                 },
+                onMouseMove: { location in
+                    guard let location else {
+                        cursorPosition = nil
+                        return
+                    }
+                    let content = CGPoint(
+                        x: (location.x - offset.width) / scale,
+                        y: (location.y - offset.height) / scale
+                    )
+                    // Порог 2pt: не дёргать пересборку канваса на каждый пиксель.
+                    if let cursor = cursorPosition,
+                       abs(cursor.x - content.x) < 2, abs(cursor.y - content.y) < 2 {
+                        return
+                    }
+                    cursorPosition = content
+                },
                 focusBridge: focusBridge
             )
 
@@ -61,6 +78,13 @@ struct CanvasRootView: View {
         .onChange(of: editorFocused) { _, focused in
             if !focused { commitEditingIfNeeded() }
         }
+        .onChange(of: document.selectedGraphID) { _, _ in
+            // Смена графа: правка чужого узла невозможна — редактор
+            // сбрасывается без коммита, новый пустой граф сразу в редакторе.
+            editingId = nil
+            selection = nil
+            autoEditFreshDocument()
+        }
     }
 
     // MARK: - Рендер
@@ -70,6 +94,10 @@ struct CanvasRootView: View {
         let size = contentSize(positions)
 
         ZStack(alignment: .topLeading) {
+            // Точечная сетка — ощущение бесконечной доски; масштабируется
+            // вместе с контентом.
+            dotGrid(size: size)
+
             // Полосы уровней — фон, событий не перехватывают: клики по
             // пустому месту уходят в CanvasHostView (deselect), hover не ломают.
             ForEach(Array(document.graph.levels.enumerated()), id: \.element.id) { index, _ in
@@ -97,6 +125,29 @@ struct CanvasRootView: View {
         .frame(width: size.width, height: size.height, alignment: .topLeading)
     }
 
+    /// Тонкая точечная сетка на весь контент. Рисуется один раз на Canvas —
+    /// дёшево даже на больших графах.
+    private func dotGrid(size: CGSize) -> some View {
+        Canvas { context, _ in
+            let step: CGFloat = 28
+            let dot: CGFloat = 1.6
+            var y: CGFloat = step / 2
+            while y < size.height {
+                var x: CGFloat = step / 2
+                while x < size.width {
+                    context.fill(
+                        Path(ellipseIn: CGRect(x: x, y: y, width: dot, height: dot)),
+                        with: .color(.primary.opacity(0.055))
+                    )
+                    x += step
+                }
+                y += step
+            }
+        }
+        .frame(width: size.width, height: size.height)
+        .allowsHitTesting(false)
+    }
+
     // MARK: Полосы уровней
 
     private func bandTop(_ index: Int) -> CGFloat {
@@ -116,14 +167,21 @@ struct CanvasRootView: View {
             .frame(width: width - bandInset * 2, height: bandHeight)
             .offset(x: bandInset, y: top)
 
-        Text("Уровень \(index + 1)")
-            .font(.system(size: 10, weight: .semibold, design: .rounded))
-            .foregroundStyle(LevelColors.stroke(for: index).opacity(0.55))
-            .position(x: bandInset + 46, y: top + 16)
+        // Вертикально у левой кромки полосы — не пересекается ни с узлами,
+        // ни с их подписями при любой плотности графа.
+        Text("УРОВЕНЬ \(index + 1)")
+            .font(.system(size: 9, weight: .bold, design: .rounded))
+            .tracking(1.4)
+            .foregroundStyle(LevelColors.stroke(for: index).opacity(0.65))
+            .fixedSize()
+            .rotationEffect(.degrees(-90))
+            .position(x: bandInset - 12, y: top + bandHeight / 2)
     }
 
     /// Кнопки полосы: «+ работа» в конце ряда, вставка уровня на стыках,
-    /// удаление пустого уровня. Полупрозрачны, оживают под курсором.
+    /// удаление пустого уровня. Появляются только рядом с курсором
+    /// (proximity-reveal) — канвас остаётся чистым, кнопка находится
+    /// движением в её сторону.
     @ViewBuilder
     private func bandControls(index: Int, level: GraphLevel, positions: [UUID: CGPoint]) -> some View {
         let top = bandTop(index)
@@ -131,20 +189,27 @@ struct CanvasRootView: View {
         let lastX = level.jobs.compactMap { positions[$0.id]?.x }.max().map { $0 + contentPadding }
 
         // Автономная работа — в конец уровня.
+        let addJobPoint = CGPoint(x: (lastX ?? contentPadding - 40) + 96, y: nodeY)
         addJobButton(level: level)
-            .position(x: (lastX ?? contentPadding - 40) + 96, y: nodeY)
+            .proximityReveal(reveal(near: addJobPoint))
+            .position(addJobPoint)
 
         // Вставка уровня: над самой верхней полосой + под каждой
         // (кромка между полосами — одна кнопка, тот же индекс).
         if index == 0 {
+            let topPoint = CGPoint(x: bandInset + 52, y: top - 3)
             insertLevelButton(at: 0)
-                .position(x: bandInset + 52, y: top - 3)
+                .proximityReveal(reveal(near: topPoint))
+                .position(topPoint)
         }
+        let bottomPoint = CGPoint(x: bandInset + 52, y: top + bandHeight + 3)
         insertLevelButton(at: index + 1)
-            .position(x: bandInset + 52, y: top + bandHeight + 3)
+            .proximityReveal(reveal(near: bottomPoint))
+            .position(bottomPoint)
 
         // Пустой уровень можно убрать.
         if level.jobs.isEmpty, document.graph.levels.count > 1 {
+            let trashPoint = CGPoint(x: (lastX ?? contentPadding - 40) + 148, y: nodeY)
             Button {
                 document.perform(.deleteLevel(level.id))
             } label: {
@@ -159,8 +224,27 @@ struct CanvasRootView: View {
             .buttonStyle(.plain)
             .modifier(HoverPulse())
             .help("Удалить пустой уровень")
-            .position(x: (lastX ?? contentPadding - 40) + 148, y: nodeY)
+            .proximityReveal(reveal(near: trashPoint))
+            .position(trashPoint)
         }
+    }
+
+    /// Курсор в радиусе от точки (координаты контента).
+    private func cursorWithin(_ point: CGPoint, _ radius: CGFloat) -> Bool {
+        guard let cursor = cursorPosition else { return false }
+        return hypot(cursor.x - point.x, cursor.y - point.y) <= radius
+    }
+
+    /// 1 вблизи точки, плавное затухание до 0 к краю радиуса.
+    /// Расстояние в координатах контента — работает при любом zoom.
+    private func reveal(near point: CGPoint) -> Double {
+        guard let cursor = cursorPosition else { return 0 }
+        let distance = hypot(cursor.x - point.x, cursor.y - point.y)
+        let full: CGFloat = 55
+        let edge: CGFloat = 150
+        if distance <= full { return 1 }
+        if distance >= edge { return 0 }
+        return Double(1 - (distance - full) / (edge - full))
     }
 
     private func addJobButton(level: GraphLevel) -> some View {
@@ -183,7 +267,7 @@ struct CanvasRootView: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .modifier(HoverPulse())
+        .modifier(HoverPulse(idleOpacity: 0.9))
         .help("Добавить отдельную работу на этот уровень")
     }
 
@@ -205,7 +289,7 @@ struct CanvasRootView: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .modifier(HoverPulse(idleOpacity: 0.4))
+        .modifier(HoverPulse(idleOpacity: 0.75))
         .help("Вставить уровень здесь")
     }
 
@@ -244,7 +328,14 @@ struct CanvasRootView: View {
     private func nodeView(_ job: JobNode, level: Int, at position: CGPoint) -> some View {
         let diameter = LevelStyle.style(for: level).diameter
         let isSelected = selection == job.id
-        let showsPlus = hoveredJob == job.id || isSelected
+        // Ховер — от позиции курсора, не от onHover: тот теряет exit-события
+        // при частых пересборках канваса и «залипает».
+        let isHovered = cursorWithin(position, diameter / 2 + 8)
+        let plusRight = CGPoint(x: position.x + diameter / 2 + 18, y: position.y)
+        let plusBelow = CGPoint(x: position.x - diameter / 2 - 14, y: position.y + diameter / 2 + 14)
+        // Зоны плюсов держат кнопки видимыми по пути от круга до клика.
+        let showsPlus = isSelected || isHovered
+            || cursorWithin(plusRight, 20) || cursorWithin(plusBelow, 20)
 
         Circle()
             .fill(LevelColors.fill(for: level))
@@ -252,23 +343,39 @@ struct CanvasRootView: View {
             .overlay {
                 if isSelected {
                     Circle()
-                        .strokeBorder(Color.accentColor.opacity(0.7), lineWidth: 3)
+                        .strokeBorder(Color.accentColor.opacity(0.8), lineWidth: 2.5)
                         .padding(-5)
+                        .shadow(color: Color.accentColor.opacity(0.45), radius: 6)
                 }
             }
+            .shadow(color: .black.opacity(0.16), radius: 3, y: 1.5)
             .frame(width: diameter, height: diameter)
-            .scaleEffect(hoveredJob == job.id ? 1.06 : 1)
-            .animation(.spring(duration: 0.25), value: hoveredJob == job.id)
+            .scaleEffect(isHovered ? 1.06 : 1)
+            .animation(.spring(duration: 0.25), value: isHovered)
             .position(position)
-            .onHover { inside in
-                if inside {
-                    hoveredJob = job.id
-                } else if hoveredJob == job.id {
-                    hoveredJob = nil
-                }
-            }
+            // ⌘-клик — связь с выделенной работой (до обычных tap-жестов).
+            .gesture(
+                TapGesture()
+                    .modifiers(.command)
+                    .onEnded { toggleEdgeWithSelection(job.id) }
+            )
             .onTapGesture(count: 2) { beginEditing(job) }
             .onTapGesture { select(job.id) }
+            .contextMenu {
+                Button("Редактировать") { beginEditing(job) }
+                if let selection, selection != job.id {
+                    Button(edgeExists(selection, job.id)
+                           ? "Убрать связь с выделенной"
+                           : "Связать с выделенной (⌘-клик)") {
+                        toggleEdgeWithSelection(job.id)
+                    }
+                }
+                Divider()
+                Button("Удалить", role: .destructive) {
+                    commitEditingIfNeeded()
+                    selection = document.perform(.delete(job.id))
+                }
+            }
 
         if showsPlus {
             // Связанная работа справа — тот же уровень.
@@ -278,7 +385,7 @@ struct CanvasRootView: View {
                     startEditingNew(newId)
                 }
             }
-            .position(x: position.x + diameter / 2 + 18, y: position.y)
+            .position(plusRight)
             .transition(.scale(scale: 0.5).combined(with: .opacity))
 
             // Связанная работа снизу — уровень ниже.
@@ -288,15 +395,15 @@ struct CanvasRootView: View {
                     startEditingNew(newId)
                 }
             }
-            .position(x: position.x - diameter / 2 - 14, y: position.y + diameter / 2 + 14)
+            .position(plusBelow)
             .transition(.scale(scale: 0.5).combined(with: .opacity))
         }
 
         if editingId == job.id {
-            TextField("role: хочу …", text: $draft)
-                .textFieldStyle(.roundedBorder)
+            TextField("роль: хочу …", text: $draft)
+                .textFieldStyle(.plain)
                 .font(.system(size: 12))
-                .frame(width: 220)
+                .multilineTextAlignment(.center)
                 .focused($editorFocused)
                 .onSubmit { commitEditing() }
                 .onExitCommand { cancelEditing() }
@@ -304,7 +411,21 @@ struct CanvasRootView: View {
                     commitEditingThenAddBelow()
                     return .handled
                 }
-                .position(x: position.x, y: position.y + diameter / 2 + 34)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .frame(width: 230)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(.regularMaterial)
+                        .shadow(color: .black.opacity(0.22), radius: 10, y: 3)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(Color.accentColor.opacity(0.6), lineWidth: 1.5)
+                )
+                // Узел у левого края — карточку прижимаем, чтобы не уехала
+                // за границу канваса (под сайдбар).
+                .position(x: max(position.x, 145), y: position.y + diameter / 2 + 36)
         } else {
             nodeLabel(job, level: level)
                 .position(x: position.x, y: position.y + diameter / 2 + 32)
@@ -333,7 +454,8 @@ struct CanvasRootView: View {
         VStack(spacing: 0) {
             if let role = job.role {
                 Text("\(role):")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(.secondary)
             }
             Text(job.verb)
                 .font(.system(size: level == 0 ? 12 : 11, weight: level == 0 ? .semibold : .regular))
@@ -462,6 +584,25 @@ struct CanvasRootView: View {
     private func select(_ id: UUID) {
         commitEditingIfNeeded()
         selection = id
+        // Клик по узлу не проходит через NSView канваса — фокус мог остаться
+        // у сайдбара/другого поля, и Delete не дошёл бы до канваса.
+        focusBridge.focusCanvas()
+    }
+
+    /// ⌘-клик / контекстное меню: связь выделенная → эта работа.
+    private func toggleEdgeWithSelection(_ target: UUID) {
+        guard let selection, selection != target else {
+            select(target)
+            return
+        }
+        document.perform(.toggleEdge(from: selection, to: target))
+        focusBridge.focusCanvas()
+    }
+
+    private func edgeExists(_ a: UUID, _ b: UUID) -> Bool {
+        document.graph.edges.contains {
+            ($0.from == a && $0.to == b) || ($0.from == b && $0.to == a)
+        }
     }
 
     // MARK: - Инлайн-редактирование
@@ -525,6 +666,16 @@ struct CanvasRootView: View {
            job.verb.isEmpty {
             startEditingNew(job.id)
         }
+    }
+}
+
+private extension View {
+    /// Proximity-reveal: прозрачность от близости курсора; невидимая
+    /// кнопка не ловит клики.
+    func proximityReveal(_ opacity: Double) -> some View {
+        self
+            .opacity(opacity)
+            .allowsHitTesting(opacity > 0.1)
     }
 }
 

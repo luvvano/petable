@@ -19,23 +19,28 @@ struct CanvasHostView: NSViewRepresentable {
     /// (множитель, позиция курсора в координатах вью) — zoom вокруг курсора.
     let onZoom: (CGFloat, CGPoint) -> Void
     let onClickEmpty: () -> Void
+    /// Позиция курсора в координатах вью; nil — курсор ушёл с канваса.
+    /// SwiftUI-ховер здесь не работает: NSView перехватывает mouseMoved,
+    /// поэтому трекинг живёт в самом NSView.
+    let onMouseMove: (CGPoint?) -> Void
     let focusBridge: CanvasFocusBridge
 
     func makeNSView(context: Context) -> EventCatcherView {
         let view = EventCatcherView()
-        view.onKey = onKey
-        view.onPan = onPan
-        view.onZoom = onZoom
-        view.onClickEmpty = onClickEmpty
-        focusBridge.view = view
+        apply(to: view)
         return view
     }
 
     func updateNSView(_ view: EventCatcherView, context: Context) {
+        apply(to: view)
+    }
+
+    private func apply(to view: EventCatcherView) {
         view.onKey = onKey
         view.onPan = onPan
         view.onZoom = onZoom
         view.onClickEmpty = onClickEmpty
+        view.onMouseMove = onMouseMove
         focusBridge.view = view
     }
 }
@@ -56,12 +61,32 @@ final class EventCatcherView: NSView {
     var onPan: ((CGSize) -> Void)?
     var onZoom: ((CGFloat, CGPoint) -> Void)?
     var onClickEmpty: (() -> Void)?
+    var onMouseMove: ((CGPoint?) -> Void)?
 
     override var acceptsFirstResponder: Bool { true }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         window?.makeFirstResponder(self)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        // inVisibleRect — область следует за размером вью сама.
+        addTrackingArea(NSTrackingArea(
+            rect: .zero,
+            options: [.mouseMoved, .mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
+            owner: self
+        ))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        onMouseMove?(cursorLocation(event))
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        onMouseMove?(nil)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -82,7 +107,7 @@ final class EventCatcherView: NSView {
         case 48: return .tab
         case 36: return cmd ? .cmdReturn : .enter
         case 53: return .escape
-        case 51: return .delete
+        case 51, 117: return .delete // backspace и forward-delete
         case 123: return cmd ? .cmdLeft : .left
         case 124: return cmd ? .cmdRight : .right
         case 125: return .down

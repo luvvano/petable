@@ -42,6 +42,31 @@ struct EnvelopeTests {
         #expect(graph.sources(of: tree.children[1].children[2].id) == [tree.children[1].id])
     }
 
+    @Test("3. v2 (стадия без id/name) читается: имя по умолчанию, запись в v3")
+    func v2StageGetsDefaults() throws {
+        let graph = Fixtures.closeMonth()
+        let graphJSON = try JSONEncoder().encode(graph)
+        let json = #"{"version": 2, "stages": [{"type": "jobGraph", "graph": \#(String(data: graphJSON, encoding: .utf8)!)}]}"#
+        let decoded = try Envelope.decode(json.data(using: .utf8)!)
+        #expect(decoded.version == Envelope.currentVersion)
+        #expect(decoded.stages.count == 1)
+        #expect(decoded.stages[0].name == Envelope.defaultGraphName)
+        #expect(decoded.jobGraph == graph)
+    }
+
+    @Test("4. Несколько графов: id, имена и порядок стадий переживают round-trip")
+    func multiGraphRoundTrip() throws {
+        let envelope = Envelope(stages: [
+            Envelope.Stage(name: "Закрытие месяца", graph: Fixtures.closeMonth()),
+            Envelope.Stage(name: "Онбординг", graph: WorkGraph(levels: [GraphLevel(jobs: [JobNode(verb: "нанять")])])),
+        ])
+        let decoded = try Envelope.decode(try envelope.encoded())
+        #expect(decoded == envelope)
+        #expect(decoded.stages.map(\.id) == envelope.stages.map(\.id))
+        #expect(decoded.stages.map(\.name) == ["Закрытие месяца", "Онбординг"])
+        #expect(decoded.jobGraphStages.count == 2)
+    }
+
     private struct LegacyEnvelope: Codable {
         var version: Int
         var stages: [Stage]
