@@ -1,8 +1,8 @@
 import Foundation
 
-/// Узел графа работ: «role: хочу + глагол» с упорядоченными детьми.
-/// Дерево, не произвольный граф. Порядок `children` = порядок
-/// последовательности слева направо на канвасе.
+/// Legacy-формат v1: узел-дерево «role: хочу + глагол» с упорядоченными
+/// детьми. Остался только для чтения старых файлов — при декодировании
+/// конверта v1 дерево мигрирует в WorkGraph (см. WorkGraph.init(tree:)).
 public struct Job: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var verb: String

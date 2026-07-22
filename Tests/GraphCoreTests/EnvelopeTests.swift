@@ -4,28 +4,50 @@ import Testing
 
 @Suite("Конверт документа")
 struct EnvelopeTests {
-    @Test("1. Encode/decode round-trip: роли, порядок детей, UUID стабильны")
+    @Test("1. Encode/decode round-trip: уровни, рёбра, роли, UUID стабильны")
     func roundTrip() throws {
         let envelope = Envelope(graph: Fixtures.closeMonth())
         let data = try envelope.encoded()
         let decoded = try Envelope.decode(data)
         #expect(decoded == envelope)
-        #expect(decoded.jobGraph?.children.map(\.id) == envelope.jobGraph?.children.map(\.id))
-        #expect(decoded.jobGraph?.children[1].children.count == 3)
+        #expect(decoded.jobGraph?.levels.map(\.id) == envelope.jobGraph?.levels.map(\.id))
+        #expect(decoded.jobGraph?.edges == envelope.jobGraph?.edges)
         #expect(decoded.version == Envelope.currentVersion)
     }
 
     @Test("2. Версия больше текущей → понятная ошибка, не порча")
     func futureVersionFails() throws {
         let json = #"{"version": 99, "stages": []}"#.data(using: .utf8)!
-        #expect(throws: Envelope.EnvelopeError.unsupportedVersion(found: 99, supported: 1)) {
+        #expect(throws: Envelope.EnvelopeError.unsupportedVersion(found: 99, supported: Envelope.currentVersion)) {
             try Envelope.decode(json)
         }
     }
 
-    @Test("2а. Версия 1 открывается штатно")
-    func currentVersionDecodes() throws {
-        let data = try Envelope(graph: Job(verb: "x")).encoded()
-        #expect(try Envelope.decode(data).jobGraph?.verb == "x")
+    @Test("2а. Legacy v1 (дерево Job) читается и мигрирует в WorkGraph")
+    func legacyV1Migrates() throws {
+        let tree = Fixtures.closeMonthTree()
+        let legacyJSON = try JSONEncoder().encode(LegacyEnvelope(
+            version: 1,
+            stages: [.init(type: "jobGraph", graph: tree)]
+        ))
+        let decoded = try Envelope.decode(legacyJSON)
+        let graph = try #require(decoded.jobGraph)
+        #expect(decoded.version == Envelope.currentVersion)
+        #expect(graph.levels.count == 3)
+        #expect(graph.levels[0].jobs.map(\.id) == [tree.id])
+        #expect(graph.levels[1].jobs.count == 5)
+        #expect(graph.levels[2].jobs.count == 3)
+        // Рёбра parent → child сохранены.
+        #expect(graph.sources(of: tree.children[0].id) == [tree.id])
+        #expect(graph.sources(of: tree.children[1].children[2].id) == [tree.children[1].id])
+    }
+
+    private struct LegacyEnvelope: Codable {
+        var version: Int
+        var stages: [Stage]
+        struct Stage: Codable {
+            var type: String
+            var graph: Job
+        }
     }
 }

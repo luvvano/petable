@@ -6,15 +6,15 @@ import Foundation
 /// undo-события). Документ приложения владеет сессией.
 @MainActor
 public final class GraphSession {
-    public private(set) var root: Job
+    public private(set) var graph: WorkGraph
     public let undoManager: UndoManager
 
-    public var onChange: ((Job) -> Void)?
+    public var onChange: ((WorkGraph) -> Void)?
 
-    public init(root: Job, undoManager: UndoManager = UndoManager()) {
-        self.root = root
+    public init(graph: WorkGraph, undoManager: UndoManager = UndoManager()) {
+        self.graph = graph
         self.undoManager = undoManager
-        // Снапшот копирует всё дерево — безлимитный стек растёт весь сеанс.
+        // Снапшот копирует весь граф — безлимитный стек растёт весь сеанс.
         undoManager.levelsOfUndo = 100
         // Детеминированная группировка: одна правка = одна undo-группа,
         // одинаково в приложении и в тестах (без зависимости от runloop).
@@ -24,30 +24,29 @@ public final class GraphSession {
     /// Применяет интент. Возвращает id узла для фокуса; nil = no-op (undo не регистрируется).
     @discardableResult
     public func perform(_ intent: GraphIntent) -> UUID? {
-        guard let result = GraphEngine.apply(intent, to: root) else { return nil }
-        assert(true) // undoManager собственный, nil невозможен by construction
-        let snapshot = root
+        guard let result = GraphEngine.apply(intent, to: graph) else { return nil }
+        let snapshot = graph
         undoManager.beginUndoGrouping()
         undoManager.registerUndo(withTarget: self) { session in
             MainActor.assumeIsolated { session.restore(snapshot) }
         }
         undoManager.endUndoGrouping()
-        setRoot(result.root)
+        setGraph(result.graph)
         return result.focus
     }
 
-    private func restore(_ snapshot: Job) {
-        let current = root
+    private func restore(_ snapshot: WorkGraph) {
+        let current = graph
         undoManager.beginUndoGrouping()
         undoManager.registerUndo(withTarget: self) { session in
             MainActor.assumeIsolated { session.restore(current) }
         }
         undoManager.endUndoGrouping()
-        setRoot(snapshot)
+        setGraph(snapshot)
     }
 
-    private func setRoot(_ newRoot: Job) {
-        root = newRoot
-        onChange?(newRoot)
+    private func setGraph(_ newGraph: WorkGraph) {
+        graph = newGraph
+        onChange?(newGraph)
     }
 }

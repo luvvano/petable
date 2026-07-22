@@ -2,8 +2,9 @@ import Foundation
 @testable import GraphCore
 
 enum Fixtures {
-    /// Референс-пример из дизайн-дока: 3 уровня, 9 узлов.
-    static func closeMonth() -> Job {
+    /// Референс-пример «Закрыть месяц» в legacy-формате дерева (v1) —
+    /// используется и для теста миграции, и как источник WorkGraph.
+    static func closeMonthTree() -> Job {
         Job(
             verb: "Закрыть месяц без ошибок",
             children: [
@@ -23,22 +24,25 @@ enum Fixtures {
         )
     }
 
-    /// Синтетическое дерево заданного размера для стресс-тестов:
-    /// ветвление 5, детерминированное.
-    static func synthetic(count: Int) -> Job {
-        var remaining = count - 1
-        func build(level: Int) -> [Job] {
-            var children: [Job] = []
-            while remaining > 0 && children.count < 5 {
-                remaining -= 1
-                var node = Job(verb: "узел \(remaining)", role: level % 2 == 0 ? "роль" : nil)
-                if level < 4 {
-                    node.children = build(level: level + 1)
-                }
-                children.append(node)
+    /// Тот же пример как WorkGraph: 3 уровня (1 + 5 + 3), рёбра parent→child.
+    static func closeMonth() -> WorkGraph {
+        WorkGraph(tree: closeMonthTree())
+    }
+
+    /// Синтетический граф заданного размера: 5 уровней, цепочки связей,
+    /// детерминированный. Для стресс-тестов.
+    static func synthetic(count: Int) -> WorkGraph {
+        var levels = (0..<5).map { _ in GraphLevel() }
+        var edges: [JobEdge] = []
+        var previous: JobNode?
+        for index in 0..<count {
+            let node = JobNode(verb: "узел \(index)", role: index % 2 == 0 ? "роль" : nil)
+            levels[index % 5].jobs.append(node)
+            if let previous, index % 7 != 0 {
+                edges.append(JobEdge(from: previous.id, to: node.id))
             }
-            return children
+            previous = node
         }
-        return Job(verb: "корень", children: build(level: 1))
+        return WorkGraph(levels: levels, edges: edges)
     }
 }

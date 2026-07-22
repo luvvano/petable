@@ -56,6 +56,10 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/WorkGraph.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
         },
         {
@@ -73,7 +77,8 @@
         "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Job.swift.o",
         "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Layout.swift.o",
         "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/LevelStyle.swift.o",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/RoleParser.swift.o"
+        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/RoleParser.swift.o",
+        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/WorkGraph.swift.o"
       ],
       "otherArguments" : [
         "-target",
@@ -156,6 +161,10 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/WorkGraph.swift.o"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/Modules/GraphCore.swiftmodule"
         }
       ],
@@ -167,7 +176,8 @@
         "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Job.swift",
         "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Layout.swift",
         "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/LevelStyle.swift",
-        "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/RoleParser.swift"
+        "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/RoleParser.swift",
+        "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/WorkGraph.swift"
       ],
       "tempsPath" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build",
       "wholeModuleOptimization" : false
@@ -440,6 +450,7 @@
       "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Layout.swift",
       "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/LevelStyle.swift",
       "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/RoleParser.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/WorkGraph.swift",
       "-I",
       "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/Modules",
       "-target",
@@ -686,6 +697,10 @@
         {
           "kind" : "file",
           "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/RoleParser.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/WorkGraph.swift"
         }
       ],
       "outputFilePath" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/sources"
@@ -738,6 +753,10 @@
         {
           "kind" : "file",
           "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/RoleParser.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/WorkGraph.swift.o"
         },
         {
           "kind" : "file",

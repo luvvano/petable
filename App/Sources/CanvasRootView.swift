@@ -1,10 +1,11 @@
 import SwiftUI
 import GraphCore
 
-/// Канвас графа работ: автораскладка, zoom/pan, клавиатурное редактирование.
-/// Позиции всех узлов — чистая функция от дерева (GraphLayout); ручного
-/// перетаскивания нет, поэтому анимация перекладки — просто spring вокруг
-/// мутации модели в PetableDocument.perform.
+/// Канвас графа работ: уровни-полосы, автораскладка слева направо,
+/// zoom/pan, клавиатурное и мышиное редактирование. Позиции — чистая
+/// функция от графа (GraphLayout); ручного перетаскивания нет, поэтому
+/// анимация перекладки — spring вокруг мутации модели
+/// в PetableDocument.perform.
 struct CanvasRootView: View {
     @ObservedObject var document: PetableDocument
     @Environment(\.undoManager) private var undoManager
@@ -13,6 +14,7 @@ struct CanvasRootView: View {
     @State private var editingId: UUID?
     @State private var draft = ""
     @State private var editingIsNewNode = false
+    @State private var hoveredJob: UUID?
     @FocusState private var editorFocused: Bool
 
     @State private var scale: CGFloat = 1
@@ -20,9 +22,13 @@ struct CanvasRootView: View {
     @StateObject private var focusBridge = CanvasFocusBridge()
 
     private let contentPadding: CGFloat = 90
+    private let bandInset: CGFloat = 24
+    /// Центр узла лежит на этом расстоянии от верхней кромки полосы.
+    private let nodeOffsetInBand: CGFloat = 50
+    private var bandHeight: CGFloat { LayoutMetrics.rowHeight - 10 }
 
     var body: some View {
-        let positions = GraphLayout.layout(document.root)
+        let positions = GraphLayout.layout(document.graph)
 
         ZStack(alignment: .topLeading) {
             CanvasHostView(
@@ -47,7 +53,7 @@ struct CanvasRootView: View {
         .background(Color(nsColor: .textBackgroundColor))
         .onAppear {
             document.attach(undoManager)
-            autoEditFreshRoot()
+            autoEditFreshDocument()
         }
         .onChange(of: undoManager) { _, newValue in
             document.attach(newValue)
@@ -64,29 +70,181 @@ struct CanvasRootView: View {
         let size = contentSize(positions)
 
         ZStack(alignment: .topLeading) {
+            // Полосы уровней — фон, событий не перехватывают: клики по
+            // пустому месту уходят в CanvasHostView (deselect), hover не ломают.
+            ForEach(Array(document.graph.levels.enumerated()), id: \.element.id) { index, _ in
+                bandBackground(index: index, width: size.width)
+                    .allowsHitTesting(false)
+            }
+
             // Рёбра: animatable Shape, интерполируются тем же spring, что и круги.
-            ForEach(document.root.allNodes, id: \.id) { node in
-                ForEach(node.children, id: \.id) { child in
-                    EdgeShape(
-                        from: point(positions[node.id]),
-                        to: point(positions[child.id])
-                    )
-                    .stroke(Color.gray.opacity(0.55), lineWidth: 1.5)
+            ForEach(document.graph.edges, id: \.self) { edge in
+                edgeView(edge, positions: positions)
+            }
+
+            // Узлы.
+            ForEach(Array(document.graph.levels.enumerated()), id: \.element.id) { levelIndex, level in
+                ForEach(level.jobs) { job in
+                    nodeView(job, level: levelIndex, at: point(positions[job.id]))
                 }
             }
 
-            ForEach(document.root.allNodes, id: \.id) { node in
-                nodeView(node, at: point(positions[node.id]))
+            // Контролы уровней: добавить работу, вставить/удалить уровень.
+            ForEach(Array(document.graph.levels.enumerated()), id: \.element.id) { index, level in
+                bandControls(index: index, level: level, positions: positions)
             }
         }
         .frame(width: size.width, height: size.height, alignment: .topLeading)
     }
 
+    // MARK: Полосы уровней
+
+    private func bandTop(_ index: Int) -> CGFloat {
+        contentPadding + CGFloat(index) * LayoutMetrics.rowHeight - nodeOffsetInBand
+    }
+
     @ViewBuilder
-    private func nodeView(_ node: Job, at position: CGPoint) -> some View {
-        let level = document.root.level(of: node.id) ?? 0
+    private func bandBackground(index: Int, width: CGFloat) -> some View {
+        let top = bandTop(index)
+
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(LevelColors.fill(for: index).opacity(0.07))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(LevelColors.stroke(for: index).opacity(0.18), lineWidth: 1)
+            )
+            .frame(width: width - bandInset * 2, height: bandHeight)
+            .offset(x: bandInset, y: top)
+
+        Text("Уровень \(index + 1)")
+            .font(.system(size: 10, weight: .semibold, design: .rounded))
+            .foregroundStyle(LevelColors.stroke(for: index).opacity(0.55))
+            .position(x: bandInset + 46, y: top + 16)
+    }
+
+    /// Кнопки полосы: «+ работа» в конце ряда, вставка уровня на стыках,
+    /// удаление пустого уровня. Полупрозрачны, оживают под курсором.
+    @ViewBuilder
+    private func bandControls(index: Int, level: GraphLevel, positions: [UUID: CGPoint]) -> some View {
+        let top = bandTop(index)
+        let nodeY = top + nodeOffsetInBand
+        let lastX = level.jobs.compactMap { positions[$0.id]?.x }.max().map { $0 + contentPadding }
+
+        // Автономная работа — в конец уровня.
+        addJobButton(level: level)
+            .position(x: (lastX ?? contentPadding - 40) + 96, y: nodeY)
+
+        // Вставка уровня: над самой верхней полосой + под каждой
+        // (кромка между полосами — одна кнопка, тот же индекс).
+        if index == 0 {
+            insertLevelButton(at: 0)
+                .position(x: bandInset + 52, y: top - 3)
+        }
+        insertLevelButton(at: index + 1)
+            .position(x: bandInset + 52, y: top + bandHeight + 3)
+
+        // Пустой уровень можно убрать.
+        if level.jobs.isEmpty, document.graph.levels.count > 1 {
+            Button {
+                document.perform(.deleteLevel(level.id))
+            } label: {
+                Image(systemName: "trash")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22, height: 22)
+                    .background(Circle().fill(.ultraThinMaterial))
+                    .overlay(Circle().strokeBorder(Color.secondary.opacity(0.35), lineWidth: 1))
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .modifier(HoverPulse())
+            .help("Удалить пустой уровень")
+            .position(x: (lastX ?? contentPadding - 40) + 148, y: nodeY)
+        }
+    }
+
+    private func addJobButton(level: GraphLevel) -> some View {
+        Button {
+            commitEditingIfNeeded()
+            if let newId = document.perform(.addJob(level: level.id)) {
+                startEditingNew(newId)
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "plus")
+                    .font(.system(size: 9, weight: .bold))
+                Text("работа")
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Capsule().fill(.ultraThinMaterial))
+            .overlay(Capsule().strokeBorder(Color.accentColor.opacity(0.4), lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .modifier(HoverPulse())
+        .help("Добавить отдельную работу на этот уровень")
+    }
+
+    private func insertLevelButton(at index: Int) -> some View {
+        Button {
+            commitEditingIfNeeded()
+            document.perform(.insertLevel(at: index))
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "plus")
+                    .font(.system(size: 9, weight: .bold))
+                Text("уровень")
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(.ultraThinMaterial))
+            .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.35), lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .modifier(HoverPulse(idleOpacity: 0.4))
+        .help("Вставить уровень здесь")
+    }
+
+    // MARK: Рёбра
+
+    @ViewBuilder
+    private func edgeView(_ edge: JobEdge, positions: [UUID: CGPoint]) -> some View {
+        if let fromLevel = document.graph.levelIndex(of: edge.from),
+           let toLevel = document.graph.levelIndex(of: edge.to) {
+            let from = point(positions[edge.from])
+            let to = point(positions[edge.to])
+            let fromR = LevelStyle.style(for: fromLevel).diameter / 2
+            let toR = LevelStyle.style(for: toLevel).diameter / 2
+            let vertical = fromLevel != toLevel
+            let sign: CGFloat = to.x >= from.x ? 1 : -1
+
+            EdgeShape(
+                from: vertical
+                    ? CGPoint(x: from.x, y: from.y + (toLevel > fromLevel ? fromR : -fromR))
+                    : CGPoint(x: from.x + sign * fromR, y: from.y),
+                to: vertical
+                    ? CGPoint(x: to.x, y: to.y - (toLevel > fromLevel ? toR + 3 : -(toR + 3)))
+                    : CGPoint(x: to.x - sign * (toR + 3), y: to.y),
+                vertical: vertical
+            )
+            .stroke(
+                Color.gray.opacity(0.5),
+                style: StrokeStyle(lineWidth: 1.5, lineCap: .round)
+            )
+        }
+    }
+
+    // MARK: Узлы
+
+    @ViewBuilder
+    private func nodeView(_ job: JobNode, level: Int, at position: CGPoint) -> some View {
         let diameter = LevelStyle.style(for: level).diameter
-        let isSelected = selection == node.id
+        let isSelected = selection == job.id
+        let showsPlus = hoveredJob == job.id || isSelected
 
         Circle()
             .fill(LevelColors.fill(for: level))
@@ -99,11 +257,42 @@ struct CanvasRootView: View {
                 }
             }
             .frame(width: diameter, height: diameter)
+            .scaleEffect(hoveredJob == job.id ? 1.06 : 1)
+            .animation(.spring(duration: 0.25), value: hoveredJob == job.id)
             .position(position)
-            .onTapGesture(count: 2) { beginEditing(node) }
-            .onTapGesture { select(node.id) }
+            .onHover { inside in
+                if inside {
+                    hoveredJob = job.id
+                } else if hoveredJob == job.id {
+                    hoveredJob = nil
+                }
+            }
+            .onTapGesture(count: 2) { beginEditing(job) }
+            .onTapGesture { select(job.id) }
 
-        if editingId == node.id {
+        if showsPlus {
+            // Связанная работа справа — тот же уровень.
+            nodePlusButton(help: "Связанная работа справа") {
+                commitEditingIfNeeded()
+                if let newId = document.perform(.addConnectedRight(of: job.id)) {
+                    startEditingNew(newId)
+                }
+            }
+            .position(x: position.x + diameter / 2 + 18, y: position.y)
+            .transition(.scale(scale: 0.5).combined(with: .opacity))
+
+            // Связанная работа снизу — уровень ниже.
+            nodePlusButton(help: "Связанная работа на уровень ниже") {
+                commitEditingIfNeeded()
+                if let newId = document.perform(.addConnectedBelow(of: job.id)) {
+                    startEditingNew(newId)
+                }
+            }
+            .position(x: position.x - diameter / 2 - 14, y: position.y + diameter / 2 + 14)
+            .transition(.scale(scale: 0.5).combined(with: .opacity))
+        }
+
+        if editingId == job.id {
             TextField("role: хочу …", text: $draft)
                 .textFieldStyle(.roundedBorder)
                 .font(.system(size: 12))
@@ -112,49 +301,49 @@ struct CanvasRootView: View {
                 .onSubmit { commitEditing() }
                 .onExitCommand { cancelEditing() }
                 .onKeyPress(.tab) {
-                    commitEditingThenAddChild()
+                    commitEditingThenAddBelow()
                     return .handled
                 }
-                .position(labelPosition(position, diameter: diameter, level: level))
+                .position(x: position.x, y: position.y + diameter / 2 + 34)
         } else {
-            nodeLabel(node, level: level)
-                .position(labelPosition(position, diameter: diameter, level: level))
-                .onTapGesture(count: 2) { beginEditing(node) }
-                .onTapGesture { select(node.id) }
+            nodeLabel(job, level: level)
+                .position(x: position.x, y: position.y + diameter / 2 + 32)
+                .onTapGesture(count: 2) { beginEditing(job) }
+                .onTapGesture { select(job.id) }
         }
+    }
+
+    private func nodePlusButton(help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: "plus")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(.ultraThinMaterial))
+                .overlay(Circle().strokeBorder(Color.accentColor.opacity(0.5), lineWidth: 1))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .modifier(HoverPulse(idleOpacity: 0.85))
+        .help(help)
     }
 
     @ViewBuilder
-    private func nodeLabel(_ node: Job, level: Int) -> some View {
-        if level == 0 {
-            Text(node.verb)
-                .font(.system(size: 15, weight: .bold))
-                .lineLimit(2)
-                .frame(width: 190, alignment: .leading)
-        } else {
-            VStack(spacing: 0) {
-                if let role = node.role {
-                    Text("\(role):")
-                        .font(.system(size: 11, weight: .semibold))
-                }
-                Text(node.verb)
-                    .font(.system(size: 11))
-                    // Резерв 3 строки — совпадает с labelReserve раскладки;
-                    // длиннее — truncation, полный текст в редакторе.
-                    .lineLimit(node.role == nil ? 3 : 2)
-                    .truncationMode(.tail)
-                    .multilineTextAlignment(.center)
+    private func nodeLabel(_ job: JobNode, level: Int) -> some View {
+        VStack(spacing: 0) {
+            if let role = job.role {
+                Text("\(role):")
+                    .font(.system(size: 11, weight: .semibold))
             }
-            .frame(width: LayoutMetrics.columnWidth - 6)
+            Text(job.verb)
+                .font(.system(size: level == 0 ? 12 : 11, weight: level == 0 ? .semibold : .regular))
+                // Резерв 3 строки — совпадает с labelReserve раскладки;
+                // длиннее — truncation, полный текст в редакторе.
+                .lineLimit(job.role == nil ? 3 : 2)
+                .truncationMode(.tail)
+                .multilineTextAlignment(.center)
         }
-    }
-
-    private func labelPosition(_ nodePosition: CGPoint, diameter: CGFloat, level: Int) -> CGPoint {
-        if level == 0, editingId == nil || editingId != document.root.id {
-            // Заголовок корня — справа от круга, как в референсе.
-            return CGPoint(x: nodePosition.x + diameter / 2 + 105, y: nodePosition.y)
-        }
-        return CGPoint(x: nodePosition.x, y: nodePosition.y + diameter / 2 + 30)
+        .frame(width: LayoutMetrics.columnWidth - 6)
     }
 
     private func point(_ position: CGPoint?) -> CGPoint {
@@ -163,9 +352,9 @@ struct CanvasRootView: View {
     }
 
     private func contentSize(_ positions: [UUID: CGPoint]) -> CGSize {
-        let maxX = (positions.values.map(\.x).max() ?? 0) + contentPadding * 2 + 120
-        let maxY = (positions.values.map(\.y).max() ?? 0) + contentPadding * 2 + 60
-        return CGSize(width: max(maxX, 800), height: max(maxY, 600))
+        let maxX = (positions.values.map(\.x).max() ?? 0) + contentPadding * 2 + 220
+        let bottom = bandTop(max(document.graph.levels.count - 1, 0)) + bandHeight + contentPadding
+        return CGSize(width: max(maxX, 900), height: max(bottom, 600))
     }
 
     // MARK: - Zoom вокруг курсора
@@ -191,20 +380,28 @@ struct CanvasRootView: View {
     private func handleKey(_ key: CanvasKey) -> Bool {
         switch key {
         case .tab:
-            let target = selection ?? document.root.id
-            if let newId = document.perform(.addChild(of: target)) {
-                startEditingNew(newId)
+            if let selection {
+                // Связанная работа на уровень ниже (декомпозиция).
+                if let newId = document.perform(.addConnectedBelow(of: selection)) {
+                    startEditingNew(newId)
+                }
+            } else if let firstLevel = document.graph.levels.first {
+                // Пустой канвас/нет выделения — автономная работа в верхний уровень.
+                if let newId = document.perform(.addJob(level: firstLevel.id)) {
+                    startEditingNew(newId)
+                }
             }
             return true
         case .cmdReturn:
             guard let selection else { return false }
-            if let newId = document.perform(.addSiblingAfter(selection)) {
+            // Связанная работа справа — продолжение последовательности.
+            if let newId = document.perform(.addConnectedRight(of: selection)) {
                 startEditingNew(newId)
             }
             return true
         case .enter:
-            guard let selection, let node = document.root.find(selection) else { return false }
-            beginEditing(node)
+            guard let selection, let job = document.graph.job(selection) else { return false }
+            beginEditing(job)
             return true
         case .cmdLeft:
             guard let selection else { return false }
@@ -216,34 +413,50 @@ struct CanvasRootView: View {
             return true
         case .delete:
             guard let selection else { return false }
-            // Без модалки: ⌘Z возвращает поддерево. На корне — no-op в движке.
-            self.selection = document.perform(.delete(selection)) ?? self.selection
+            // Без модалки: ⌘Z возвращает работу вместе со связями.
+            self.selection = document.perform(.delete(selection))
             return true
         case .escape:
             selection = nil
             return true
         case .left, .right:
-            return moveSelectionSibling(key == .right ? 1 : -1)
+            return moveSelectionInLevel(key == .right ? 1 : -1)
         case .up:
-            guard let selection, let parent = document.root.parent(of: selection) else { return false }
-            select(parent.id)
-            return true
+            return moveSelectionAcrossLevels(-1)
         case .down:
-            guard let selection, let first = document.root.find(selection)?.children.first else { return false }
-            select(first.id)
-            return true
+            return moveSelectionAcrossLevels(1)
         }
     }
 
-    private func moveSelectionSibling(_ delta: Int) -> Bool {
+    private func moveSelectionInLevel(_ delta: Int) -> Bool {
         guard let selection,
-              let parent = document.root.parent(of: selection),
-              let index = parent.children.firstIndex(where: { $0.id == selection })
+              let levelIndex = document.graph.levelIndex(of: selection)
         else { return false }
+        let jobs = document.graph.levels[levelIndex].jobs
+        guard let index = jobs.firstIndex(where: { $0.id == selection }) else { return false }
         let target = index + delta
-        guard target >= 0, target < parent.children.count else { return false }
-        select(parent.children[target].id)
+        guard target >= 0, target < jobs.count else { return false }
+        select(jobs[target].id)
         return true
+    }
+
+    /// Вверх/вниз: ближайший непустой уровень, работа с ближайшим индексом.
+    private func moveSelectionAcrossLevels(_ delta: Int) -> Bool {
+        guard let selection,
+              let levelIndex = document.graph.levelIndex(of: selection)
+        else { return false }
+        let jobs = document.graph.levels[levelIndex].jobs
+        let index = jobs.firstIndex(where: { $0.id == selection }) ?? 0
+        var target = levelIndex + delta
+        while target >= 0, target < document.graph.levels.count {
+            let targetJobs = document.graph.levels[target].jobs
+            if !targetJobs.isEmpty {
+                select(targetJobs[min(index, targetJobs.count - 1)].id)
+                return true
+            }
+            target += delta
+        }
+        return false
     }
 
     private func select(_ id: UUID) {
@@ -253,11 +466,11 @@ struct CanvasRootView: View {
 
     // MARK: - Инлайн-редактирование
 
-    private func beginEditing(_ node: Job) {
-        selection = node.id
-        draft = node.displayText
+    private func beginEditing(_ job: JobNode) {
+        selection = job.id
+        draft = job.displayText
         editingIsNewNode = false
-        editingId = node.id
+        editingId = job.id
         editorFocused = true
     }
 
@@ -272,11 +485,11 @@ struct CanvasRootView: View {
     private func commitEditing() {
         guard let id = editingId else { return }
         editingId = nil
-        // Движок сам решает: пустой текст → удалить новый узел /
-        // плейсхолдер на корне / no-op на существующем.
+        // Движок сам решает: пустой текст на новом узле → удалить,
+        // на существующем → no-op.
         let focus = document.perform(.setText(id, raw: draft))
-        if document.root.find(id) == nil {
-            selection = focus ?? document.root.id
+        if document.graph.job(id) == nil {
+            selection = focus
         }
         focusBridge.focusCanvas()
     }
@@ -290,26 +503,41 @@ struct CanvasRootView: View {
         editingId = nil
         if editingIsNewNode {
             // Esc на только что созданном узле — узел исчезает.
-            document.perform(.setText(id, raw: ""))
-            selection = document.root.find(id) == nil ? document.root.id : id
+            let focus = document.perform(.setText(id, raw: ""))
+            if document.graph.job(id) == nil { selection = focus }
         }
         focusBridge.focusCanvas()
     }
 
-    private func commitEditingThenAddChild() {
+    private func commitEditingThenAddBelow() {
         guard let id = editingId else { return }
         commitEditing()
-        guard document.root.find(id) != nil else { return }
-        if let newId = document.perform(.addChild(of: id)) {
+        guard document.graph.job(id) != nil else { return }
+        if let newId = document.perform(.addConnectedBelow(of: id)) {
             startEditingNew(newId)
         }
     }
 
-    /// Новый документ открывается с корнем в режиме редактирования.
-    private func autoEditFreshRoot() {
-        if document.root.verb == GraphEngine.rootPlaceholder, document.root.children.isEmpty {
-            beginEditing(document.root)
-            draft = ""
+    /// Новый документ открывается с единственной пустой работой в редакторе.
+    private func autoEditFreshDocument() {
+        if document.graph.jobCount == 1,
+           let job = document.graph.allJobs.first,
+           job.verb.isEmpty {
+            startEditingNew(job.id)
         }
+    }
+}
+
+/// Полупрозрачная кнопка, оживающая под курсором: полная непрозрачность + рост.
+private struct HoverPulse: ViewModifier {
+    var idleOpacity: Double = 0.55
+    @State private var hovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(hovering ? 1 : idleOpacity)
+            .scaleEffect(hovering ? 1.12 : 1)
+            .animation(.spring(duration: 0.2), value: hovering)
+            .onHover { hovering = $0 }
     }
 }

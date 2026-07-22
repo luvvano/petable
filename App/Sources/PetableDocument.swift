@@ -11,20 +11,20 @@ extension UTType {
 ///   клавиша/клик → GraphIntent → document.perform(intent)
 ///                                    ├─ снапшот до правки → UndoManager (окна)
 ///                                    ├─ GraphEngine.apply (чистая функция)
-///                                    └─ @Published root → SwiftUI
+///                                    └─ @Published graph → SwiftUI
 ///                                         └─ GraphLayout.layout → позиции → рендер
 final class PetableDocument: ReferenceFileDocument, ObservableObject {
     typealias Snapshot = Envelope
 
-    @Published private(set) var root: Job
+    @Published private(set) var graph: WorkGraph
     private var session: GraphSession?
 
     static var readableContentTypes: [UTType] { [.petableDocument] }
 
-    /// Новый документ = один корневой узел, сразу в режиме редактирования.
-    /// Пустого документа не бывает.
+    /// Новый документ = один уровень с одной пустой работой,
+    /// сразу в режиме редактирования.
     init() {
-        root = Job(verb: GraphEngine.rootPlaceholder)
+        graph = WorkGraph(levels: [GraphLevel(jobs: [JobNode(verb: "")])])
     }
 
     init(configuration: ReadConfiguration) throws {
@@ -35,11 +35,11 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
         guard let graph = envelope.jobGraph else {
             throw CocoaError(.fileReadCorruptFile)
         }
-        root = graph
+        self.graph = graph
     }
 
     func snapshot(contentType: UTType) throws -> Envelope {
-        Envelope(graph: root)
+        Envelope(graph: graph)
     }
 
     func fileWrapper(snapshot: Envelope, configuration: WriteConfiguration) throws -> FileWrapper {
@@ -53,9 +53,9 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
     func attach(_ undoManager: UndoManager?) {
         guard let undoManager else { return }
         if let session, session.undoManager === undoManager { return }
-        let newSession = GraphSession(root: root, undoManager: undoManager)
-        newSession.onChange = { [weak self] newRoot in
-            self?.root = newRoot
+        let newSession = GraphSession(graph: graph, undoManager: undoManager)
+        newSession.onChange = { [weak self] newGraph in
+            self?.graph = newGraph
         }
         session = newSession
     }

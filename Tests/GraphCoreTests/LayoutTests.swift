@@ -3,99 +3,98 @@ import CoreGraphics
 import Testing
 @testable import GraphCore
 
-@Suite("Автораскладка tidy tree")
+@Suite("Автораскладка по уровням")
 struct LayoutTests {
-    /// Свойства из тест-плана №7 — проверяются на любом дереве.
-    private func assertProperties(_ root: Job, _ positions: [UUID: CGPoint]) throws {
-        #expect(positions.count == root.count)
+    /// Свойства, обязательные для любого графа.
+    private func assertProperties(_ graph: WorkGraph, _ positions: [UUID: CGPoint]) throws {
+        #expect(positions.count == graph.jobCount)
 
-        for node in root.allNodes {
-            let level = try #require(root.level(of: node.id))
-            let point = try #require(positions[node.id])
+        for (levelIndex, level) in graph.levels.enumerated() {
+            let xs = level.jobs.compactMap { positions[$0.id]?.x }
             // Уровень строго определяет Y.
-            #expect(point.y == CGFloat(level) * LayoutMetrics.rowHeight)
-
-            // Порядок X сиблингов = порядок массива children, дистанция ≥ колонки.
-            let childXs = node.children.compactMap { positions[$0.id]?.x }
-            for pair in zip(childXs, childXs.dropFirst()) {
-                #expect(pair.1 - pair.0 >= LayoutMetrics.columnWidth - 0.001)
+            for job in level.jobs {
+                #expect(positions[job.id]?.y == CGFloat(levelIndex) * LayoutMetrics.rowHeight)
             }
-
-            // Родитель центрирован над своим поддеревом (Бухгейм).
-            if let first = childXs.first, let last = childXs.last {
-                #expect(abs(point.x - (first + last) / 2) < 0.001)
-            }
-        }
-
-        // Ни одна пара узлов одного уровня не ближе ширины колонки.
-        var byLevel: [Int: [CGFloat]] = [:]
-        for node in root.allNodes {
-            byLevel[root.level(of: node.id)!, default: []].append(positions[node.id]!.x)
-        }
-        for xs in byLevel.values {
-            let sorted = xs.sorted()
-            for pair in zip(sorted, sorted.dropFirst()) {
+            // Порядок X = порядок массива jobs, дистанция ≥ ширины колонки.
+            for pair in zip(xs, xs.dropFirst()) {
                 #expect(pair.1 - pair.0 >= LayoutMetrics.columnWidth - 0.001)
             }
         }
+
+        // Нормализация: минимальный x = 0.
+        if let minX = positions.values.map(\.x).min() {
+            #expect(abs(minX) < 0.001)
+        }
     }
 
-    @Test("5. Эталон: простое дерево — дети в колонках, родитель по центру")
-    func referenceSimple() throws {
-        let root = Job(verb: "r", children: [Job(verb: "a"), Job(verb: "b"), Job(verb: "c")])
-        let positions = GraphLayout.layout(root)
-        let xs = root.children.map { positions[$0.id]!.x }
-        #expect(xs == [0, 130, 260])
-        #expect(positions[root.id]!.x == 130)
-        #expect(positions[root.id]!.y == 0)
-        #expect(positions[root.children[0].id]!.y == LayoutMetrics.rowHeight)
-    }
-
-    @Test("5. Пример «Закрыть месяц»: 3 уровня, 9 узлов, все свойства")
+    @Test("Пример «Закрыть месяц»: 3 уровня, 9 узлов, все свойства")
     func closeMonthExample() throws {
-        let root = Fixtures.closeMonth()
-        let positions = GraphLayout.layout(root)
-        try assertProperties(root, positions)
-        // Декомпозированный узел №2 центрирован над своими тремя детьми.
-        let second = root.children[1]
-        let kidXs = second.children.map { positions[$0.id]!.x }
-        #expect(abs(positions[second.id]!.x - (kidXs.first! + kidXs.last!) / 2) < 0.001)
+        let graph = Fixtures.closeMonth()
+        let positions = GraphLayout.layout(graph)
+        try assertProperties(graph, positions)
+
+        // Первый ребёнок декомпозиции выравнивается под источником.
+        let source = graph.levels[1].jobs[1]
+        let firstChild = graph.levels[2].jobs[0]
+        #expect(positions[firstChild.id]?.x == positions[source.id]?.x)
     }
 
-    @Test("6. Один узел")
-    func singleNode() throws {
-        let root = Job(verb: "одинокий")
-        let positions = GraphLayout.layout(root)
-        #expect(positions == [root.id: .zero])
+    @Test("Связь внутри уровня: работа встаёт справа от источника")
+    func inLevelConnectionGoesRight() throws {
+        var graph = WorkGraph(levels: [GraphLevel(jobs: [JobNode(verb: "a"), JobNode(verb: "b")])])
+        let a = graph.levels[0].jobs[0]
+        let b = graph.levels[0].jobs[1]
+        graph.edges = [JobEdge(from: a.id, to: b.id)]
+        let positions = GraphLayout.layout(graph)
+        #expect(positions[b.id]!.x - positions[a.id]!.x == LayoutMetrics.columnWidth)
     }
 
-    @Test("6. Цепь глубиной 10")
+    @Test("Одна работа")
+    func singleJob() throws {
+        let graph = WorkGraph(levels: [GraphLevel(jobs: [JobNode(verb: "одинокая")])])
+        let positions = GraphLayout.layout(graph)
+        #expect(positions == [graph.levels[0].jobs[0].id: .zero])
+    }
+
+    @Test("Пустой граф — пустые позиции, без крэша")
+    func emptyGraph() {
+        #expect(GraphLayout.layout(WorkGraph(levels: [GraphLevel()])).isEmpty)
+        #expect(GraphLayout.layout(WorkGraph()).isEmpty)
+    }
+
+    @Test("Цепь декомпозиций глубиной 10 — вертикальное выравнивание")
     func deepChain() throws {
-        var node = Job(verb: "лист")
-        for i in (0..<9).reversed() {
-            node = Job(verb: "уровень \(i)", children: [node])
+        var levels: [GraphLevel] = []
+        var edges: [JobEdge] = []
+        var previous: JobNode?
+        for index in 0..<10 {
+            let node = JobNode(verb: "уровень \(index)")
+            levels.append(GraphLevel(jobs: [node]))
+            if let previous { edges.append(JobEdge(from: previous.id, to: node.id)) }
+            previous = node
         }
-        let positions = GraphLayout.layout(node)
-        try assertProperties(node, positions)
-        #expect(positions.values.map(\.y).max() == 9 * LayoutMetrics.rowHeight)
-        // Цепь без ветвлений — все x совпадают.
+        let graph = WorkGraph(levels: levels, edges: edges)
+        let positions = GraphLayout.layout(graph)
+        try assertProperties(graph, positions)
+        // Все под источником — один столбец.
         #expect(Set(positions.values.map(\.x)).count == 1)
+        #expect(positions.values.map(\.y).max() == 9 * LayoutMetrics.rowHeight)
     }
 
-    @Test("6. Ряд из 50 сиблингов")
+    @Test("Ряд из 50 работ в уровне")
     func wideRow() throws {
-        let root = Job(verb: "корень", children: (0..<50).map { Job(verb: "узел \($0)") })
-        let positions = GraphLayout.layout(root)
-        try assertProperties(root, positions)
-        let xs = root.children.map { positions[$0.id]!.x }
+        let graph = WorkGraph(levels: [GraphLevel(jobs: (0..<50).map { JobNode(verb: "узел \($0)") })])
+        let positions = GraphLayout.layout(graph)
+        try assertProperties(graph, positions)
+        let xs = graph.levels[0].jobs.map { positions[$0.id]!.x }
         #expect(xs.first == 0)
         #expect(xs.last == 49 * LayoutMetrics.columnWidth)
     }
 
-    @Test("7. Свойства на синтетическом дереве 150 узлов")
+    @Test("Свойства на синтетическом графе 150 узлов")
     func propertiesSynthetic() throws {
-        let root = Fixtures.synthetic(count: 150)
-        #expect(root.count == 150)
-        try assertProperties(root, GraphLayout.layout(root))
+        let graph = Fixtures.synthetic(count: 150)
+        #expect(graph.jobCount == 150)
+        try assertProperties(graph, GraphLayout.layout(graph))
     }
 }
