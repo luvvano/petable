@@ -2,12 +2,26 @@
   "": {
     "swift-dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/primary.swiftdeps"
   },
+  "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/AgentArtifactsTests.swift": {
+    "dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/AgentArtifactsTests.d",
+    "object": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/AgentArtifactsTests.swift.o",
+    "swiftmodule": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/AgentArtifactsTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/AgentArtifactsTests.swiftdeps",
+    "diagnostics": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/AgentArtifactsTests.dia"
+  },
   "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/EnvelopeTests.swift": {
     "dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/EnvelopeTests.d",
     "object": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/EnvelopeTests.swift.o",
     "swiftmodule": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/EnvelopeTests~partial.swiftmodule",
     "swift-dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/EnvelopeTests.swiftdeps",
     "diagnostics": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/EnvelopeTests.dia"
+  },
+  "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/ExportTests.swift": {
+    "dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/ExportTests.d",
+    "object": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/ExportTests.swift.o",
+    "swiftmodule": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/ExportTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/ExportTests.swiftdeps",
+    "diagnostics": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/ExportTests.dia"
   },
   "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/Fixtures.swift": {
     "dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/Fixtures.d",

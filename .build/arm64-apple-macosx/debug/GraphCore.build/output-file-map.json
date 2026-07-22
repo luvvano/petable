@@ -2,12 +2,26 @@
   "": {
     "swift-dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/primary.swiftdeps"
   },
+  "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/AgentArtifacts.swift": {
+    "dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/AgentArtifacts.d",
+    "object": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/AgentArtifacts.swift.o",
+    "swiftmodule": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/AgentArtifacts~partial.swiftmodule",
+    "swift-dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/AgentArtifacts.swiftdeps",
+    "diagnostics": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/AgentArtifacts.dia"
+  },
   "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Envelope.swift": {
     "dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Envelope.d",
     "object": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Envelope.swift.o",
     "swiftmodule": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Envelope~partial.swiftmodule",
     "swift-dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Envelope.swiftdeps",
     "diagnostics": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Envelope.dia"
+  },
+  "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Export.swift": {
+    "dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Export.d",
+    "object": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Export.swift.o",
+    "swiftmodule": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Export~partial.swiftmodule",
+    "swift-dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Export.swiftdeps",
+    "diagnostics": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Export.dia"
   },
   "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/GraphEngine.swift": {
     "dependencies": "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/GraphEngine.d",

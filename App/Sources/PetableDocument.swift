@@ -172,6 +172,30 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
         return stage.id
     }
 
+    /// Импортированный граф (из JSON-файла экспорта): id узлов
+    /// перегенерируются — один файл можно импортировать многократно;
+    /// имя разрешается от коллизий. Становится выбранным.
+    @MainActor
+    @discardableResult
+    func importGraph(name: String, graph: WorkGraph) -> UUID {
+        let base = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let stage = Envelope.Stage(
+            name: uniqueName(
+                base: base.isEmpty ? Envelope.defaultGraphName : base,
+                existing: Set(graphStages.map(\.name)),
+                firstWithoutNumber: true
+            ),
+            modifiedAt: Date(),
+            graph: graph.withRegeneratedIDs()
+        )
+        applyListChange {
+            stages.append(stage)
+            selectedGraphID = stage.id
+            selectedResearchItem = nil
+        }
+        return stage.id
+    }
+
     @MainActor
     func renameGraph(_ id: UUID, to rawName: String) {
         let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -375,6 +399,40 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
         }
     }
 
+    // MARK: - Артефакты ИИ-агента
+
+    /// Результат исследования агента: интервью + граф работ, оба
+    /// помечены origin == .agent. Открывается созданное интервью.
+    @MainActor
+    @discardableResult
+    func addAgentResearch(payload: AgentArtifactsPayload, template: InterviewTemplate) -> UUID {
+        var interview = payload.makeInterview(template: template)
+        interview.name = uniqueName(
+            base: interview.name,
+            existing: Set(research.interviews.map(\.name)),
+            firstWithoutNumber: true
+        )
+        let graph = payload.makeWorkGraph()
+        let stage = Envelope.Stage(
+            name: uniqueName(
+                base: payload.graph.name.isEmpty ? "Граф работ агента" : payload.graph.name,
+                existing: Set(graphStages.map(\.name)),
+                firstWithoutNumber: true
+            ),
+            modifiedAt: Date(),
+            origin: .agent,
+            graph: graph
+        )
+        let interviewID = interview.id
+        applyListChange { [interview] in
+            stages.append(stage)
+            research.interviews.append(interview)
+            selectedGraphID = stage.id
+            selectedResearchItem = .interview(interviewID)
+        }
+        return interviewID
+    }
+
     private func nextInterviewName() -> String {
         uniqueName(base: "Интервью", existing: Set(research.interviews.map(\.name)))
     }
@@ -383,8 +441,15 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
         uniqueName(base: "Шаблон", existing: Set(research.templates.map(\.name)))
     }
 
-    private func uniqueName(base: String, existing: Set<String>) -> String {
-        var number = existing.count + 1
+    /// Имя без коллизий. firstWithoutNumber: сначала пробуется само base
+    /// (для имён от агента); иначе сразу «base N».
+    private func uniqueName(
+        base: String,
+        existing: Set<String>,
+        firstWithoutNumber: Bool = false
+    ) -> String {
+        if firstWithoutNumber, !existing.contains(base) { return base }
+        var number = firstWithoutNumber ? 2 : existing.count + 1
         var candidate = "\(base) \(number)"
         while existing.contains(candidate) {
             number += 1

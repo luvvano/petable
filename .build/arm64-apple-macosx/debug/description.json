@@ -28,7 +28,15 @@
       "inputs" : [
         {
           "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/AgentArtifacts.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Envelope.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Export.swift"
         },
         {
           "kind" : "file",
@@ -75,7 +83,9 @@
       "moduleName" : "GraphCore",
       "moduleOutputPath" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/Modules/GraphCore.swiftmodule",
       "objects" : [
+        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/AgentArtifacts.swift.o",
         "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Envelope.swift.o",
+        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Export.swift.o",
         "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/GraphEngine.swift.o",
         "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/GraphSession.swift.o",
         "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Job.swift.o",
@@ -138,7 +148,15 @@
       "outputs" : [
         {
           "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/AgentArtifacts.swift.o"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Envelope.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Export.swift.o"
         },
         {
           "kind" : "file",
@@ -179,7 +197,9 @@
       ],
       "prepareForIndexing" : false,
       "sources" : [
+        "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/AgentArtifacts.swift",
         "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Envelope.swift",
+        "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Export.swift",
         "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/GraphEngine.swift",
         "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/GraphSession.swift",
         "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Job.swift",
@@ -294,7 +314,15 @@
       "inputs" : [
         {
           "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/AgentArtifactsTests.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/EnvelopeTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/ExportTests.swift"
         },
         {
           "kind" : "file",
@@ -341,7 +369,9 @@
       "moduleName" : "GraphCoreTests",
       "moduleOutputPath" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/Modules/GraphCoreTests.swiftmodule",
       "objects" : [
+        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/AgentArtifactsTests.swift.o",
         "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/EnvelopeTests.swift.o",
+        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/ExportTests.swift.o",
         "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/Fixtures.swift.o",
         "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/GraphEngineTests.swift.o",
         "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/GraphSessionTests.swift.o",
@@ -402,7 +432,15 @@
       "outputs" : [
         {
           "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/AgentArtifactsTests.swift.o"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/EnvelopeTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/ExportTests.swift.o"
         },
         {
           "kind" : "file",
@@ -439,7 +477,9 @@
       ],
       "prepareForIndexing" : false,
       "sources" : [
+        "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/AgentArtifactsTests.swift",
         "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/EnvelopeTests.swift",
+        "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/ExportTests.swift",
         "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/Fixtures.swift",
         "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/GraphEngineTests.swift",
         "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/GraphSessionTests.swift",
@@ -463,7 +503,9 @@
       "-package-name",
       "petable",
       "-c",
+      "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/AgentArtifacts.swift",
       "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Envelope.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Export.swift",
       "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/GraphEngine.swift",
       "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/GraphSession.swift",
       "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Job.swift",
@@ -591,7 +633,9 @@
       "-package-name",
       "petable",
       "-c",
+      "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/AgentArtifactsTests.swift",
       "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/EnvelopeTests.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/ExportTests.swift",
       "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/Fixtures.swift",
       "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/GraphEngineTests.swift",
       "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/GraphSessionTests.swift",
@@ -694,7 +738,15 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/AgentArtifacts.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Envelope.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Export.swift"
         },
         {
           "kind" : "file",
@@ -754,7 +806,15 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/AgentArtifacts.swift.o"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Envelope.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Export.swift.o"
         },
         {
           "kind" : "file",
@@ -794,7 +854,15 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/AgentArtifactsTests.swift.o"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/EnvelopeTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/ExportTests.swift.o"
         },
         {
           "kind" : "file",
@@ -836,7 +904,15 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/AgentArtifactsTests.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/EnvelopeTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/ExportTests.swift"
         },
         {
           "kind" : "file",

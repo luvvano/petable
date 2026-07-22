@@ -10,9 +10,10 @@ import Foundation
 /// одна стадия без имени. v3: у стадии появились `id` и `name` —
 /// проект держит несколько именованных графов работ. v4: опциональная
 /// секция `research` — шаблоны и интервью раздела «Исследования».
-/// v1–v3 читаются и мигрируют на лету; запись всегда в v4.
+/// v5: `origin` у стадий и интервью — артефакты, созданные ИИ-агентом,
+/// помечены. v1–v4 читаются и мигрируют на лету; запись всегда в v5.
 public struct Envelope: Codable, Equatable, Sendable {
-    public static let currentVersion = 4
+    public static let currentVersion = 5
     public static let jobGraphStageType = "jobGraph"
     public static let defaultGraphName = "Граф работ"
 
@@ -29,6 +30,8 @@ public struct Envelope: Codable, Equatable, Sendable {
         /// Момент последней правки графа стадии. Опциональное поле v3 —
         /// старые файлы без него читаются, приложение проставляет при правке.
         public var modifiedAt: Date?
+        /// Кто создал стадию (v5); nil = человек.
+        public var origin: ArtifactOrigin?
         public var graph: WorkGraph
 
         public init(
@@ -36,16 +39,21 @@ public struct Envelope: Codable, Equatable, Sendable {
             type: String = Envelope.jobGraphStageType,
             name: String = Envelope.defaultGraphName,
             modifiedAt: Date? = nil,
+            origin: ArtifactOrigin? = nil,
             graph: WorkGraph
         ) {
             self.id = id
             self.type = type
             self.name = name
             self.modifiedAt = modifiedAt
+            self.origin = origin
             self.graph = graph
         }
 
-        enum CodingKeys: String, CodingKey { case id, type, name, modifiedAt, graph }
+        /// Происхождение с учётом старых файлов без поля.
+        public var resolvedOrigin: ArtifactOrigin { origin ?? .human }
+
+        enum CodingKeys: String, CodingKey { case id, type, name, modifiedAt, origin, graph }
 
         /// v2-стадии не имели `id` и `name` — при чтении подставляются
         /// значения по умолчанию, сохранение перезапишет файл в v3.
@@ -56,6 +64,7 @@ public struct Envelope: Codable, Equatable, Sendable {
             self.name = try container.decodeIfPresent(String.self, forKey: .name)
                 ?? Envelope.defaultGraphName
             self.modifiedAt = try container.decodeIfPresent(Date.self, forKey: .modifiedAt)
+            self.origin = try container.decodeIfPresent(ArtifactOrigin.self, forKey: .origin)
             self.graph = try container.decode(WorkGraph.self, forKey: .graph)
         }
     }

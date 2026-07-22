@@ -45,6 +45,11 @@ struct InterviewFormView: View {
             HStack(spacing: 8) {
                 Label(interview.template.name, systemImage: "doc.text")
                 Text(interview.createdAt, style: .date)
+                if interview.resolvedOrigin == .agent {
+                    Label("Создано ИИ-агентом", systemImage: "sparkles")
+                        .foregroundStyle(Color.purple)
+                        .help("Гипотеза, сгенерированная агентом по методологии AJTBD — проверьте реальными интервью")
+                }
             }
             .font(.system(size: 11))
             .foregroundStyle(.secondary)

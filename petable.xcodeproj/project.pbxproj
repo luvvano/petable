@@ -11,10 +11,13 @@
 		3AC5D72F0299A596AE1926B9 /* ResearchViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F11456C586746FF698A909A /* ResearchViews.swift */; };
 		50E82C33EBB43877BD0C18EE /* PetableDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5784A5AD0A8680F74738F4F5 /* PetableDocument.swift */; };
 		66ACAE8195976D7C719E5D32 /* CanvasRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C70377BEAC79F596245F8956 /* CanvasRootView.swift */; };
+		7B55BEE04721BA91D1D33F2C /* AgentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E62A45FA71D4D0DD484A33F5 /* AgentService.swift */; };
 		82184708D4ACED543534C1D3 /* GraphCore in Frameworks */ = {isa = PBXBuildFile; productRef = 36C73F57FA1089A82679D3FD /* GraphCore */; };
+		900E3D2ADF383CAD72DF5DC8 /* ExportImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1331AC4697E53BAD68A9316F /* ExportImport.swift */; };
 		930AC76E00837B4E7908006A /* PetableApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECBCDF746F95FA51C02169F2 /* PetableApp.swift */; };
 		9D5E004F8ED6D6011C82B12A /* ProjectsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D79E12F8644248968D9CD2C3 /* ProjectsView.swift */; };
 		9DDC7ACAB3123B16C752B7CE /* EdgeShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6DADB00ADC81C9ACD5DD30C /* EdgeShape.swift */; };
+		A946A0CE79277B538609A251 /* AgentViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52B817033A06DD9CB5F87525 /* AgentViews.swift */; };
 		BC2E5ECFEA80278D956B6A8D /* LevelColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DCB7854D3BB308FACCA6CA8 /* LevelColors.swift */; };
 		D0D86A1C5D5226B88F0BC93B /* ProjectStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 047B9837F8FEFE53EDB0338C /* ProjectStore.swift */; };
 		F3F141C896EEF6B7E6DB28BC /* KeyboardFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9569C7DB8D26BBD48DECBDA9 /* KeyboardFlowUITests.swift */; };
@@ -32,7 +35,9 @@
 
 /* Begin PBXFileReference section */
 		047B9837F8FEFE53EDB0338C /* ProjectStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectStore.swift; sourceTree = "<group>"; };
+		1331AC4697E53BAD68A9316F /* ExportImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportImport.swift; sourceTree = "<group>"; };
 		2F11456C586746FF698A909A /* ResearchViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResearchViews.swift; sourceTree = "<group>"; };
+		52B817033A06DD9CB5F87525 /* AgentViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentViews.swift; sourceTree = "<group>"; };
 		5784A5AD0A8680F74738F4F5 /* PetableDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetableDocument.swift; sourceTree = "<group>"; };
 		5EB6C462D7DAA6E097ACD327 /* petableUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = petableUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6ECDA5BAE270450B89F06F57 /* petable */ = {isa = PBXFileReference; lastKnownFileType = folder; name = petable; path = .; sourceTree = SOURCE_ROOT; };
@@ -42,6 +47,7 @@
 		C70377BEAC79F596245F8956 /* CanvasRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasRootView.swift; sourceTree = "<group>"; };
 		D48D8C6ACF85E367BFD35260 /* CanvasHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasHostView.swift; sourceTree = "<group>"; };
 		D79E12F8644248968D9CD2C3 /* ProjectsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectsView.swift; sourceTree = "<group>"; };
+		E62A45FA71D4D0DD484A33F5 /* AgentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentService.swift; sourceTree = "<group>"; };
 		E6DADB00ADC81C9ACD5DD30C /* EdgeShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EdgeShape.swift; sourceTree = "<group>"; };
 		ECBCDF746F95FA51C02169F2 /* PetableApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetableApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -79,9 +85,12 @@
 		79F1202848272FE7FFE5D280 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				E62A45FA71D4D0DD484A33F5 /* AgentService.swift */,
+				52B817033A06DD9CB5F87525 /* AgentViews.swift */,
 				D48D8C6ACF85E367BFD35260 /* CanvasHostView.swift */,
 				C70377BEAC79F596245F8956 /* CanvasRootView.swift */,
 				E6DADB00ADC81C9ACD5DD30C /* EdgeShape.swift */,
+				1331AC4697E53BAD68A9316F /* ExportImport.swift */,
 				8DCB7854D3BB308FACCA6CA8 /* LevelColors.swift */,
 				ECBCDF746F95FA51C02169F2 /* PetableApp.swift */,
 				5784A5AD0A8680F74738F4F5 /* PetableDocument.swift */,
@@ -204,9 +213,12 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7B55BEE04721BA91D1D33F2C /* AgentService.swift in Sources */,
+				A946A0CE79277B538609A251 /* AgentViews.swift in Sources */,
 				257681894B444D2784735B69 /* CanvasHostView.swift in Sources */,
 				66ACAE8195976D7C719E5D32 /* CanvasRootView.swift in Sources */,
 				9DDC7ACAB3123B16C752B7CE /* EdgeShape.swift in Sources */,
+				900E3D2ADF383CAD72DF5DC8 /* ExportImport.swift in Sources */,
 				BC2E5ECFEA80278D956B6A8D /* LevelColors.swift in Sources */,
 				930AC76E00837B4E7908006A /* PetableApp.swift in Sources */,
 				50E82C33EBB43877BD0C18EE /* PetableDocument.swift in Sources */,

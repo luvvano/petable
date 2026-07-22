@@ -81,7 +81,7 @@ struct ResearchTests {
         let decoded = try Envelope.decode(try envelope.encoded())
         #expect(decoded == envelope)
         #expect(decoded.research?.interviews.first?.answers[field.id] == "роль, сегмент, платил 3 раза")
-        #expect(decoded.version == 4)
+        #expect(decoded.version == Envelope.currentVersion)
     }
 
     @Test("6. Файл v3 без research читается: research == nil")

@@ -97,6 +97,8 @@ public struct Interview: Codable, Equatable, Identifiable, Sendable {
     public var answers: [UUID: String]
     /// Значения плейсхолдеров: ключ → слова респондента.
     public var placeholderValues: [String: String]
+    /// Кто создал интервью; nil (старые файлы) = человек.
+    public var origin: ArtifactOrigin?
 
     public init(
         id: UUID = UUID(),
@@ -105,7 +107,8 @@ public struct Interview: Codable, Equatable, Identifiable, Sendable {
         createdAt: Date = Date(),
         modifiedAt: Date? = nil,
         answers: [UUID: String] = [:],
-        placeholderValues: [String: String] = [:]
+        placeholderValues: [String: String] = [:],
+        origin: ArtifactOrigin? = nil
     ) {
         self.id = id
         self.name = name
@@ -114,7 +117,11 @@ public struct Interview: Codable, Equatable, Identifiable, Sendable {
         self.modifiedAt = modifiedAt
         self.answers = answers
         self.placeholderValues = placeholderValues
+        self.origin = origin
     }
+
+    /// Происхождение с учётом старых файлов без поля.
+    public var resolvedOrigin: ArtifactOrigin { origin ?? .human }
 
     /// Записывает ответ поля; если поле питает плейсхолдер —
     /// обновляет и его значение (распространяется на все вопросы).
