@@ -47,11 +47,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct AppShellView: View {
     @ObservedObject var document: PetableDocument
 
-    /// Единый тип выбора в сайдбаре: граф, интервью или шаблон.
+    /// Единый тип выбора в сайдбаре: граф, интервью, шаблон,
+    /// сегмент или Карта сегментов.
     enum SidebarItem: Hashable {
         case graph(UUID)
         case interview(UUID)
         case template(UUID)
+        case segment(UUID)
+        case segmentMap
     }
 
     /// Фильтр артефактов по происхождению: все / человек / агент.
@@ -72,6 +75,7 @@ struct AppShellView: View {
     @State private var graphsExpanded = true
     @State private var interviewsExpanded = true
     @State private var templatesExpanded = false
+    @State private var segmentsExpanded = true
     @State private var hoveredRow: UUID?
     @State private var renamingID: UUID?
     @State private var renameDraft = ""
@@ -151,6 +155,27 @@ struct AppShellView: View {
                         filter: $interviewFilter
                     )
                 }
+
+                DisclosureGroup(isExpanded: $segmentsExpanded) {
+                    if !document.segmentation.segments.isEmpty {
+                        HStack {
+                            Label("Карта сегментов", systemImage: "tablecells")
+                            Spacer()
+                        }
+                        .tag(SidebarItem.segmentMap)
+                        .help("Сравнительная таблица сегментов: экономика, блокеры, вердикты")
+                    }
+                    ForEach(document.segmentation.segments) { segment in
+                        segmentRow(segment)
+                            .tag(SidebarItem.segment(segment.id))
+                    }
+                    newItemRow("Создать сегмент", help: "Новый сегмент: кóровые работы + критерии + экономика") {
+                        document.addSegment()
+                    }
+                } label: {
+                    Label("Сегменты", systemImage: "person.3")
+                        .font(.system(size: 13, weight: .semibold))
+                }
             }
             .listStyle(.sidebar)
             .navigationSplitViewColumnWidth(min: 190, ideal: 230, max: 300)
@@ -160,6 +185,10 @@ struct AppShellView: View {
                 InterviewFormView(document: document, interviewID: id)
             case .template(let id):
                 TemplateEditorView(document: document, templateID: id)
+            case .segment(let id):
+                SegmentEditorView(document: document, segmentID: id)
+            case .segmentMap:
+                SegmentMapView(document: document)
             case nil:
                 CanvasRootView(document: document)
             }
@@ -199,7 +228,7 @@ struct AppShellView: View {
                 }
                 .help("Экспортировать интервью: в файл или в буфер обмена")
             }
-        case .template:
+        case .template, .segment, .segmentMap:
             EmptyView()
         case nil:
             if let stage = document.graphStages.first(where: { $0.id == document.selectedGraphID }) {
@@ -270,6 +299,8 @@ struct AppShellView: View {
                 switch document.selectedResearchItem {
                 case .interview(let id): return .interview(id)
                 case .template(let id): return .template(id)
+                case .segment(let id): return .segment(id)
+                case .segmentMap: return .segmentMap
                 case nil: return document.selectedGraphID.map(SidebarItem.graph)
                 }
             },
@@ -278,6 +309,8 @@ struct AppShellView: View {
                 case .graph(let id): document.selectGraph(id)
                 case .interview(let id): document.selectResearch(.interview(id))
                 case .template(let id): document.selectResearch(.template(id))
+                case .segment(let id): document.selectResearch(.segment(id))
+                case .segmentMap: document.selectResearch(.segmentMap)
                 case nil: break
                 }
             }
@@ -328,6 +361,31 @@ struct AppShellView: View {
                     ("Скопировать Markdown", { ExportImport.copyInterviewMarkdown(interview) }),
                 ]
             )
+        }
+    }
+
+    @ViewBuilder
+    private func segmentRow(_ segment: Segment) -> some View {
+        if renamingID == segment.id {
+            renameField("Название сегмента") { document.renameSegment(segment.id, to: $0) }
+        } else {
+            HStack(spacing: 6) {
+                sidebarRow(
+                    id: segment.id,
+                    name: segment.name,
+                    icon: "person.3",
+                    isAgent: segment.resolvedOrigin == .agent,
+                    deletable: true,
+                    deleteHelp: "Удалить сегмент",
+                    onDelete: { document.deleteSegment(segment.id) },
+                    onRename: { beginRename(id: segment.id, name: segment.name) }
+                )
+                if let verdict = segment.verdict {
+                    Text(verdict.badge)
+                        .font(.system(size: 9))
+                        .help(verdict.title)
+                }
+            }
         }
     }
 

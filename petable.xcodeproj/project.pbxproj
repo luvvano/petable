@@ -19,6 +19,7 @@
 		9DDC7ACAB3123B16C752B7CE /* EdgeShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6DADB00ADC81C9ACD5DD30C /* EdgeShape.swift */; };
 		A946A0CE79277B538609A251 /* AgentViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52B817033A06DD9CB5F87525 /* AgentViews.swift */; };
 		BC2E5ECFEA80278D956B6A8D /* LevelColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DCB7854D3BB308FACCA6CA8 /* LevelColors.swift */; };
+		BC48987AD696E5470DA2F4AB /* SegmentViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD15B5C36F969484C7736B95 /* SegmentViews.swift */; };
 		D0D86A1C5D5226B88F0BC93B /* ProjectStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 047B9837F8FEFE53EDB0338C /* ProjectStore.swift */; };
 		F3F141C896EEF6B7E6DB28BC /* KeyboardFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9569C7DB8D26BBD48DECBDA9 /* KeyboardFlowUITests.swift */; };
 /* End PBXBuildFile section */
@@ -40,16 +41,17 @@
 		52B817033A06DD9CB5F87525 /* AgentViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentViews.swift; sourceTree = "<group>"; };
 		5784A5AD0A8680F74738F4F5 /* PetableDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetableDocument.swift; sourceTree = "<group>"; };
 		5EB6C462D7DAA6E097ACD327 /* petableUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = petableUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		6ECDA5BAE270450B89F06F57 /* petable */ = {isa = PBXFileReference; lastKnownFileType = folder; name = petable; path = .; sourceTree = SOURCE_ROOT; };
 		8DCB7854D3BB308FACCA6CA8 /* LevelColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LevelColors.swift; sourceTree = "<group>"; };
 		9569C7DB8D26BBD48DECBDA9 /* KeyboardFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardFlowUITests.swift; sourceTree = "<group>"; };
 		98C30A1BAAAF4FDF1990FED8 /* petable.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = petable.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BD15B5C36F969484C7736B95 /* SegmentViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SegmentViews.swift; sourceTree = "<group>"; };
 		C70377BEAC79F596245F8956 /* CanvasRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasRootView.swift; sourceTree = "<group>"; };
 		D48D8C6ACF85E367BFD35260 /* CanvasHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasHostView.swift; sourceTree = "<group>"; };
 		D79E12F8644248968D9CD2C3 /* ProjectsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectsView.swift; sourceTree = "<group>"; };
 		E62A45FA71D4D0DD484A33F5 /* AgentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentService.swift; sourceTree = "<group>"; };
 		E6DADB00ADC81C9ACD5DD30C /* EdgeShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EdgeShape.swift; sourceTree = "<group>"; };
 		ECBCDF746F95FA51C02169F2 /* PetableApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetableApp.swift; sourceTree = "<group>"; };
+		F888F1F16F2011D9CC61E7C3 /* sorted-dancing-wigderson */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "sorted-dancing-wigderson"; path = .; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -77,7 +79,7 @@
 		1552D3B1E9C190B2D297339D /* Packages */ = {
 			isa = PBXGroup;
 			children = (
-				6ECDA5BAE270450B89F06F57 /* petable */,
+				F888F1F16F2011D9CC61E7C3 /* sorted-dancing-wigderson */,
 			);
 			name = Packages;
 			sourceTree = "<group>";
@@ -97,6 +99,7 @@
 				047B9837F8FEFE53EDB0338C /* ProjectStore.swift */,
 				D79E12F8644248968D9CD2C3 /* ProjectsView.swift */,
 				2F11456C586746FF698A909A /* ResearchViews.swift */,
+				BD15B5C36F969484C7736B95 /* SegmentViews.swift */,
 			);
 			name = Sources;
 			path = App/Sources;
@@ -225,6 +228,7 @@
 				D0D86A1C5D5226B88F0BC93B /* ProjectStore.swift in Sources */,
 				9D5E004F8ED6D6011C82B12A /* ProjectsView.swift in Sources */,
 				3AC5D72F0299A596AE1926B9 /* ResearchViews.swift in Sources */,
+				BC48987AD696E5470DA2F4AB /* SegmentViews.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

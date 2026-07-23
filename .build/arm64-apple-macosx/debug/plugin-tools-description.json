@@ -1,8 +1,8 @@
 {
   "builtTestProducts" : [
     {
-      "binaryPath" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCorePackageTests.xctest/Contents/MacOS/GraphCorePackageTests",
-      "packagePath" : "/Users/egorproskurin/Projects/luvano/petable",
+      "binaryPath" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCorePackageTests.xctest/Contents/MacOS/GraphCorePackageTests",
+      "packagePath" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson",
       "productName" : "GraphCorePackageTests"
     }
   ],
@@ -23,77 +23,82 @@
   "swiftCommands" : {
     "C.GraphCore-arm64-apple-macosx-debug.module" : {
       "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
-      "fileList" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/sources",
-      "importPath" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/Modules",
+      "fileList" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/sources",
+      "importPath" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/Modules",
       "inputs" : [
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/AgentArtifacts.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/AgentArtifacts.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Envelope.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/Envelope.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Export.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/Export.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/GraphEngine.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/GraphEngine.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/GraphSession.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/GraphSession.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Job.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/Job.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Layout.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/Layout.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/LevelStyle.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/LevelStyle.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Research.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/Research.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/RoleParser.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/RoleParser.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/WorkGraph.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/Segmentation.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/WorkGraph.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/sources"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/sources"
         }
       ],
       "isLibrary" : true,
       "moduleName" : "GraphCore",
-      "moduleOutputPath" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/Modules/GraphCore.swiftmodule",
+      "moduleOutputPath" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/Modules/GraphCore.swiftmodule",
       "objects" : [
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/AgentArtifacts.swift.o",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Envelope.swift.o",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Export.swift.o",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/GraphEngine.swift.o",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/GraphSession.swift.o",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Job.swift.o",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Layout.swift.o",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/LevelStyle.swift.o",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Research.swift.o",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/RoleParser.swift.o",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/WorkGraph.swift.o"
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/AgentArtifacts.swift.o",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/Envelope.swift.o",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/Export.swift.o",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/GraphEngine.swift.o",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/GraphSession.swift.o",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/Job.swift.o",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/Layout.swift.o",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/LevelStyle.swift.o",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/Research.swift.o",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/RoleParser.swift.o",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/Segmentation.swift.o",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/WorkGraph.swift.o"
       ],
       "otherArguments" : [
         "-target",
@@ -102,7 +107,7 @@
         "-enable-batch-mode",
         "-serialize-diagnostics",
         "-index-store-path",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/index/store",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/index/store",
         "-Onone",
         "-enable-testing",
         "-j12",
@@ -110,12 +115,12 @@
         "-DDEBUG",
         "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
         "-module-cache-path",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/ModuleCache",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/ModuleCache",
         "-parseable-output",
         "-parse-as-library",
         "-emit-objc-header",
         "-emit-objc-header-path",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/include/GraphCore-Swift.h",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/include/GraphCore-Swift.h",
         "-swift-version",
         "6",
         "-plugin-path",
@@ -142,103 +147,108 @@
         "-Xcc",
         "-g",
         "-package-name",
-        "petable"
+        "sorted_dancing_wigderson"
       ],
-      "outputFileMapPath" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/output-file-map.json",
+      "outputFileMapPath" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/output-file-map.json",
       "outputs" : [
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/AgentArtifacts.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/AgentArtifacts.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Envelope.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/Envelope.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Export.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/Export.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/GraphEngine.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/GraphEngine.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/GraphSession.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/GraphSession.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Job.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/Job.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Layout.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/Layout.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/LevelStyle.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/LevelStyle.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Research.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/Research.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/RoleParser.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/RoleParser.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/WorkGraph.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/Segmentation.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/Modules/GraphCore.swiftmodule"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/WorkGraph.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/Modules/GraphCore.swiftmodule"
         }
       ],
       "prepareForIndexing" : false,
       "sources" : [
-        "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/AgentArtifacts.swift",
-        "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Envelope.swift",
-        "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Export.swift",
-        "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/GraphEngine.swift",
-        "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/GraphSession.swift",
-        "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Job.swift",
-        "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Layout.swift",
-        "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/LevelStyle.swift",
-        "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Research.swift",
-        "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/RoleParser.swift",
-        "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/WorkGraph.swift"
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/AgentArtifacts.swift",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/Envelope.swift",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/Export.swift",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/GraphEngine.swift",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/GraphSession.swift",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/Job.swift",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/Layout.swift",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/LevelStyle.swift",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/Research.swift",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/RoleParser.swift",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/Segmentation.swift",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/WorkGraph.swift"
       ],
-      "tempsPath" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build",
+      "tempsPath" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build",
       "wholeModuleOptimization" : false
     },
     "C.GraphCorePackageTests-arm64-apple-macosx-debug.module" : {
       "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
-      "fileList" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCorePackageTests.build/sources",
-      "importPath" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/Modules",
+      "fileList" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCorePackageTests.build/sources",
+      "importPath" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/Modules",
       "inputs" : [
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCorePackageTests.derived/runner.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCorePackageTests.derived/runner.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/Modules/GraphCoreTests.swiftmodule"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/Modules/GraphCoreTests.swiftmodule"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCorePackageTests.build/sources"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCorePackageTests.build/sources"
         }
       ],
       "isLibrary" : true,
       "moduleName" : "GraphCorePackageTests",
-      "moduleOutputPath" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/Modules/GraphCorePackageTests.swiftmodule",
+      "moduleOutputPath" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/Modules/GraphCorePackageTests.swiftmodule",
       "objects" : [
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCorePackageTests.build/runner.swift.o"
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCorePackageTests.build/runner.swift.o"
       ],
       "otherArguments" : [
         "-target",
@@ -247,7 +257,7 @@
         "-enable-batch-mode",
         "-serialize-diagnostics",
         "-index-store-path",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/index/store",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/index/store",
         "-Onone",
         "-enable-testing",
         "-Xfrontend",
@@ -257,12 +267,12 @@
         "-DDEBUG",
         "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
         "-module-cache-path",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/ModuleCache",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/ModuleCache",
         "-parseable-output",
         "-parse-as-library",
         "-emit-objc-header",
         "-emit-objc-header-path",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCorePackageTests.build/include/GraphCorePackageTests-Swift.h",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCorePackageTests.build/include/GraphCorePackageTests-Swift.h",
         "-plugin-path",
         "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
         "-sdk",
@@ -287,98 +297,103 @@
         "-Xcc",
         "-g",
         "-package-name",
-        "petable"
+        "sorted_dancing_wigderson"
       ],
-      "outputFileMapPath" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCorePackageTests.build/output-file-map.json",
+      "outputFileMapPath" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCorePackageTests.build/output-file-map.json",
       "outputs" : [
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCorePackageTests.build/runner.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCorePackageTests.build/runner.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/Modules/GraphCorePackageTests.swiftmodule"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/Modules/GraphCorePackageTests.swiftmodule"
         }
       ],
       "prepareForIndexing" : false,
       "sources" : [
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCorePackageTests.derived/runner.swift"
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCorePackageTests.derived/runner.swift"
       ],
-      "tempsPath" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCorePackageTests.build",
+      "tempsPath" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCorePackageTests.build",
       "wholeModuleOptimization" : false
     },
     "C.GraphCoreTests-arm64-apple-macosx-debug.module" : {
       "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
-      "fileList" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/sources",
-      "importPath" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/Modules",
+      "fileList" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/sources",
+      "importPath" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/Modules",
       "inputs" : [
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/AgentArtifactsTests.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/AgentArtifactsTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/EnvelopeTests.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/EnvelopeTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/ExportTests.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/ExportTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/Fixtures.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/Fixtures.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/GraphEngineTests.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/GraphEngineTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/GraphSessionTests.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/GraphSessionTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/LayoutTests.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/LayoutTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/PerfTests.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/PerfTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/ResearchTests.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/ResearchTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/RoleParserTests.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/RoleParserTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/SegmentationTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/Modules/GraphCore.swiftmodule"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/sources"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/Modules/GraphCore.swiftmodule"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/sources"
         }
       ],
       "isLibrary" : true,
       "moduleName" : "GraphCoreTests",
-      "moduleOutputPath" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/Modules/GraphCoreTests.swiftmodule",
+      "moduleOutputPath" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/Modules/GraphCoreTests.swiftmodule",
       "objects" : [
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/AgentArtifactsTests.swift.o",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/EnvelopeTests.swift.o",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/ExportTests.swift.o",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/Fixtures.swift.o",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/GraphEngineTests.swift.o",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/GraphSessionTests.swift.o",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/LayoutTests.swift.o",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/PerfTests.swift.o",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/ResearchTests.swift.o",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/RoleParserTests.swift.o"
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/AgentArtifactsTests.swift.o",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/EnvelopeTests.swift.o",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/ExportTests.swift.o",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/Fixtures.swift.o",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/GraphEngineTests.swift.o",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/GraphSessionTests.swift.o",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/LayoutTests.swift.o",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/PerfTests.swift.o",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/ResearchTests.swift.o",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/RoleParserTests.swift.o",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/SegmentationTests.swift.o"
       ],
       "otherArguments" : [
         "-target",
@@ -387,7 +402,7 @@
         "-enable-batch-mode",
         "-serialize-diagnostics",
         "-index-store-path",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/index/store",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/index/store",
         "-Onone",
         "-enable-testing",
         "-Xfrontend",
@@ -397,7 +412,7 @@
         "-DDEBUG",
         "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
         "-module-cache-path",
-        "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/ModuleCache",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/ModuleCache",
         "-parseable-output",
         "-parse-as-library",
         "-swift-version",
@@ -426,69 +441,74 @@
         "-Xcc",
         "-g",
         "-package-name",
-        "petable"
+        "sorted_dancing_wigderson"
       ],
-      "outputFileMapPath" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/output-file-map.json",
+      "outputFileMapPath" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/output-file-map.json",
       "outputs" : [
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/AgentArtifactsTests.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/AgentArtifactsTests.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/EnvelopeTests.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/EnvelopeTests.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/ExportTests.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/ExportTests.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/Fixtures.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/Fixtures.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/GraphEngineTests.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/GraphEngineTests.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/GraphSessionTests.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/GraphSessionTests.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/LayoutTests.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/LayoutTests.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/PerfTests.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/PerfTests.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/ResearchTests.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/ResearchTests.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/RoleParserTests.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/RoleParserTests.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/Modules/GraphCoreTests.swiftmodule"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/SegmentationTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/Modules/GraphCoreTests.swiftmodule"
         }
       ],
       "prepareForIndexing" : false,
       "sources" : [
-        "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/AgentArtifactsTests.swift",
-        "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/EnvelopeTests.swift",
-        "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/ExportTests.swift",
-        "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/Fixtures.swift",
-        "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/GraphEngineTests.swift",
-        "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/GraphSessionTests.swift",
-        "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/LayoutTests.swift",
-        "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/PerfTests.swift",
-        "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/ResearchTests.swift",
-        "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/RoleParserTests.swift"
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/AgentArtifactsTests.swift",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/EnvelopeTests.swift",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/ExportTests.swift",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/Fixtures.swift",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/GraphEngineTests.swift",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/GraphSessionTests.swift",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/LayoutTests.swift",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/PerfTests.swift",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/ResearchTests.swift",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/RoleParserTests.swift",
+        "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/SegmentationTests.swift"
       ],
-      "tempsPath" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build",
+      "tempsPath" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build",
       "wholeModuleOptimization" : false
     }
   },
@@ -501,28 +521,29 @@
       "-module-name",
       "GraphCore",
       "-package-name",
-      "petable",
+      "sorted_dancing_wigderson",
       "-c",
-      "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/AgentArtifacts.swift",
-      "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Envelope.swift",
-      "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Export.swift",
-      "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/GraphEngine.swift",
-      "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/GraphSession.swift",
-      "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Job.swift",
-      "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Layout.swift",
-      "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/LevelStyle.swift",
-      "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Research.swift",
-      "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/RoleParser.swift",
-      "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/WorkGraph.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/AgentArtifacts.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/Envelope.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/Export.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/GraphEngine.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/GraphSession.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/Job.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/Layout.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/LevelStyle.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/Research.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/RoleParser.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/Segmentation.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/WorkGraph.swift",
       "-I",
-      "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/Modules",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/Modules",
       "-target",
       "arm64-apple-macosx14.0",
       "-incremental",
       "-enable-batch-mode",
       "-serialize-diagnostics",
       "-index-store-path",
-      "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/index/store",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/index/store",
       "-Onone",
       "-enable-testing",
       "-j12",
@@ -530,12 +551,12 @@
       "-DDEBUG",
       "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
       "-module-cache-path",
-      "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/ModuleCache",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/ModuleCache",
       "-parseable-output",
       "-parse-as-library",
       "-emit-objc-header",
       "-emit-objc-header-path",
-      "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/include/GraphCore-Swift.h",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/include/GraphCore-Swift.h",
       "-swift-version",
       "6",
       "-plugin-path",
@@ -562,7 +583,7 @@
       "-Xcc",
       "-g",
       "-package-name",
-      "petable",
+      "sorted_dancing_wigderson",
       "-driver-use-frontend-path",
       "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
     ],
@@ -571,18 +592,18 @@
       "-module-name",
       "GraphCorePackageTests",
       "-package-name",
-      "petable",
+      "sorted_dancing_wigderson",
       "-c",
-      "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCorePackageTests.derived/runner.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCorePackageTests.derived/runner.swift",
       "-I",
-      "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/Modules",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/Modules",
       "-target",
       "arm64-apple-macosx14.0",
       "-incremental",
       "-enable-batch-mode",
       "-serialize-diagnostics",
       "-index-store-path",
-      "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/index/store",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/index/store",
       "-Onone",
       "-enable-testing",
       "-Xfrontend",
@@ -592,12 +613,12 @@
       "-DDEBUG",
       "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
       "-module-cache-path",
-      "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/ModuleCache",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/ModuleCache",
       "-parseable-output",
       "-parse-as-library",
       "-emit-objc-header",
       "-emit-objc-header-path",
-      "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCorePackageTests.build/include/GraphCorePackageTests-Swift.h",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCorePackageTests.build/include/GraphCorePackageTests-Swift.h",
       "-plugin-path",
       "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
       "-sdk",
@@ -622,7 +643,7 @@
       "-Xcc",
       "-g",
       "-package-name",
-      "petable",
+      "sorted_dancing_wigderson",
       "-driver-use-frontend-path",
       "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
     ],
@@ -631,27 +652,28 @@
       "-module-name",
       "GraphCoreTests",
       "-package-name",
-      "petable",
+      "sorted_dancing_wigderson",
       "-c",
-      "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/AgentArtifactsTests.swift",
-      "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/EnvelopeTests.swift",
-      "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/ExportTests.swift",
-      "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/Fixtures.swift",
-      "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/GraphEngineTests.swift",
-      "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/GraphSessionTests.swift",
-      "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/LayoutTests.swift",
-      "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/PerfTests.swift",
-      "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/ResearchTests.swift",
-      "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/RoleParserTests.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/AgentArtifactsTests.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/EnvelopeTests.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/ExportTests.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/Fixtures.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/GraphEngineTests.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/GraphSessionTests.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/LayoutTests.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/PerfTests.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/ResearchTests.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/RoleParserTests.swift",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/SegmentationTests.swift",
       "-I",
-      "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/Modules",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/Modules",
       "-target",
       "arm64-apple-macosx14.0",
       "-incremental",
       "-enable-batch-mode",
       "-serialize-diagnostics",
       "-index-store-path",
-      "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/index/store",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/index/store",
       "-Onone",
       "-enable-testing",
       "-Xfrontend",
@@ -661,7 +683,7 @@
       "-DDEBUG",
       "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
       "-module-cache-path",
-      "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/ModuleCache",
+      "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/ModuleCache",
       "-parseable-output",
       "-parse-as-library",
       "-swift-version",
@@ -690,7 +712,7 @@
       "-Xcc",
       "-g",
       "-package-name",
-      "petable",
+      "sorted_dancing_wigderson",
       "-driver-use-frontend-path",
       "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
     ]
@@ -711,14 +733,14 @@
 
   },
   "testEntryPointCommands" : {
-    "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCorePackageTests.derived/runner.swift" : {
+    "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCorePackageTests.derived/runner.swift" : {
       "inputs" : [
 
       ],
       "outputs" : [
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCorePackageTests.derived/runner.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCorePackageTests.derived/runner.swift"
         }
       ]
     }
@@ -729,7 +751,7 @@
     }
   },
   "writeCommands" : {
-    "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/sources" : {
+    "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/sources" : {
       "alwaysOutOfDate" : false,
       "inputs" : [
         {
@@ -738,52 +760,56 @@
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/AgentArtifacts.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/AgentArtifacts.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Envelope.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/Envelope.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Export.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/Export.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/GraphEngine.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/GraphEngine.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/GraphSession.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/GraphSession.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Job.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/Job.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Layout.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/Layout.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/LevelStyle.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/LevelStyle.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/Research.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/Research.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/RoleParser.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/RoleParser.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Sources/GraphCore/WorkGraph.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/Segmentation.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Sources/GraphCore/WorkGraph.swift"
         }
       ],
-      "outputFilePath" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/sources"
+      "outputFilePath" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/sources"
     },
-    "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCorePackageTests.build/sources" : {
+    "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCorePackageTests.build/sources" : {
       "alwaysOutOfDate" : false,
       "inputs" : [
         {
@@ -792,12 +818,12 @@
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCorePackageTests.derived/runner.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCorePackageTests.derived/runner.swift"
         }
       ],
-      "outputFilePath" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCorePackageTests.build/sources"
+      "outputFilePath" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCorePackageTests.build/sources"
     },
-    "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCorePackageTests.product/Objects.LinkFileList" : {
+    "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCorePackageTests.product/Objects.LinkFileList" : {
       "alwaysOutOfDate" : false,
       "inputs" : [
         {
@@ -806,96 +832,104 @@
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/AgentArtifacts.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/AgentArtifacts.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Envelope.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/Envelope.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Export.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/Export.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/GraphEngine.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/GraphEngine.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/GraphSession.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/GraphSession.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Job.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/Job.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Layout.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/Layout.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/LevelStyle.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/LevelStyle.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/Research.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/Research.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/RoleParser.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/RoleParser.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCore.build/WorkGraph.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/Segmentation.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCorePackageTests.build/runner.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCore.build/WorkGraph.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/AgentArtifactsTests.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCorePackageTests.build/runner.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/EnvelopeTests.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/AgentArtifactsTests.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/ExportTests.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/EnvelopeTests.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/Fixtures.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/ExportTests.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/GraphEngineTests.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/Fixtures.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/GraphSessionTests.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/GraphEngineTests.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/LayoutTests.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/GraphSessionTests.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/PerfTests.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/LayoutTests.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/ResearchTests.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/PerfTests.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/RoleParserTests.swift.o"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/ResearchTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/RoleParserTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/SegmentationTests.swift.o"
         }
       ],
-      "outputFilePath" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCorePackageTests.product/Objects.LinkFileList"
+      "outputFilePath" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCorePackageTests.product/Objects.LinkFileList"
     },
-    "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/sources" : {
+    "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/sources" : {
       "alwaysOutOfDate" : false,
       "inputs" : [
         {
@@ -904,48 +938,52 @@
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/AgentArtifactsTests.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/AgentArtifactsTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/EnvelopeTests.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/EnvelopeTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/ExportTests.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/ExportTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/Fixtures.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/Fixtures.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/GraphEngineTests.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/GraphEngineTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/GraphSessionTests.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/GraphSessionTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/LayoutTests.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/LayoutTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/PerfTests.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/PerfTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/ResearchTests.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/ResearchTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/egorproskurin/Projects/luvano/petable/Tests/GraphCoreTests/RoleParserTests.swift"
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/RoleParserTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/Tests/GraphCoreTests/SegmentationTests.swift"
         }
       ],
-      "outputFilePath" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/GraphCoreTests.build/sources"
+      "outputFilePath" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/GraphCoreTests.build/sources"
     },
-    "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt" : {
+    "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt" : {
       "alwaysOutOfDate" : true,
       "inputs" : [
         {
@@ -957,7 +995,7 @@
           "name" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
         }
       ],
-      "outputFilePath" : "/Users/egorproskurin/Projects/luvano/petable/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+      "outputFilePath" : "/Users/egorproskurin/Projects/luvano/petable/.claude/worktrees/sorted-dancing-wigderson/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
     }
   }
 }
