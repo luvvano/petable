@@ -144,6 +144,23 @@ struct AppShellView: View {
                         newItemRow("Создать шаблон", help: "Новый шаблон интервью") {
                             document.addTemplate()
                         }
+                        Menu {
+                            Button("Из файла…") {
+                                ExportImport.importTemplate(into: document)
+                            }
+                            Button("Вставить из буфера") {
+                                ExportImport.importTemplateFromClipboard(into: document)
+                            }
+                        } label: {
+                            Label("Импортировать…", systemImage: "square.and.arrow.down")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(Color.accentColor)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                        }
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .help("Импортировать шаблон интервью из JSON: файл или буфер обмена")
                     } label: {
                         Label("Шаблоны", systemImage: "doc.on.doc")
                             .font(.system(size: 12, weight: .medium))
@@ -228,7 +245,19 @@ struct AppShellView: View {
                 }
                 .help("Экспортировать интервью: в файл или в буфер обмена")
             }
-        case .template, .segment, .segmentMap:
+        case .template(let id):
+            if let template = document.research.templates.first(where: { $0.id == id }) {
+                Menu {
+                    templateShareLink(template)
+                    Divider()
+                    Button("Экспортировать в JSON…") { ExportImport.exportTemplateJSON(template) }
+                    Button("Скопировать JSON") { ExportImport.copyTemplateJSON(template) }
+                } label: {
+                    Label("Экспорт", systemImage: "square.and.arrow.up")
+                }
+                .help("Поделиться шаблоном или экспортировать: файл, буфер обмена")
+            }
+        case .segment, .segmentMap:
             EmptyView()
         case nil:
             if let stage = document.graphStages.first(where: { $0.id == document.selectedGraphID }) {
@@ -399,8 +428,27 @@ struct AppShellView: View {
             deletable: true,
             deleteHelp: "Удалить шаблон",
             onDelete: { document.deleteTemplate(template.id) },
-            onRename: nil
+            onRename: nil,
+            exportItems: [
+                ("Экспортировать в JSON…", { ExportImport.exportTemplateJSON(template) }),
+                ("Скопировать JSON", { ExportImport.copyTemplateJSON(template) }),
+            ],
+            extraContextItems: AnyView(templateShareLink(template))
         )
+    }
+
+    /// Системная кнопка «Поделиться» шаблоном: Mail, Сообщения, AirDrop,
+    /// Telegram, WhatsApp — все установленные share-расширения.
+    private func templateShareLink(_ template: InterviewTemplate) -> some View {
+        ShareLink(
+            item: TemplateShareItem(template: template),
+            preview: SharePreview(
+                "Шаблон AJTBD — \(template.name)",
+                image: Image(systemName: "doc.text")
+            )
+        ) {
+            Label("Поделиться…", systemImage: "square.and.arrow.up")
+        }
     }
 
     /// Строка сайдбара: имя + бейдж «агент» + корзина при наведении
@@ -414,7 +462,8 @@ struct AppShellView: View {
         deleteHelp: String,
         onDelete: @escaping () -> Void,
         onRename: (() -> Void)?,
-        exportItems: [(title: String, action: () -> Void)] = []
+        exportItems: [(title: String, action: () -> Void)] = [],
+        extraContextItems: AnyView? = nil
     ) -> some View {
         HStack {
             Label(name, systemImage: icon)
@@ -445,6 +494,10 @@ struct AppShellView: View {
         .contextMenu {
             if let onRename {
                 Button("Переименовать", action: onRename)
+            }
+            if let extraContextItems {
+                Divider()
+                extraContextItems
             }
             if !exportItems.isEmpty {
                 Divider()

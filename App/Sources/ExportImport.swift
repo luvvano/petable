@@ -1,6 +1,20 @@
 import AppKit
+import CoreTransferable
 import UniformTypeIdentifiers
 import GraphCore
+
+/// Транспорт шаблона для системной кнопки «Поделиться» (ShareLink).
+/// Файл пишется лениво — в момент, когда пользователь выбрал сервис,
+/// а не при каждом показе меню.
+struct TemplateShareItem: Transferable {
+    let template: InterviewTemplate
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(exportedContentType: .json) { item in
+            SentTransferredFile(try ExportImport.temporaryTemplateFile(item.template))
+        }
+    }
+}
 
 /// Экспорт интервью (JSON / Markdown / PDF) и экспорт/импорт графа
 /// работ (JSON) через системные панели сохранения/открытия.
@@ -49,6 +63,84 @@ enum ExportImport {
                 "Не удалось экспортировать интервью",
                 nil,
                 fallback: "Ошибка при создании PDF-файла."
+            )
+        }
+    }
+
+    // MARK: - Шаблоны интервью
+
+    static func exportTemplateJSON(_ template: InterviewTemplate) {
+        guard let url = runSavePanel(suggestedName: template.name, type: .json) else { return }
+        do {
+            try InterviewTemplateExportFile(template: template).encoded().write(to: url)
+        } catch {
+            showError("Не удалось экспортировать шаблон", error)
+        }
+    }
+
+    static func copyTemplateJSON(_ template: InterviewTemplate) {
+        do {
+            let data = try InterviewTemplateExportFile(template: template).encoded()
+            copyToClipboard(String(decoding: data, as: UTF8.self))
+        } catch {
+            showError("Не удалось скопировать шаблон", error)
+        }
+    }
+
+    /// Файл шаблона во временной папке — для системного шаринга
+    /// (ShareLink): Mail, Сообщения, AirDrop, Telegram, WhatsApp и
+    /// другие установленные share-расширения. Своя подпапка на вызов —
+    /// имя файла человеческое и не конфликтует с прошлыми.
+    nonisolated static func temporaryTemplateFile(_ template: InterviewTemplate) throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("petable-share-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let name = template.name
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+        let url = directory.appendingPathComponent("Шаблон AJTBD — \(name).json")
+        try InterviewTemplateExportFile(template: template).encoded().write(to: url)
+        return url
+    }
+
+    static func importTemplate(into document: PetableDocument) {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.message = "Выберите JSON-файл шаблона интервью, экспортированный из petable"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            importTemplateData(try Data(contentsOf: url), into: document)
+        } catch {
+            showError("Не удалось импортировать шаблон", error)
+        }
+    }
+
+    static func importTemplateFromClipboard(into document: PetableDocument) {
+        guard let text = NSPasteboard.general.string(forType: .string),
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            showError(
+                "Не удалось импортировать шаблон",
+                nil,
+                fallback: "Буфер обмена пуст или не содержит текста."
+            )
+            return
+        }
+        importTemplateData(Data(text.utf8), into: document)
+    }
+
+    private static func importTemplateData(_ data: Data, into document: PetableDocument) {
+        do {
+            let file = try InterviewTemplateExportFile.decode(data)
+            document.importTemplate(file.template)
+        } catch let error as ExportFileError {
+            showError("Не удалось импортировать шаблон", error)
+        } catch {
+            showError(
+                "Не удалось импортировать шаблон",
+                nil,
+                fallback: "JSON не похож на экспорт шаблона интервью petable."
             )
         }
     }

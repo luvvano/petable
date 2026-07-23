@@ -404,6 +404,28 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
         }
     }
 
+    /// Импорт шаблона из файла или буфера (экспорт другого проекта или
+    /// другого человека): id перегенерируются — один файл можно
+    /// импортировать многократно; имя разрешается от коллизий.
+    /// Открывается в редакторе шаблона.
+    @MainActor
+    @discardableResult
+    func importTemplate(_ template: InterviewTemplate) -> UUID {
+        var imported = template.withRegeneratedIDs()
+        let base = imported.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        imported.name = uniqueName(
+            base: base.isEmpty ? "Шаблон" : base,
+            existing: Set(research.templates.map(\.name)),
+            firstWithoutNumber: true
+        )
+        let importedID = imported.id
+        applyListChange { [imported] in
+            research.templates.append(imported)
+            selectedResearchItem = .template(importedID)
+        }
+        return importedID
+    }
+
     @MainActor
     func deleteTemplate(_ id: UUID) {
         guard let index = research.templates.firstIndex(where: { $0.id == id }) else { return }
