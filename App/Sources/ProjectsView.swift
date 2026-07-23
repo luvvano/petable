@@ -11,6 +11,7 @@ struct ProjectsView: View {
 
     @State private var creating = false
     @State private var nameDraft = ""
+    @State private var selectedID: URL?
     @State private var renamingID: URL?
     @State private var renameDraft = ""
     @FocusState private var renameFocused: Bool
@@ -50,10 +51,11 @@ struct ProjectsView: View {
     // MARK: - Список
 
     private var projectList: some View {
-        List(store.projects) { project in
+        List(store.projects, selection: $selectedID) { project in
             row(project)
                 .contentShape(Rectangle())
-                .onTapGesture(count: 2) { open(project.url) }
+                .gesture(TapGesture(count: 2).onEnded { open(project.url) })
+                .simultaneousGesture(TapGesture().onEnded { selectedID = project.id })
                 .contextMenu {
                     Button("Открыть") { open(project.url) }
                     Button("Переименовать") { beginRename(project) }
@@ -61,8 +63,19 @@ struct ProjectsView: View {
                         NSWorkspace.shared.activateFileViewerSelecting([project.url])
                     }
                 }
+                .tag(project.id)
         }
         .listStyle(.inset)
+        // Клавиатура как в Finder/Xcode Welcome: стрелки — по списку,
+        // Return — открыть выделенный проект.
+        .onKeyPress(.return) {
+            guard renamingID == nil,
+                  let url = selectedID,
+                  store.projects.contains(where: { $0.id == url })
+            else { return .ignored }
+            open(url)
+            return .handled
+        }
     }
 
     @ViewBuilder
@@ -99,6 +112,14 @@ struct ProjectsView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+            Button {
+                nameDraft = ""
+                creating = true
+            } label: {
+                Label("Новый проект", systemImage: "plus")
+            }
+            .buttonStyle(.borderedProminent)
+            .padding(.top, 4)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

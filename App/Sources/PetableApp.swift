@@ -24,11 +24,66 @@ struct PetableApp: App {
                 }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
             }
+            CanvasZoomMenuCommands()
+            CanvasGraphMenuCommands()
         }
 
         // Настройки (⌘,): токены и конфигурация ИИ-агента.
         Settings {
             AgentSettingsView()
+        }
+    }
+}
+
+/// Меню «Вид»: стандартные zoom-команды macOS (⌘+/⌘−/⌘0/⇧⌘0),
+/// работают в окне с канвасом через focusedSceneValue.
+struct CanvasZoomMenuCommands: Commands {
+    @FocusedValue(\.canvasZoom) private var canvasZoom
+
+    var body: some Commands {
+        CommandGroup(after: .toolbar) {
+            Button("Увеличить") { canvasZoom?.zoomIn() }
+                .keyboardShortcut("+", modifiers: .command)
+                .disabled(canvasZoom == nil)
+            Button("Уменьшить") { canvasZoom?.zoomOut() }
+                .keyboardShortcut("-", modifiers: .command)
+                .disabled(canvasZoom == nil)
+            Button("Реальный размер") { canvasZoom?.actualSize() }
+                .keyboardShortcut("0", modifiers: .command)
+                .disabled(canvasZoom == nil)
+            Button("Вписать граф в окно") { canvasZoom?.zoomToFit() }
+                .keyboardShortcut("0", modifiers: [.command, .shift])
+                .disabled(canvasZoom == nil)
+            Divider()
+        }
+    }
+}
+
+/// Меню «Граф»: все действия канваса в строке меню — HIG называет её
+/// главным местом обнаружения команд. Клавиши (Tab, Return, ⌘←…)
+/// перехватывает сам канвас, поэтому в пунктах они показаны текстом,
+/// а не key equivalents — иначе меню отняло бы Tab у текстовых полей.
+struct CanvasGraphMenuCommands: Commands {
+    @FocusedValue(\.canvasGraph) private var graph
+
+    var body: some Commands {
+        CommandMenu("Граф") {
+            Button("Новая работа на верхнем уровне") { graph?.addJobTop() }
+                .disabled(graph == nil)
+            Button("Декомпозиция ниже (Tab)") { graph?.addBelow() }
+                .disabled(graph?.hasSelection != true)
+            Button("Работа справа (⌘Return)") { graph?.addRight() }
+                .disabled(graph?.hasSelection != true)
+            Divider()
+            Button("Редактировать текст (Return)") { graph?.editText() }
+                .disabled(graph?.hasSelection != true)
+            Button("Сдвинуть влево (⌘←)") { graph?.moveLeft() }
+                .disabled(graph?.hasSelection != true)
+            Button("Сдвинуть вправо (⌘→)") { graph?.moveRight() }
+                .disabled(graph?.hasSelection != true)
+            Divider()
+            Button("Удалить работу (Delete)") { graph?.deleteSelection() }
+                .disabled(graph?.hasSelection != true)
         }
     }
 }
@@ -358,6 +413,7 @@ struct AppShellView: View {
                 isAgent: stage.resolvedOrigin == .agent,
                 deletable: document.graphStages.count > 1,
                 deleteHelp: "Удалить граф",
+                onSelect: { document.selectGraph(stage.id) },
                 onDelete: { document.deleteGraph(stage.id) },
                 onRename: { beginRename(id: stage.id, name: stage.name) },
                 exportItems: [
@@ -380,6 +436,7 @@ struct AppShellView: View {
                 isAgent: interview.resolvedOrigin == .agent,
                 deletable: true,
                 deleteHelp: "Удалить интервью",
+                onSelect: { document.selectResearch(.interview(interview.id)) },
                 onDelete: { document.deleteInterview(interview.id) },
                 onRename: { beginRename(id: interview.id, name: interview.name) },
                 exportItems: [
@@ -427,6 +484,7 @@ struct AppShellView: View {
             isAgent: false,
             deletable: true,
             deleteHelp: "Удалить шаблон",
+            onSelect: { document.selectResearch(.template(template.id)) },
             onDelete: { document.deleteTemplate(template.id) },
             onRename: nil,
             exportItems: [
@@ -460,6 +518,7 @@ struct AppShellView: View {
         isAgent: Bool,
         deletable: Bool,
         deleteHelp: String,
+        onSelect: @escaping () -> Void,
         onDelete: @escaping () -> Void,
         onRename: (() -> Void)?,
         exportItems: [(title: String, action: () -> Void)] = [],
@@ -491,6 +550,11 @@ struct AppShellView: View {
                 hoveredRow = nil
             }
         }
+        // Двойной клик — переименование (конвенция Finder/Xcode). Жест
+        // перехватывает клики у List, поэтому одиночный клик выбирает
+        // строку явно — simultaneousGesture, иначе выбор ломается.
+        .gesture(TapGesture(count: 2).onEnded { onRename?() })
+        .simultaneousGesture(TapGesture().onEnded { onSelect() })
         .contextMenu {
             if let onRename {
                 Button("Переименовать", action: onRename)

@@ -18,6 +18,10 @@ struct CanvasRootView: View {
 
     @State private var scale: CGFloat = 1
     @State private var offset: CGSize = .zero
+    /// Видимая область канваса — для zoom-to-fit и зума от центра.
+    @State private var viewportSize: CGSize = .zero
+    /// Подсказки горячих клавиш внизу канваса; выключаются кнопкой «?».
+    @AppStorage("canvas.showsHints") private var showsHints = true
     /// Курсор в координатах контента — для proximity-reveal кнопок.
     @State private var cursorPosition: CGPoint?
     /// Выделенное ребро — подсветка + ✕ на линии + Delete.
@@ -56,6 +60,9 @@ struct CanvasRootView: View {
                     selection = nil
                     selectedEdge = nil
                 },
+                onDoubleClickEmpty: { location in
+                    createJobAtEmptyPoint(location)
+                },
                 onMouseMove: { location in
                     guard let location else {
                         cursorPosition = nil
@@ -81,6 +88,64 @@ struct CanvasRootView: View {
                 .allowsHitTesting(true)
         }
         .background(Color(nsColor: .textBackgroundColor))
+        .overlay(alignment: .bottomTrailing) { zoomControls }
+        .overlay(alignment: .bottom) {
+            if showsHints { hintsBar }
+        }
+        .background(
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { viewportSize = proxy.size }
+                    .onChange(of: proxy.size) { _, size in viewportSize = size }
+            }
+        )
+        .focusedSceneValue(\.canvasZoom, CanvasZoomCommands(
+            zoomIn: { zoomStep(1.25) },
+            zoomOut: { zoomStep(1 / 1.25) },
+            actualSize: { setZoom(1) },
+            zoomToFit: { zoomToFit() }
+        ))
+        .focusedSceneValue(\.canvasGraph, CanvasGraphCommands(
+            hasSelection: selection != nil,
+            addJobTop: {
+                commitEditingIfNeeded()
+                guard let firstLevel = document.graph.levels.first else { return }
+                if let newId = document.perform(.addJob(level: firstLevel.id)) {
+                    startEditingNew(newId)
+                }
+            },
+            addBelow: {
+                guard let selection else { return }
+                commitEditingIfNeeded()
+                if let newId = document.perform(.addConnectedBelow(of: selection)) {
+                    startEditingNew(newId)
+                }
+            },
+            addRight: {
+                guard let selection else { return }
+                commitEditingIfNeeded()
+                if let newId = document.perform(.addConnectedRight(of: selection)) {
+                    startEditingNew(newId)
+                }
+            },
+            editText: {
+                guard let selection, let job = document.graph.job(selection) else { return }
+                beginEditing(job)
+            },
+            moveLeft: {
+                guard let selection else { return }
+                document.perform(.reorder(selection, direction: .left))
+            },
+            moveRight: {
+                guard let selection else { return }
+                document.perform(.reorder(selection, direction: .right))
+            },
+            deleteSelection: {
+                guard let selection else { return }
+                commitEditingIfNeeded()
+                self.selection = document.perform(.delete(selection))
+            }
+        ))
         .onAppear {
             document.attach(undoManager)
             autoEditFreshDocument()
@@ -349,6 +414,12 @@ struct CanvasRootView: View {
                 // проходят дальше (пустота, узлы).
                 .contentShape(EdgeHitShape(base: shape))
                 .onTapGesture { selectEdge(edge) }
+                .contextMenu {
+                    Button("Удалить связь", role: .destructive) {
+                        document.perform(.toggleEdge(from: edge.from, to: edge.to))
+                        if selectedEdge == edge { selectedEdge = nil }
+                    }
+                }
 
             if isSelected {
                 // Кубическая кривая с такими контролами проходит через
@@ -418,7 +489,27 @@ struct CanvasRootView: View {
             }
             .contextMenu {
                 Button("Редактировать") { beginEditing(job) }
+                Divider()
+                Button("Работа справа (⌘Return)") {
+                    commitEditingIfNeeded()
+                    if let newId = document.perform(.addConnectedRight(of: job.id)) {
+                        startEditingNew(newId)
+                    }
+                }
+                Button("Декомпозиция ниже (Tab)") {
+                    commitEditingIfNeeded()
+                    if let newId = document.perform(.addConnectedBelow(of: job.id)) {
+                        startEditingNew(newId)
+                    }
+                }
+                Button("Сдвинуть влево (⌘←)") {
+                    document.perform(.reorder(job.id, direction: .left))
+                }
+                Button("Сдвинуть вправо (⌘→)") {
+                    document.perform(.reorder(job.id, direction: .right))
+                }
                 if let selection, selection != job.id {
+                    Divider()
                     Button(edgeExists(selection, job.id)
                            ? "Убрать связь с выделенной"
                            : "Связать с выделенной (⌘-клик)") {
@@ -579,6 +670,131 @@ struct CanvasRootView: View {
         return CGSize(width: max(maxX, 900), height: max(bottom, 600))
     }
 
+    // MARK: - Zoom-контролы и команды меню
+
+    /// Панель масштаба в правом нижнем углу: −, процент (клик — 100%),
+    /// +, вписать граф, «?» — подсказки клавиш. Конвенция canvas-приложений
+    /// (Freeform, OmniGraffle): текущий масштаб всегда виден.
+    private var zoomControls: some View {
+        HStack(spacing: 2) {
+            zoomBarButton("minus", help: "Уменьшить (⌘−)") { zoomStep(1 / 1.25) }
+            Button {
+                setZoom(1)
+            } label: {
+                Text("\(Int((scale * 100).rounded()))%")
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .monospacedDigit()
+                    .frame(width: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Реальный размер (⌘0)")
+            zoomBarButton("plus", help: "Увеличить (⌘+)") { zoomStep(1.25) }
+            Divider().frame(height: 14)
+            zoomBarButton(
+                "arrow.down.backward.and.arrow.up.forward.rectangle",
+                help: "Вписать граф в окно (⇧⌘0)"
+            ) { zoomToFit() }
+            zoomBarButton(
+                showsHints ? "questionmark.circle.fill" : "questionmark.circle",
+                help: showsHints ? "Скрыть подсказки клавиш" : "Показать подсказки клавиш"
+            ) { showsHints.toggle() }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .background(Capsule().fill(.regularMaterial))
+        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1))
+        .padding(12)
+    }
+
+    private func zoomBarButton(
+        _ systemImage: String,
+        help: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 22, height: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+    }
+
+    /// Подсказка по контексту: что можно нажать прямо сейчас.
+    private var hintsBar: some View {
+        Text(currentHint)
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(.regularMaterial))
+            .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1))
+            .padding(.bottom, 12)
+            .allowsHitTesting(false)
+            .animation(.easeOut(duration: 0.15), value: currentHint)
+    }
+
+    private var currentHint: String {
+        if editingId != nil {
+            return "Return — сохранить · Tab — сохранить и декомпозиция · Esc — отмена"
+        }
+        if selectedEdge != nil {
+            return "Delete — удалить связь · Esc — снять выделение"
+        }
+        if selection != nil {
+            return "Tab — декомпозиция · ⌘Return — работа справа · Return — текст · ⌘-клик — связь · Delete — удалить"
+        }
+        return "Двойной клик — новая работа · Tab — работа сверху · драг — панорама · ⌘-скролл — zoom"
+    }
+
+    /// Zoom от центра видимой области (кнопки и меню, без курсора).
+    private func zoomStep(_ factor: CGFloat) {
+        withAnimation(.spring(duration: 0.25)) {
+            applyZoom(factor, at: CGPoint(x: viewportSize.width / 2, y: viewportSize.height / 2))
+        }
+    }
+
+    private func setZoom(_ target: CGFloat) {
+        withAnimation(.spring(duration: 0.25)) {
+            applyZoom(target / scale, at: CGPoint(x: viewportSize.width / 2, y: viewportSize.height / 2))
+        }
+    }
+
+    /// Вписать весь граф в окно: масштаб не больше 100%, контент по центру.
+    private func zoomToFit() {
+        guard viewportSize.width > 0, viewportSize.height > 0 else { return }
+        let content = contentSize(GraphLayout.layout(document.graph))
+        let fit = min(
+            viewportSize.width / content.width,
+            viewportSize.height / content.height
+        )
+        let newScale = min(max(min(fit, 1), 0.25), 4)
+        withAnimation(.spring(duration: 0.3)) {
+            scale = newScale
+            offset = CGSize(
+                width: (viewportSize.width - content.width * newScale) / 2,
+                height: (viewportSize.height - content.height * newScale) / 2
+            )
+        }
+    }
+
+    /// Двойной клик по пустому месту — работа на уровне под курсором
+    /// (конвенция Freeform/MindNode: пустое место + двойной клик = узел).
+    private func createJobAtEmptyPoint(_ location: CGPoint) {
+        commitEditingIfNeeded()
+        let contentY = (location.y - offset.height) / scale
+        let levels = document.graph.levels
+        guard !levels.isEmpty else { return }
+        let index = Int(((contentY - bandTop(0)) / LayoutMetrics.rowHeight).rounded(.down))
+        let level = levels[min(max(index, 0), levels.count - 1)]
+        if let newId = document.perform(.addJob(level: level.id)) {
+            startEditingNew(newId)
+        }
+    }
+
     // MARK: - Zoom вокруг курсора
 
     private func applyZoom(_ factor: CGFloat, at cursor: CGPoint) {
@@ -642,6 +858,9 @@ struct CanvasRootView: View {
             guard let selection else { return false }
             // Без модалки: ⌘Z возвращает работу вместе со связями.
             self.selection = document.perform(.delete(selection))
+            return true
+        case .cmdPlus:
+            zoomStep(1.25)
             return true
         case .escape:
             selection = nil
@@ -780,6 +999,50 @@ struct CanvasRootView: View {
            job.verb.isEmpty {
             startEditingNew(job.id)
         }
+    }
+}
+
+/// Zoom-команды канваса для меню «Вид» (⌘+/⌘−/⌘0/⇧⌘0) — доносятся
+/// до активного окна через focusedSceneValue.
+struct CanvasZoomCommands {
+    let zoomIn: () -> Void
+    let zoomOut: () -> Void
+    let actualSize: () -> Void
+    let zoomToFit: () -> Void
+}
+
+struct CanvasZoomKey: FocusedValueKey {
+    typealias Value = CanvasZoomCommands
+}
+
+/// Действия над графом для меню «Граф» — HIG: строка меню остаётся
+/// главным местом обнаружения команд, даже когда те дублируются
+/// клавишами и контекстными меню.
+struct CanvasGraphCommands {
+    /// Есть выделенная работа — для disabled-состояния пунктов меню.
+    let hasSelection: Bool
+    let addJobTop: () -> Void
+    let addBelow: () -> Void
+    let addRight: () -> Void
+    let editText: () -> Void
+    let moveLeft: () -> Void
+    let moveRight: () -> Void
+    let deleteSelection: () -> Void
+}
+
+struct CanvasGraphKey: FocusedValueKey {
+    typealias Value = CanvasGraphCommands
+}
+
+extension FocusedValues {
+    var canvasZoom: CanvasZoomCommands? {
+        get { self[CanvasZoomKey.self] }
+        set { self[CanvasZoomKey.self] = newValue }
+    }
+
+    var canvasGraph: CanvasGraphCommands? {
+        get { self[CanvasGraphKey.self] }
+        set { self[CanvasGraphKey.self] = newValue }
     }
 }
 
