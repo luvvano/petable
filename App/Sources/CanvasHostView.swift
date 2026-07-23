@@ -6,6 +6,8 @@ enum CanvasKey {
     case tab, enter, cmdReturn, escape, delete
     case left, right, up, down
     case cmdLeft, cmdRight
+    /// ⌘= — синоним ⌘+ (zoom in без Shift, как во всех приложениях Apple).
+    case cmdPlus
 }
 
 /// Единая точка входа событий канваса: NSView — first responder своего окна,
@@ -19,6 +21,8 @@ struct CanvasHostView: NSViewRepresentable {
     /// (множитель, позиция курсора в координатах вью) — zoom вокруг курсора.
     let onZoom: (CGFloat, CGPoint) -> Void
     let onClickEmpty: () -> Void
+    /// Двойной клик по пустому месту — координаты вью.
+    let onDoubleClickEmpty: (CGPoint) -> Void
     /// Позиция курсора в координатах вью; nil — курсор ушёл с канваса.
     /// SwiftUI-ховер здесь не работает: NSView перехватывает mouseMoved,
     /// поэтому трекинг живёт в самом NSView.
@@ -40,6 +44,7 @@ struct CanvasHostView: NSViewRepresentable {
         view.onPan = onPan
         view.onZoom = onZoom
         view.onClickEmpty = onClickEmpty
+        view.onDoubleClickEmpty = onDoubleClickEmpty
         view.onMouseMove = onMouseMove
         focusBridge.view = view
     }
@@ -61,7 +66,11 @@ final class EventCatcherView: NSView {
     var onPan: ((CGSize) -> Void)?
     var onZoom: ((CGFloat, CGPoint) -> Void)?
     var onClickEmpty: (() -> Void)?
+    var onDoubleClickEmpty: ((CGPoint) -> Void)?
     var onMouseMove: ((CGPoint?) -> Void)?
+
+    /// Суммарный сдвиг текущего drag — отличаем клик от панорамирования.
+    private var dragDistance: CGFloat = 0
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -91,7 +100,29 @@ final class EventCatcherView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
-        onClickEmpty?()
+        dragDistance = 0
+        if event.clickCount == 2 {
+            onDoubleClickEmpty?(cursorLocation(event))
+        }
+    }
+
+    /// Drag по пустому месту = панорамирование (как в Freeform/Figma).
+    /// Курсор — «сжатая рука» на время перетаскивания.
+    override func mouseDragged(with event: NSEvent) {
+        dragDistance += abs(event.deltaX) + abs(event.deltaY)
+        if dragDistance > 4 {
+            NSCursor.closedHand.set()
+            onPan?(CGSize(width: event.deltaX, height: event.deltaY))
+        }
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        NSCursor.arrow.set()
+        // Клик без движения — deselect; после панорамирования выделение живёт.
+        if dragDistance <= 4, event.clickCount <= 1 {
+            onClickEmpty?()
+        }
+        dragDistance = 0
     }
 
     override func keyDown(with event: NSEvent) {
@@ -105,6 +136,7 @@ final class EventCatcherView: NSView {
         let cmd = event.modifierFlags.contains(.command)
         switch event.keyCode {
         case 48: return .tab
+        case 24, 69: return cmd ? .cmdPlus : nil // "=" и keypad "+"
         case 36: return cmd ? .cmdReturn : .enter
         case 53: return .escape
         case 51, 117: return .delete // backspace и forward-delete
