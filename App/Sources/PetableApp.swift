@@ -463,6 +463,7 @@ struct AppShellView: View {
                     isAgent: segment.resolvedOrigin == .agent,
                     deletable: true,
                     deleteHelp: "Удалить сегмент",
+                    onSelect: { document.selectResearch(.segment(segment.id)) },
                     onDelete: { document.deleteSegment(segment.id) },
                     onRename: { beginRename(id: segment.id, name: segment.name) }
                 )
