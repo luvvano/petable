@@ -27,12 +27,17 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
 
     /// Раздел «Исследования»: шаблоны интервью + интервью.
     @Published private(set) var research: Research
+    /// Раздел «Сегменты»: сегментация AJTBD.
+    @Published private(set) var segmentation: Segmentation
     /// Что открыто в detail вместо канваса; nil — показывается граф.
     @Published private(set) var selectedResearchItem: ResearchSelection?
 
     enum ResearchSelection: Hashable {
         case interview(UUID)
         case template(UUID)
+        case segment(UUID)
+        /// Карта сегментов: сравнительная таблица всех сегментов проекта.
+        case segmentMap
     }
 
     /// Сессия на каждый граф, к которому прикасались. Живут, пока жив
@@ -50,6 +55,7 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
         stages = [stage]
         selectedGraphID = stage.id
         research = Research(templates: InterviewTemplate.defaultTemplates())
+        segmentation = Segmentation()
     }
 
     init(configuration: ReadConfiguration) throws {
@@ -64,6 +70,8 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
         stages = envelope.stages
         // Файлы до v4 без исследований получают дефолтные шаблоны.
         research = envelope.research ?? Research(templates: InterviewTemplate.defaultTemplates())
+        // Файлы до v6 без сегментов получают пустой список.
+        segmentation = envelope.segmentation ?? Segmentation()
         // Открывается последний граф по времени изменения;
         // без отметок (старые файлы) — первый.
         selectedGraphID = (graphs.max {
@@ -72,7 +80,7 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
     }
 
     func snapshot(contentType: UTType) throws -> Envelope {
-        Envelope(stages: stages, research: research)
+        Envelope(stages: stages, research: research, segmentation: segmentation)
     }
 
     func fileWrapper(snapshot: Envelope, configuration: WriteConfiguration) throws -> FileWrapper {
@@ -107,6 +115,10 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
             guard research.interviews.contains(where: { $0.id == id }) else { return }
         case .template(let id):
             guard research.templates.contains(where: { $0.id == id }) else { return }
+        case .segment(let id):
+            guard segmentation.segments.contains(where: { $0.id == id }) else { return }
+        case .segmentMap:
+            break
         }
         selectedResearchItem = item
     }
@@ -238,6 +250,7 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
     private struct ListState {
         var stages: [Envelope.Stage]
         var research: Research
+        var segmentation: Segmentation
         var selection: UUID?
         var researchSelection: ResearchSelection?
     }
@@ -250,6 +263,7 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
         let before = ListState(
             stages: stages,
             research: research,
+            segmentation: segmentation,
             selection: selectedGraphID,
             researchSelection: selectedResearchItem
         )
@@ -274,12 +288,14 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
         let current = ListState(
             stages: stages,
             research: research,
+            segmentation: segmentation,
             selection: selectedGraphID,
             researchSelection: selectedResearchItem
         )
         registerListUndo(restoring: current)
         stages = state.stages
         research = state.research
+        segmentation = state.segmentation
         selectedGraphID = state.selection
         selectedResearchItem = state.researchSelection
     }
@@ -388,6 +404,28 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
         }
     }
 
+    /// Импорт шаблона из файла или буфера (экспорт другого проекта или
+    /// другого человека): id перегенерируются — один файл можно
+    /// импортировать многократно; имя разрешается от коллизий.
+    /// Открывается в редакторе шаблона.
+    @MainActor
+    @discardableResult
+    func importTemplate(_ template: InterviewTemplate) -> UUID {
+        var imported = template.withRegeneratedIDs()
+        let base = imported.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        imported.name = uniqueName(
+            base: base.isEmpty ? "Шаблон" : base,
+            existing: Set(research.templates.map(\.name)),
+            firstWithoutNumber: true
+        )
+        let importedID = imported.id
+        applyListChange { [imported] in
+            research.templates.append(imported)
+            selectedResearchItem = .template(importedID)
+        }
+        return importedID
+    }
+
     @MainActor
     func deleteTemplate(_ id: UUID) {
         guard let index = research.templates.firstIndex(where: { $0.id == id }) else { return }
@@ -397,6 +435,64 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
                 selectedResearchItem = nil
             }
         }
+    }
+
+    // MARK: - Сегменты
+
+    /// Новый пустой сегмент с одной кóровой работой; открывается в редакторе.
+    @MainActor
+    @discardableResult
+    func addSegment() -> UUID {
+        let segment = Segment(
+            name: nextSegmentName(),
+            coreJobs: [SegmentCoreJob()]
+        )
+        applyListChange {
+            segmentation.segments.append(segment)
+            selectedResearchItem = .segment(segment.id)
+        }
+        return segment.id
+    }
+
+    @MainActor
+    func renameSegment(_ id: UUID, to rawName: String) {
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty,
+              let index = segmentation.segments.firstIndex(where: { $0.id == id }),
+              segmentation.segments[index].name != name
+        else { return }
+        applyListChange {
+            segmentation.segments[index].name = name
+        }
+    }
+
+    /// Полная замена сегмента (редактор отдаёт целиком) —
+    /// тот же паттерн, что updateTemplate.
+    @MainActor
+    func updateSegment(_ segment: Segment) {
+        guard let index = segmentation.segments.firstIndex(where: { $0.id == segment.id }),
+              segmentation.segments[index] != segment
+        else { return }
+        applyListChange {
+            var updated = segment
+            updated.modifiedAt = Date()
+            segmentation.segments[index] = updated
+        }
+    }
+
+    @MainActor
+    func deleteSegment(_ id: UUID) {
+        guard let index = segmentation.segments.firstIndex(where: { $0.id == id }) else { return }
+        applyListChange {
+            segmentation.segments.remove(at: index)
+            if selectedResearchItem == .segment(id) {
+                selectedResearchItem = nil
+            }
+        }
+    }
+
+    private func nextSegmentName() -> String {
+        uniqueName(base: "Сегмент", existing: Set(segmentation.segments.map(\.name)))
     }
 
     // MARK: - Артефакты ИИ-агента

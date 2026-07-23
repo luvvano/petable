@@ -36,6 +36,26 @@ enum ExportCoding {
         decoder.dateDecodingStrategy = .iso8601
         return decoder
     }
+
+    /// Заголовок любого экспортного файла. Проверяется до разбора
+    /// полезной нагрузки: иначе чужой тип падает на отсутствующем
+    /// ключе нагрузки с невнятной ошибкой декодера вместо понятной
+    /// «файл имеет тип X, ожидался Y».
+    private struct Header: Codable {
+        var version: Int
+        var type: String
+    }
+
+    /// Валидирует `type` и `version` файла до полного декодирования.
+    static func validateHeader(_ data: Data, expectedType: String, supportedVersion: Int) throws {
+        let header = try makeDecoder().decode(Header.self, from: data)
+        guard header.type == expectedType else {
+            throw ExportFileError.wrongType(found: header.type, expected: expectedType)
+        }
+        guard header.version <= supportedVersion else {
+            throw ExportFileError.unsupportedVersion(found: header.version, supported: supportedVersion)
+        }
+    }
 }
 
 // MARK: - Интервью
@@ -60,14 +80,8 @@ public struct InterviewExportFile: Codable, Equatable, Sendable {
     }
 
     public static func decode(_ data: Data) throws -> InterviewExportFile {
-        let file = try ExportCoding.makeDecoder().decode(InterviewExportFile.self, from: data)
-        guard file.type == fileType else {
-            throw ExportFileError.wrongType(found: file.type, expected: fileType)
-        }
-        guard file.version <= currentVersion else {
-            throw ExportFileError.unsupportedVersion(found: file.version, supported: currentVersion)
-        }
-        return file
+        try ExportCoding.validateHeader(data, expectedType: fileType, supportedVersion: currentVersion)
+        return try ExportCoding.makeDecoder().decode(InterviewExportFile.self, from: data)
     }
 }
 
@@ -136,6 +150,57 @@ public enum InterviewExport {
     }
 }
 
+// MARK: - Шаблон интервью
+
+/// Файл экспорта шаблона интервью: `{ version, type, template }`.
+/// Для обмена шаблонами между людьми: отправил файл — собеседник
+/// импортировал и пользуется.
+public struct InterviewTemplateExportFile: Codable, Equatable, Sendable {
+    public static let currentVersion = 1
+    public static let fileType = "petable.interviewTemplate"
+
+    public var version: Int
+    public var type: String
+    public var template: InterviewTemplate
+
+    public init(template: InterviewTemplate) {
+        self.version = Self.currentVersion
+        self.type = Self.fileType
+        self.template = template
+    }
+
+    public func encoded() throws -> Data {
+        try ExportCoding.makeEncoder().encode(self)
+    }
+
+    public static func decode(_ data: Data) throws -> InterviewTemplateExportFile {
+        try ExportCoding.validateHeader(data, expectedType: fileType, supportedVersion: currentVersion)
+        return try ExportCoding.makeDecoder().decode(InterviewTemplateExportFile.self, from: data)
+    }
+}
+
+public extension InterviewTemplate {
+    /// Копия шаблона со свежими id шаблона, секций и полей — для
+    /// импорта: один файл можно импортировать несколько раз, и чужие
+    /// id не пересекутся с местными. Плейсхолдеры (`fillsPlaceholder`
+    /// и `{ключи}` в вопросах) — строковые, переживают как есть.
+    func withRegeneratedIDs() -> InterviewTemplate {
+        InterviewTemplate(
+            name: name,
+            sections: sections.map { section in
+                Section(title: section.title, fields: section.fields.map { field in
+                    Field(
+                        title: field.title,
+                        question: field.question,
+                        hint: field.hint,
+                        fillsPlaceholder: field.fillsPlaceholder
+                    )
+                })
+            }
+        )
+    }
+}
+
 // MARK: - Граф работ
 
 /// Файл экспорта графа работ: `{ version, type, name, graph }`.
@@ -160,14 +225,8 @@ public struct WorkGraphExportFile: Codable, Equatable, Sendable {
     }
 
     public static func decode(_ data: Data) throws -> WorkGraphExportFile {
-        let file = try ExportCoding.makeDecoder().decode(WorkGraphExportFile.self, from: data)
-        guard file.type == fileType else {
-            throw ExportFileError.wrongType(found: file.type, expected: fileType)
-        }
-        guard file.version <= currentVersion else {
-            throw ExportFileError.unsupportedVersion(found: file.version, supported: currentVersion)
-        }
-        return file
+        try ExportCoding.validateHeader(data, expectedType: fileType, supportedVersion: currentVersion)
+        return try ExportCoding.makeDecoder().decode(WorkGraphExportFile.self, from: data)
     }
 }
 

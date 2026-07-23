@@ -11,9 +11,10 @@ import Foundation
 /// проект держит несколько именованных графов работ. v4: опциональная
 /// секция `research` — шаблоны и интервью раздела «Исследования».
 /// v5: `origin` у стадий и интервью — артефакты, созданные ИИ-агентом,
-/// помечены. v1–v4 читаются и мигрируют на лету; запись всегда в v5.
+/// помечены. v6: опциональная секция `segmentation` — сегменты AJTBD.
+/// v1–v5 читаются и мигрируют на лету; запись всегда в v6.
 public struct Envelope: Codable, Equatable, Sendable {
-    public static let currentVersion = 5
+    public static let currentVersion = 6
     public static let jobGraphStageType = "jobGraph"
     public static let defaultGraphName = "Граф работ"
 
@@ -22,6 +23,8 @@ public struct Envelope: Codable, Equatable, Sendable {
     /// Раздел «Исследования»; nil у файлов до v4 —
     /// документ подставит дефолтные шаблоны.
     public var research: Research?
+    /// Раздел «Сегменты»; nil у файлов до v6 — пустой список.
+    public var segmentation: Segmentation?
 
     public struct Stage: Codable, Equatable, Identifiable, Sendable {
         public var id: UUID
@@ -73,10 +76,11 @@ public struct Envelope: Codable, Equatable, Sendable {
         self.init(stages: [Stage(graph: graph)])
     }
 
-    public init(stages: [Stage], research: Research? = nil) {
+    public init(stages: [Stage], research: Research? = nil, segmentation: Segmentation? = nil) {
         self.version = Self.currentVersion
         self.stages = stages
         self.research = research
+        self.segmentation = segmentation
     }
 
     /// Первая стадия jobGraph — граф по умолчанию (для миграций и тестов).
@@ -100,7 +104,7 @@ public struct Envelope: Codable, Equatable, Sendable {
         }
     }
 
-    enum CodingKeys: String, CodingKey { case version, stages, research }
+    enum CodingKeys: String, CodingKey { case version, stages, research, segmentation }
 
     /// Стадия v1: граф — дерево Job. Нужна только для миграции при чтении.
     private struct LegacyStage: Codable {
@@ -124,6 +128,7 @@ public struct Envelope: Codable, Equatable, Sendable {
             self.stages = try container.decode([Stage].self, forKey: .stages)
         }
         self.research = try container.decodeIfPresent(Research.self, forKey: .research)
+        self.segmentation = try container.decodeIfPresent(Segmentation.self, forKey: .segmentation)
         self.version = Self.currentVersion
     }
 
