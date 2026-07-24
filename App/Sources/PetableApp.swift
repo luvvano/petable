@@ -429,6 +429,7 @@ struct AppShellView: View {
             if let stage = document.graphStages.first(where: { $0.id == document.selectedGraphID }) {
                 Menu {
                     Button("Экспортировать в JSON…") { ExportImport.exportGraphJSON(stage) }
+                    Button("Экспортировать в PNG…") { ExportImport.exportGraphPNG(stage) }
                     Divider()
                     Button("Скопировать JSON") { ExportImport.copyGraphJSON(stage) }
                 } label: {
@@ -529,6 +530,7 @@ struct AppShellView: View {
                 onRename: { beginRename(id: stage.id, name: stage.name) },
                 exportItems: [
                     ("Экспортировать в JSON…", { ExportImport.exportGraphJSON(stage) }),
+                    ("Экспортировать в PNG…", { ExportImport.exportGraphPNG(stage) }),
                     ("Скопировать JSON", { ExportImport.copyGraphJSON(stage) }),
                 ]
             )

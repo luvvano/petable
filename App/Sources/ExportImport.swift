@@ -1,5 +1,6 @@
 import AppKit
 import CoreTransferable
+import SwiftUI
 import UniformTypeIdentifiers
 import GraphCore
 
@@ -162,6 +163,36 @@ enum ExportImport {
             copyToClipboard(String(decoding: data, as: UTF8.self))
         } catch {
             showError("Не удалось скопировать граф работ", error)
+        }
+    }
+
+    /// PNG-снапшот графа: офскрин-рендер GraphSnapshotView в 2x.
+    /// Тема картинки — текущая тема приложения (ImageRenderer сам
+    /// её не наследует, среда задаётся явно).
+    static func exportGraphPNG(_ stage: Envelope.Stage) {
+        guard let url = runSavePanel(suggestedName: stage.name, type: .png) else { return }
+        let isDark = NSApp.effectiveAppearance
+            .bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let renderer = ImageRenderer(
+            content: GraphSnapshotView(graph: stage.graph)
+                .environment(\.colorScheme, isDark ? .dark : .light)
+        )
+        renderer.scale = 2
+        guard let cgImage = renderer.cgImage,
+              let data = NSBitmapImageRep(cgImage: cgImage)
+                  .representation(using: .png, properties: [:])
+        else {
+            showError(
+                "Не удалось экспортировать граф работ",
+                nil,
+                fallback: "Ошибка при создании PNG-изображения."
+            )
+            return
+        }
+        do {
+            try data.write(to: url)
+        } catch {
+            showError("Не удалось экспортировать граф работ", error)
         }
     }
 

@@ -491,41 +491,19 @@ struct CanvasRootView: View {
         }
     }
 
-    /// Обходные точки для связи через 2+ уровня: без них S-кривая проходит
-    /// сквозь полосу промежуточного уровня рядом с чужим узлом и читается
-    /// как связь через него. Линия сразу спускается в колонку целевой
-    /// работы, а узлы промежуточных уровней огибает сбоку — со стороны
-    /// начала связи, чтобы обход читался как продолжение линии.
+    /// Обходные точки ребра через 2+ уровня — общая геометрия в GraphCore
+    /// (используется и PNG-снапшотом).
     private func detourWaypoints(
         start: CGPoint, end: CGPoint,
         fromLevel: Int, toLevel: Int,
         positions: [UUID: CGPoint]
     ) -> [CGPoint] {
-        let lower = min(fromLevel, toLevel)
-        let upper = max(fromLevel, toLevel)
-        guard upper - lower >= 2 else { return [] }
-        let between = Array((lower + 1)...(upper - 1))
-        let ordered = fromLevel < toLevel ? between : between.reversed()
-
-        var result: [CGPoint] = []
-        for levelIndex in ordered {
-            guard levelIndex < document.graph.levels.count else { continue }
-            let y = contentPadding + CGFloat(levelIndex) * LayoutMetrics.rowHeight
-            let clearance = LevelStyle.style(for: levelIndex).diameter / 2 + 24
-            let nodeXs = document.graph.levels[levelIndex].jobs
-                .compactMap { positions[$0.id]?.x }
-                .map { $0 + contentPadding }
-
-            var x = end.x
-            var iterations = 0
-            while iterations < 6,
-                  let blocking = nodeXs.first(where: { abs(x - $0) < clearance }) {
-                x = blocking + (start.x <= blocking ? -clearance : clearance)
-                iterations += 1
-            }
-            result.append(CGPoint(x: x, y: y))
-        }
-        return result
+        GraphLayout.detourWaypoints(
+            graph: document.graph, positions: positions,
+            start: start, end: end,
+            fromLevel: fromLevel, toLevel: toLevel,
+            padding: contentPadding
+        )
     }
 
     // MARK: Узлы

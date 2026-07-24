@@ -43,4 +43,46 @@ public enum GraphLayout {
         }
         return positions
     }
+
+    /// Обходные точки для связи через 2+ уровня: без них S-кривая проходит
+    /// сквозь полосу промежуточного уровня рядом с чужим узлом и читается
+    /// как связь через него. Линия сразу спускается в колонку целевой
+    /// работы, а узлы промежуточных уровней огибает сбоку — со стороны
+    /// начала связи, чтобы обход читался как продолжение линии.
+    ///
+    /// `start`/`end` — концы ребра в координатах вида; `padding` — сдвиг
+    /// раскладки относительно этих координат (positions + padding = вид).
+    public static func detourWaypoints(
+        graph: WorkGraph,
+        positions: [UUID: CGPoint],
+        start: CGPoint, end: CGPoint,
+        fromLevel: Int, toLevel: Int,
+        padding: CGFloat
+    ) -> [CGPoint] {
+        let lower = min(fromLevel, toLevel)
+        let upper = max(fromLevel, toLevel)
+        guard upper - lower >= 2 else { return [] }
+        let between = Array((lower + 1)...(upper - 1))
+        let ordered = fromLevel < toLevel ? between : between.reversed()
+
+        var result: [CGPoint] = []
+        for levelIndex in ordered {
+            guard levelIndex < graph.levels.count else { continue }
+            let y = padding + CGFloat(levelIndex) * LayoutMetrics.rowHeight
+            let clearance = LevelStyle.style(for: levelIndex).diameter / 2 + 24
+            let nodeXs = graph.levels[levelIndex].jobs
+                .compactMap { positions[$0.id]?.x }
+                .map { $0 + padding }
+
+            var x = end.x
+            var iterations = 0
+            while iterations < 6,
+                  let blocking = nodeXs.first(where: { abs(x - $0) < clearance }) {
+                x = blocking + (start.x <= blocking ? -clearance : clearance)
+                iterations += 1
+            }
+            result.append(CGPoint(x: x, y: y))
+        }
+        return result
+    }
 }
