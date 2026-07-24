@@ -15,6 +15,10 @@ struct CanvasRootView: View {
     @State private var draft = ""
     @State private var editingIsNewNode = false
     @FocusState private var editorFocused: Bool
+    /// Инлайн-переименование уровня (двойной клик по имени).
+    @State private var editingLevelId: UUID?
+    @State private var levelDraft = ""
+    @FocusState private var levelEditorFocused: Bool
 
     @State private var scale: CGFloat = 1
     @State private var offset: CGSize = .zero
@@ -156,10 +160,14 @@ struct CanvasRootView: View {
         .onChange(of: editorFocused) { _, focused in
             if !focused { commitEditingIfNeeded() }
         }
+        .onChange(of: levelEditorFocused) { _, focused in
+            if !focused { commitLevelEditingIfNeeded() }
+        }
         .onChange(of: document.selectedGraphID) { _, _ in
             // Смена графа: правка чужого узла невозможна — редактор
             // сбрасывается без коммита, новый пустой граф сразу в редакторе.
             editingId = nil
+            editingLevelId = nil
             selection = nil
             selectedEdge = nil
             dragLink = nil
@@ -260,16 +268,50 @@ struct CanvasRootView: View {
             )
             .frame(width: width - bandInset * 2, height: bandHeight)
             .offset(x: bandInset, y: top)
+    }
 
-        // Вертикально у левой кромки полосы — не пересекается ни с узлами,
-        // ни с их подписями при любой плотности графа.
-        Text("УРОВЕНЬ \(index + 1)")
-            .font(.system(size: 9, weight: .bold, design: .rounded))
-            .tracking(1.4)
-            .foregroundStyle(LevelColors.stroke(for: index).opacity(0.65))
-            .fixedSize()
-            .rotationEffect(.degrees(-90))
-            .position(x: bandInset - 12, y: top + bandHeight / 2)
+    /// Имя уровня вертикально у левой кромки полосы — не пересекается
+    /// ни с узлами, ни с подписями при любой плотности графа.
+    /// Двойной клик — инлайн-переименование; рендерится в слое контролов
+    /// (bandBackground events не принимает).
+    @ViewBuilder
+    private func levelLabel(index: Int, level: GraphLevel, top: CGFloat) -> some View {
+        if editingLevelId == level.id {
+            TextField("УРОВЕНЬ \(index + 1)", text: $levelDraft)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .multilineTextAlignment(.center)
+                .focused($levelEditorFocused)
+                .onSubmit { commitLevelEditing() }
+                .onExitCommand { cancelLevelEditing() }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .frame(width: 200)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(.regularMaterial)
+                        .shadow(color: .black.opacity(0.22), radius: 10, y: 3)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(Color.accentColor.opacity(0.6), lineWidth: 1.5)
+                )
+                // Горизонтально внутри полосы: вертикальный TextField нечитаем.
+                .position(x: bandInset + 116, y: top + bandHeight / 2)
+        } else {
+            Text(level.name?.uppercased() ?? "УРОВЕНЬ \(index + 1)")
+                .font(.system(size: 9, weight: .bold, design: .rounded))
+                .tracking(1.4)
+                .foregroundStyle(LevelColors.stroke(for: index).opacity(0.65))
+                .lineLimit(1)
+                .fixedSize()
+                .frame(maxWidth: bandHeight)
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) { beginLevelEditing(level) }
+                .rotationEffect(.degrees(-90))
+                .position(x: bandInset - 12, y: top + bandHeight / 2)
+                .help("Двойной клик — переименовать уровень")
+        }
     }
 
     /// Кнопки полосы: «+ работа» в конце ряда, вставка уровня на стыках,
@@ -281,6 +323,8 @@ struct CanvasRootView: View {
         let top = bandTop(index)
         let nodeY = top + nodeOffsetInBand
         let lastX = level.jobs.compactMap { positions[$0.id]?.x }.max().map { $0 + contentPadding }
+
+        levelLabel(index: index, level: level, top: top)
 
         // Автономная работа — в конец уровня.
         let addJobPoint = CGPoint(x: (lastX ?? contentPadding - 40) + 96, y: nodeY)
@@ -402,7 +446,11 @@ struct CanvasRootView: View {
             let end = vertical
                 ? CGPoint(x: to.x, y: to.y - (toLevel > fromLevel ? toR + 3 : -(toR + 3)))
                 : CGPoint(x: to.x - sign * (toR + 3), y: to.y)
-            let shape = EdgeShape(from: start, to: end, vertical: vertical)
+            let waypoints = vertical
+                ? detourWaypoints(start: start, end: end, fromLevel: fromLevel,
+                                  toLevel: toLevel, positions: positions)
+                : []
+            let shape = EdgeShape(from: start, to: end, vertical: vertical, waypoints: waypoints)
             let isSelected = selectedEdge == edge
 
             shape
@@ -422,8 +470,11 @@ struct CanvasRootView: View {
                 }
 
             if isSelected {
-                // Кубическая кривая с такими контролами проходит через
-                // середину отрезка — ✕ ложится точно на линию.
+                // Без обходных точек кубическая кривая проходит через середину
+                // отрезка; с ними средняя обходная точка лежит на самой линии.
+                let mid = waypoints.isEmpty
+                    ? CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2)
+                    : waypoints[waypoints.count / 2]
                 Image(systemName: "xmark")
                     .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(.white)
@@ -435,9 +486,46 @@ struct CanvasRootView: View {
                         selectedEdge = nil
                     }
                     .help("Удалить связь (или Delete)")
-                    .position(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2)
+                    .position(x: mid.x, y: mid.y)
             }
         }
+    }
+
+    /// Обходные точки для связи через 2+ уровня: без них S-кривая проходит
+    /// сквозь полосу промежуточного уровня рядом с чужим узлом и читается
+    /// как связь через него. Линия сразу спускается в колонку целевой
+    /// работы, а узлы промежуточных уровней огибает сбоку — со стороны
+    /// начала связи, чтобы обход читался как продолжение линии.
+    private func detourWaypoints(
+        start: CGPoint, end: CGPoint,
+        fromLevel: Int, toLevel: Int,
+        positions: [UUID: CGPoint]
+    ) -> [CGPoint] {
+        let lower = min(fromLevel, toLevel)
+        let upper = max(fromLevel, toLevel)
+        guard upper - lower >= 2 else { return [] }
+        let between = Array((lower + 1)...(upper - 1))
+        let ordered = fromLevel < toLevel ? between : between.reversed()
+
+        var result: [CGPoint] = []
+        for levelIndex in ordered {
+            guard levelIndex < document.graph.levels.count else { continue }
+            let y = contentPadding + CGFloat(levelIndex) * LayoutMetrics.rowHeight
+            let clearance = LevelStyle.style(for: levelIndex).diameter / 2 + 24
+            let nodeXs = document.graph.levels[levelIndex].jobs
+                .compactMap { positions[$0.id]?.x }
+                .map { $0 + contentPadding }
+
+            var x = end.x
+            var iterations = 0
+            while iterations < 6,
+                  let blocking = nodeXs.first(where: { abs(x - $0) < clearance }) {
+                x = blocking + (start.x <= blocking ? -clearance : clearance)
+                iterations += 1
+            }
+            result.append(CGPoint(x: x, y: y))
+        }
+        return result
     }
 
     // MARK: Узлы
@@ -970,6 +1058,32 @@ struct CanvasRootView: View {
 
     private func commitEditingIfNeeded() {
         if editingId != nil { commitEditing() }
+    }
+
+    // MARK: - Переименование уровня
+
+    private func beginLevelEditing(_ level: GraphLevel) {
+        commitEditingIfNeeded()
+        levelDraft = level.name ?? ""
+        editingLevelId = level.id
+        levelEditorFocused = true
+    }
+
+    private func commitLevelEditing() {
+        guard let id = editingLevelId else { return }
+        editingLevelId = nil
+        // Движок сам решает: пустое имя → сброс к дефолту, без изменений → no-op.
+        document.perform(.renameLevel(id, name: levelDraft))
+        focusBridge.focusCanvas()
+    }
+
+    private func commitLevelEditingIfNeeded() {
+        if editingLevelId != nil { commitLevelEditing() }
+    }
+
+    private func cancelLevelEditing() {
+        editingLevelId = nil
+        focusBridge.focusCanvas()
     }
 
     private func cancelEditing() {

@@ -29,6 +29,8 @@ public enum GraphIntent: Equatable, Sendable {
     /// Разбирает `raw` грамматикой role:. Пустая строка на только что
     /// созданном (пустом) узле — удаление, на существующем — no-op.
     case setText(UUID, raw: String)
+    /// Имя уровня. Пустая строка (после trim) — сброс к дефолту «УРОВЕНЬ N».
+    case renameLevel(UUID, name: String)
 }
 
 public enum ReorderDirection: Equatable, Sendable {
@@ -143,6 +145,15 @@ public enum GraphEngine {
                 }
             }
             return GraphResult(graph: copy, focus: id)
+
+        case let .renameLevel(id, name):
+            guard let index = graph.levelIndex(id: id) else { return nil }
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let newName = trimmed.isEmpty ? nil : trimmed
+            guard graph.levels[index].name != newName else { return nil }
+            var copy = graph
+            copy.levels[index].name = newName
+            return GraphResult(graph: copy, focus: nil)
         }
     }
 }

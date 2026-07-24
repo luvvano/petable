@@ -154,4 +154,24 @@ struct GraphEngineTests {
         let job = graph.levels[1].jobs[2]
         #expect(GraphEngine.apply(.setText(job.id, raw: job.displayText), to: graph) == nil)
     }
+
+    @Test("renameLevel: имя с trim, пустое — сброс к дефолту, без изменений — no-op")
+    func renameLevel() throws {
+        let graph = Fixtures.closeMonth()
+        let level = graph.levels[1]
+
+        let renamed = try #require(GraphEngine.apply(.renameLevel(level.id, name: "  Кóровые  "), to: graph))
+        #expect(renamed.graph.levels[1].name == "Кóровые")
+
+        // Повторное то же имя — no-op.
+        #expect(GraphEngine.apply(.renameLevel(level.id, name: "Кóровые"), to: renamed.graph) == nil)
+
+        // Пустое имя — сброс к nil (дефолт «УРОВЕНЬ N»).
+        let cleared = try #require(GraphEngine.apply(.renameLevel(level.id, name: "   "), to: renamed.graph))
+        #expect(cleared.graph.levels[1].name == nil)
+
+        // Сброс на уровне без имени — no-op; неизвестный id — no-op.
+        #expect(GraphEngine.apply(.renameLevel(level.id, name: ""), to: graph) == nil)
+        #expect(GraphEngine.apply(.renameLevel(UUID(), name: "x"), to: graph) == nil)
+    }
 }

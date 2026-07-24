@@ -21,13 +21,17 @@ public struct JobNode: Codable, Equatable, Identifiable, Sendable {
 }
 
 /// Уровень графа — горизонтальная полоса. Порядок `jobs` = слева направо.
+/// `name` — пользовательское имя; nil — отображается дефолт «УРОВЕНЬ N»
+/// (nil, а не пустая строка, чтобы имя пересчитывалось при перестановке уровней).
 public struct GraphLevel: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var jobs: [JobNode]
+    public var name: String?
 
-    public init(id: UUID = UUID(), jobs: [JobNode] = []) {
+    public init(id: UUID = UUID(), jobs: [JobNode] = [], name: String? = nil) {
         self.id = id
         self.jobs = jobs
+        self.name = name
     }
 }
 
