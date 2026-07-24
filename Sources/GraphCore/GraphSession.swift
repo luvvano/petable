@@ -35,6 +35,19 @@ public final class GraphSession {
         return result.focus
     }
 
+    /// Полная замена графа (правка чат-агента) — одна undo-группа,
+    /// тот же стек, что у обычных интентов. No-op, если граф не меняется.
+    public func replace(with newGraph: WorkGraph) {
+        guard newGraph != graph else { return }
+        let snapshot = graph
+        undoManager.beginUndoGrouping()
+        undoManager.registerUndo(withTarget: self) { session in
+            MainActor.assumeIsolated { session.restore(snapshot) }
+        }
+        undoManager.endUndoGrouping()
+        setGraph(newGraph)
+    }
+
     private func restore(_ snapshot: WorkGraph) {
         let current = graph
         undoManager.beginUndoGrouping()

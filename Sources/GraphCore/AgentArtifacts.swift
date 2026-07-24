@@ -163,7 +163,15 @@ public struct AgentArtifactsPayload: Codable, Equatable, Sendable {
     /// Граф работ из ответа агента. Пустые узлы и рёбра с индексами
     /// за пределами уровней отбрасываются.
     public func makeWorkGraph() -> WorkGraph {
-        let levels: [GraphLevel] = graph.levels.map { nodes in
+        graph.makeWorkGraph()
+    }
+}
+
+public extension AgentArtifactsPayload.Graph {
+    /// Граф работ из транспортной формы (уровни/рёбра по индексам).
+    /// Пустые узлы и рёбра с индексами за пределами уровней отбрасываются.
+    func makeWorkGraph() -> WorkGraph {
+        let levels: [GraphLevel] = self.levels.map { nodes in
             GraphLevel(jobs: nodes.compactMap { node in
                 let verb = node.verb.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !verb.isEmpty else { return nil }
@@ -171,8 +179,8 @@ public struct AgentArtifactsPayload: Codable, Equatable, Sendable {
                 return JobNode(verb: verb, role: (role?.isEmpty ?? true) ? nil : role)
             })
         }
-        var edges: [JobEdge] = []
-        for edge in graph.edges {
+        var jobEdges: [JobEdge] = []
+        for edge in edges {
             guard levels.indices.contains(edge.fromLevel),
                   levels[edge.fromLevel].jobs.indices.contains(edge.fromIndex),
                   levels.indices.contains(edge.toLevel),
@@ -182,10 +190,10 @@ public struct AgentArtifactsPayload: Codable, Equatable, Sendable {
                 from: levels[edge.fromLevel].jobs[edge.fromIndex].id,
                 to: levels[edge.toLevel].jobs[edge.toIndex].id
             )
-            if !edges.contains(jobEdge), jobEdge.from != jobEdge.to {
-                edges.append(jobEdge)
+            if !jobEdges.contains(jobEdge), jobEdge.from != jobEdge.to {
+                jobEdges.append(jobEdge)
             }
         }
-        return WorkGraph(levels: levels.filter { !$0.jobs.isEmpty }, edges: edges)
+        return WorkGraph(levels: levels.filter { !$0.jobs.isEmpty }, edges: jobEdges)
     }
 }

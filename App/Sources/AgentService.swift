@@ -188,7 +188,68 @@ enum AgentPrompt {
     критериев успеха. Реальные конкуренты живут на уровне большой работы.
     - Изучай работы по прошлым тратам денег/времени/энергии, не по \
     намерениям; будущее без прошлой траты — фейковая работа.
+    - Критическая цепочка работ: шаги, выполняемые по порядку, \
+    декомпозируются из ОДНОЙ вышестоящей работы, лежат на одном уровне \
+    подряд и связаны рёбрами последовательности «шаг → следующий шаг» \
+    слева направо. Ребро декомпозиции от родителя ведёт к первому шагу \
+    цепочки, дальше порядок читается по горизонтальным рёбрам. Веер \
+    рёбер от родителя к каждому шагу без связей между шагами — ошибка: \
+    теряется порядок выполнения. Отдельные рёбра декомпозиции от \
+    родителя получают только независимые (параллельные) под-работы.
     """
+
+    /// System-промпт чат-агента: методология + текущее состояние проекта
+    /// + формат команд создания/правки артефактов.
+    static func chatSystem(projectContext: String) -> String {
+        """
+        \(nmtSkill)
+
+        Ты работаешь в приложении petable как чат-консультант по методологии \
+        AJTBD / Next Move Theory. Отвечай на вопросы пользователя по \
+        методологии и по его проекту: коротко, конкретно, без воды, на русском.
+
+        Текущее состояние проекта (используй эти ID в командах):
+        \(projectContext)
+
+        Ты можешь создавать и править артефакты проекта. Для этого включи \
+        в ответ один или несколько блоков строго такого вида:
+
+        ```petable-action
+        { …JSON одной команды… }
+        ```
+
+        Команды:
+        1) Создать граф работ:
+        {"action": "create_graph", "graph": {"name": "…", "levels": [[{"verb": "глагол с объектом", "role": null}]], "edges": [{"fromLevel": 0, "fromIndex": 0, "toLevel": 1, "toIndex": 0}]}}
+        Уровень 0 — большие работы (мотивация), ниже — декомпозиция. \
+        Узел — «хочу + глагол» (пиши сам глагол с объектом, без «хочу»). \
+        Рёбра двух видов: декомпозиция (fromLevel + 1 == toLevel) и \
+        последовательность (fromLevel == toLevel, соседние индексы). \
+        Шаги, выполняемые по порядку (критическая цепочка), клади на один \
+        уровень подряд и связывай цепочкой: родитель → первый шаг \
+        (декомпозиция), затем каждый шаг → следующий (последовательность \
+        внутри уровня). Не рисуй веер рёбер от родителя к каждому шагу — \
+        так теряется порядок. Отдельное ребро декомпозиции от родителя — \
+        только для независимых (параллельных) под-работ.
+
+        2) Изменить существующий граф (структура заменяется ЦЕЛИКОМ — \
+        перечисли все узлы и рёбра, включая те, что остаются без изменений; \
+        пустое name — оставить прежнее имя):
+        {"action": "update_graph", "graphID": "UUID из контекста", "graph": {…как в create_graph…}}
+
+        3) Создать интервью по шаблону проекта (answers — по fieldID шаблона):
+        {"action": "create_interview", "templateID": "UUID из контекста", "interviewName": "…", "placeholders": {"решение": "…"}, "answers": [{"fieldID": "UUID", "answer": "…"}]}
+
+        4) Править интервью (перечисленные ответы/плейсхолдеры \
+        перезаписываются, остальные не трогаются):
+        {"action": "update_interview", "interviewID": "UUID из контекста", "placeholders": {}, "answers": [{"fieldID": "UUID", "answer": "…"}]}
+
+        Правила: команды выполняются сразу и без подтверждения — вноси только \
+        то, о чём попросил пользователь. Если запрос неоднозначен, сначала \
+        уточни, без команды. Если пользователь просто задаёт вопрос — отвечай \
+        текстом без команд. UUID бери только из контекста выше, не выдумывай.
+        """
+    }
 
     /// Формирует полный промпт: задача, шаблон интервью с id полей,
     /// требуемый JSON.
@@ -216,8 +277,13 @@ enum AgentPrompt {
         2) На основе раскопанных работ построй граф работ: уровень 0 — \
         большая работа (мотивация), ниже — кóровые/малые работы, ещё ниже — \
         декомпозиция. Каждый узел — «хочу + глагол» (сам глагол с объектом, \
-        без слова «хочу»). Рёбра: декомпозиция (уровень вниз) или \
-        последовательность (внутри уровня).
+        без слова «хочу»). Рёбра двух видов: декомпозиция (на уровень вниз) \
+        и последовательность (внутри уровня: fromLevel == toLevel). Шаги, \
+        выполняемые по порядку, клади на один уровень подряд и связывай \
+        цепочкой: родитель → первый шаг (декомпозиция), затем каждый шаг → \
+        следующий (последовательность). Не рисуй веер рёбер от родителя \
+        к каждому шагу. Отдельное ребро декомпозиции от родителя — только \
+        для независимых (параллельных) под-работ.
 
         Поля шаблона интервью (отвечай по их fieldID):
         \(fieldLines.joined(separator: "\n"))
@@ -350,6 +416,91 @@ enum AgentCLI {
     }
 }
 
+/// Вложение реплики чата: картинка, PDF или текстовый файл.
+/// Классификация — при выборе файла; неподдержанное отбрасывается сразу.
+struct AgentAttachment: Identifiable, Equatable {
+    enum Kind: Equatable {
+        /// mediaType вида "image/png".
+        case image(mediaType: String)
+        case pdf
+        /// Текстовый файл — содержимое уходит текстом во всех режимах.
+        case text(content: String)
+    }
+
+    let id = UUID()
+    var fileName: String
+    var kind: Kind
+    var data: Data
+
+    /// Лимит размера файла: держит запрос в пределах лимитов API
+    /// (Anthropic — 5 МБ на картинку после base64-роста ~33%).
+    static let maxBytes = 6 * 1024 * 1024
+
+    enum LoadError: Error, LocalizedError {
+        case tooLarge(String)
+        case unsupported(String)
+        case unreadable(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .tooLarge(let name):
+                return "«\(name)» больше \(AgentAttachment.maxBytes / 1024 / 1024) МБ — не приложен."
+            case .unsupported(let name):
+                return "«\(name)»: формат не поддержан (картинки, PDF, текстовые файлы)."
+            case .unreadable(let name):
+                return "«\(name)» не удалось прочитать."
+            }
+        }
+    }
+
+    private static let imageMediaTypes: [String: String] = [
+        "png": "image/png",
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg",
+        "gif": "image/gif",
+        "webp": "image/webp",
+    ]
+
+    static func load(from url: URL) throws -> AgentAttachment {
+        let name = url.lastPathComponent
+        let secured = url.startAccessingSecurityScopedResource()
+        defer { if secured { url.stopAccessingSecurityScopedResource() } }
+        guard let data = try? Data(contentsOf: url) else {
+            throw LoadError.unreadable(name)
+        }
+        guard data.count <= maxBytes else { throw LoadError.tooLarge(name) }
+
+        let ext = url.pathExtension.lowercased()
+        if let mediaType = imageMediaTypes[ext] {
+            return AgentAttachment(fileName: name, kind: .image(mediaType: mediaType), data: data)
+        }
+        if ext == "pdf" {
+            return AgentAttachment(fileName: name, kind: .pdf, data: data)
+        }
+        if let content = String(data: data, encoding: .utf8) {
+            return AgentAttachment(fileName: name, kind: .text(content: content), data: data)
+        }
+        throw LoadError.unsupported(name)
+    }
+
+    var isImage: Bool {
+        if case .image = kind { return true }
+        return false
+    }
+}
+
+/// Реплика диалога с чат-агентом (транспортная форма).
+struct AgentChatTurn {
+    enum Role: String {
+        case user
+        case assistant
+    }
+
+    var role: Role
+    var text: String
+    var attachments: [AgentAttachment] = []
+}
+
 /// Вызов ИИ-агента: собирает промпт с NMT-скиллом, ходит в API выбранного
 /// провайдера, парсит JSON в артефакты.
 enum AgentService {
@@ -359,24 +510,159 @@ enum AgentService {
         config: AgentTaskConfig
     ) async throws -> AgentArtifactsPayload {
         let prompt = AgentPrompt.researchPrompt(solution: solution, template: template)
-        let text: String
+        let text = try await complete(
+            system: AgentPrompt.nmtSkill,
+            turns: [AgentChatTurn(role: .user, text: prompt)],
+            config: config
+        )
+        return try AgentArtifactsPayload.parse(from: text)
+    }
+
+    /// Ход чата: вся история диалога + system с контекстом проекта →
+    /// сырой текст ответа (команды из него разбирает AgentChatReply).
+    static func runChat(
+        turns: [AgentChatTurn],
+        projectContext: String,
+        config: AgentTaskConfig
+    ) async throws -> String {
+        try await complete(
+            system: AgentPrompt.chatSystem(projectContext: projectContext),
+            turns: turns,
+            config: config
+        )
+    }
+
+    /// Общий вызов: system + история реплик через выбранный провайдер.
+    private static func complete(
+        system: String,
+        turns: [AgentChatTurn],
+        config: AgentTaskConfig
+    ) async throws -> String {
         switch (config.provider, config.authMode) {
         case (.claude, .apiToken):
-            text = try await callAnthropic(
+            return try await callAnthropic(
                 token: try requireToken(.claude), model: config.model,
-                effort: config.effort, system: AgentPrompt.nmtSkill, prompt: prompt
+                effort: config.effort, system: system, turns: turns
             )
         case (.codex, .apiToken):
-            text = try await callOpenAI(
+            return try await callOpenAI(
                 token: try requireToken(.codex), model: config.model,
-                effort: config.effort, system: AgentPrompt.nmtSkill, prompt: prompt
+                effort: config.effort, system: system, turns: turns
             )
         case (.claude, .subscription):
-            text = try await callClaudeCLI(model: config.model, prompt: prompt)
+            return try await callClaudeCLI(model: config.model, system: system, turns: turns)
         case (.codex, .subscription):
-            text = try await callCodexCLI(model: config.model, effort: config.effort, prompt: prompt)
+            return try await callCodexCLI(
+                model: config.model, effort: config.effort, system: system, turns: turns
+            )
         }
-        return try AgentArtifactsPayload.parse(from: text)
+    }
+
+    /// CLI-режимы не держат состояние диалога — история склеивается
+    /// в один промпт с ролями. Бинарные вложения (картинки/PDF)
+    /// материализуются во временные файлы, CLI читает их с диска.
+    private static func flattenTurns(_ turns: [AgentChatTurn]) -> String {
+        let rendered = turns.map { turn in
+            var text = turn.text
+            let notes = turn.attachments.compactMap(attachmentNote)
+            if !notes.isEmpty {
+                text += "\n\n" + notes.joined(separator: "\n")
+            }
+            return (role: turn.role, text: text)
+        }
+        guard rendered.count > 1 else { return rendered.first?.text ?? "" }
+        let transcript = rendered.map { turn in
+            switch turn.role {
+            case .user: return "Пользователь:\n\(turn.text)"
+            case .assistant: return "Агент (ты):\n\(turn.text)"
+            }
+        }.joined(separator: "\n\n")
+        return "Диалог до этого момента:\n\n\(transcript)\n\nОтветь на последнюю реплику пользователя."
+    }
+
+    /// Вложение → фрагмент промпта CLI: текст инлайном, бинарь — путём
+    /// к временному файлу (CLI работает из temporaryDirectory и может
+    /// его читать).
+    private static func attachmentNote(_ attachment: AgentAttachment) -> String? {
+        switch attachment.kind {
+        case .text(let content):
+            return "Приложенный файл «\(attachment.fileName)»:\n```\n\(content)\n```"
+        case .image, .pdf:
+            let directory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("petable-attachments", isDirectory: true)
+            let url = directory.appendingPathComponent("\(attachment.id.uuidString)-\(attachment.fileName)")
+            do {
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                try attachment.data.write(to: url)
+            } catch {
+                return "Приложенный файл «\(attachment.fileName)» не удалось сохранить для чтения."
+            }
+            return "Приложенный файл (прочитай с диска): \(url.path)"
+        }
+    }
+
+    /// Контент реплики для Anthropic Messages API: строка без вложений,
+    /// иначе массив блоков (картинки/PDF — base64, текст файлов — текстом).
+    private static func anthropicContent(_ turn: AgentChatTurn) -> Any {
+        guard !turn.attachments.isEmpty else { return turn.text }
+        var blocks: [[String: Any]] = []
+        for attachment in turn.attachments {
+            switch attachment.kind {
+            case .image(let mediaType):
+                blocks.append([
+                    "type": "image",
+                    "source": [
+                        "type": "base64",
+                        "media_type": mediaType,
+                        "data": attachment.data.base64EncodedString(),
+                    ],
+                ])
+            case .pdf:
+                blocks.append([
+                    "type": "document",
+                    "source": [
+                        "type": "base64",
+                        "media_type": "application/pdf",
+                        "data": attachment.data.base64EncodedString(),
+                    ],
+                ])
+            case .text(let content):
+                blocks.append([
+                    "type": "text",
+                    "text": "Приложенный файл «\(attachment.fileName)»:\n```\n\(content)\n```",
+                ])
+            }
+        }
+        blocks.append(["type": "text", "text": turn.text])
+        return blocks
+    }
+
+    /// Контент реплики для OpenAI Responses API.
+    private static func openAIContent(_ turn: AgentChatTurn) -> Any {
+        guard !turn.attachments.isEmpty else { return turn.text }
+        var parts: [[String: Any]] = []
+        for attachment in turn.attachments {
+            switch attachment.kind {
+            case .image(let mediaType):
+                parts.append([
+                    "type": "input_image",
+                    "image_url": "data:\(mediaType);base64,\(attachment.data.base64EncodedString())",
+                ])
+            case .pdf:
+                parts.append([
+                    "type": "input_file",
+                    "filename": attachment.fileName,
+                    "file_data": "data:application/pdf;base64,\(attachment.data.base64EncodedString())",
+                ])
+            case .text(let content):
+                parts.append([
+                    "type": "input_text",
+                    "text": "Приложенный файл «\(attachment.fileName)»:\n```\n\(content)\n```",
+                ])
+            }
+        }
+        parts.append(["type": "input_text", "text": turn.text])
+        return parts
     }
 
     private static func requireToken(_ provider: AgentProvider) throws -> String {
@@ -389,18 +675,20 @@ enum AgentService {
     // MARK: Подписка: Claude Code CLI
 
     /// `claude -p` в headless-режиме: использует логин Claude Code
-    /// (подписка Pro/Max). NMT-скилл уходит через --append-system-prompt,
-    /// промпт задачи — через stdin.
-    private static func callClaudeCLI(model: String, prompt: String) async throws -> String {
+    /// (подписка Pro/Max). System уходит через --append-system-prompt,
+    /// промпт задачи (склеенная история) — через stdin.
+    private static func callClaudeCLI(
+        model: String, system: String, turns: [AgentChatTurn]
+    ) async throws -> String {
         try await AgentCLI.run(
             .claude,
             arguments: [
                 "-p",
                 "--output-format", "text",
                 "--model", model,
-                "--append-system-prompt", AgentPrompt.nmtSkill,
+                "--append-system-prompt", system,
             ],
-            stdin: prompt
+            stdin: flattenTurns(turns)
         )
     }
 
@@ -409,7 +697,7 @@ enum AgentService {
     /// `codex exec` в headless-режиме: использует логин Codex CLI
     /// (подписка ChatGPT Plus/Pro). Промпт — через stdin («-»).
     private static func callCodexCLI(
-        model: String, effort: AgentEffort, prompt: String
+        model: String, effort: AgentEffort, system: String, turns: [AgentChatTurn]
     ) async throws -> String {
         try await AgentCLI.run(
             .codex,
@@ -420,7 +708,7 @@ enum AgentService {
                 "-c", "model_reasoning_effort=\"\(effort.openAIValue)\"",
                 "-",
             ],
-            stdin: AgentPrompt.nmtSkill + "\n\n" + prompt
+            stdin: system + "\n\n" + flattenTurns(turns)
         )
     }
 
@@ -428,13 +716,13 @@ enum AgentService {
 
     private static func callAnthropic(
         token: String, model: String, effort: AgentEffort,
-        system: String, prompt: String
+        system: String, turns: [AgentChatTurn]
     ) async throws -> String {
         var body: [String: Any] = [
             "model": model,
             "max_tokens": 16000,
             "system": system,
-            "messages": [["role": "user", "content": prompt]],
+            "messages": turns.map { ["role": $0.role.rawValue, "content": anthropicContent($0)] },
         ]
         // Fable 5: thinking всегда включён, параметр опускается.
         // Haiku 4.5: adaptive thinking и effort не поддерживаются — опускаем.
@@ -477,15 +765,13 @@ enum AgentService {
 
     private static func callOpenAI(
         token: String, model: String, effort: AgentEffort,
-        system: String, prompt: String
+        system: String, turns: [AgentChatTurn]
     ) async throws -> String {
         let body: [String: Any] = [
             "model": model,
             "reasoning": ["effort": effort.openAIValue],
-            "input": [
-                ["role": "developer", "content": system],
-                ["role": "user", "content": prompt],
-            ],
+            "input": [["role": "developer", "content": system]]
+                + turns.map { ["role": $0.role.rawValue, "content": openAIContent($0)] },
         ]
 
         var request = URLRequest(url: URL(string: "https://api.openai.com/v1/responses")!)

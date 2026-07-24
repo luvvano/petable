@@ -136,6 +136,10 @@ struct AppShellView: View {
     @State private var renameDraft = ""
     @State private var templatePickerShown = false
     @State private var agentSheetShown = false
+    @State private var chatShown = false
+    /// Ширина панели агента; тянется за сплиттер, запоминается между запусками.
+    @AppStorage("agent.chatWidth") private var chatWidth = 340.0
+    @StateObject private var chatController = AgentChatController()
     @State private var graphFilter: OriginFilter = .all
     @State private var interviewFilter: OriginFilter = .all
     @FocusState private var renameFocused: Bool
@@ -252,21 +256,42 @@ struct AppShellView: View {
             .listStyle(.sidebar)
             .navigationSplitViewColumnWidth(min: 190, ideal: 230, max: 300)
         } detail: {
-            switch document.selectedResearchItem {
-            case .interview(let id):
-                InterviewFormView(document: document, interviewID: id)
-            case .template(let id):
-                TemplateEditorView(document: document, templateID: id)
-            case .segment(let id):
-                SegmentEditorView(document: document, segmentID: id)
-            case .segmentMap:
-                SegmentMapView(document: document)
-            case nil:
-                CanvasRootView(document: document)
+            // Панель агента живёт внутри detail-колонки (как AI-панель
+            // в Cursor): контент ужимается, окно размер не меняет.
+            // GeometryReader не запрашивает размер у окна — панель капится
+            // долей доступной ширины, окну расти не из-за чего.
+            GeometryReader { geometry in
+                HStack(spacing: 0) {
+                    detailContent
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    if chatShown {
+                        ChatPanelSplitter(
+                            width: $chatWidth,
+                            maxWidth: geometry.size.width / 2,
+                            onCollapse: { chatShown = false }
+                        )
+                        AgentChatPanel(
+                            document: document,
+                            controller: chatController,
+                            onClose: { chatShown = false }
+                        )
+                        .frame(width: panelWidth(available: geometry.size.width))
+                        .frame(maxHeight: .infinity)
+                    }
+                }
             }
         }
         .navigationTitle("")
         .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    withAnimation(.spring(duration: 0.25)) { chatShown.toggle() }
+                } label: {
+                    Label("Агент", systemImage: chatShown ? "sparkles.rectangle.stack.fill" : "sparkles.rectangle.stack")
+                }
+                .keyboardShortcut("a", modifiers: [.command, .shift])
+                .help("Чат с агентом: вопросы по AJTBD, создание и правка артефактов (⇧⌘A)")
+            }
             ToolbarItem(placement: .primaryAction) {
                 exportToolbarMenu
             }
@@ -276,6 +301,92 @@ struct AppShellView: View {
         }
         .sheet(isPresented: $agentSheetShown) {
             AgentRunSheet(document: document)
+        }
+    }
+
+    /// Фактическая ширина панели: пользовательская, но не шире половины
+    /// доступного места — панель никогда не заставляет окно расти.
+    private func panelWidth(available: CGFloat) -> CGFloat {
+        let cap = max(ChatPanelSplitter.minWidth, available / 2)
+        return min(max(ChatPanelSplitter.minWidth, chatWidth), cap)
+    }
+
+    /// Вертикальный сплиттер панели агента: тянется мышью, курсор ↔.
+    /// Влево — до половины окна; вправо — до минимума, дальше панель
+    /// сворачивается (как AI-панель в Cursor).
+    private struct ChatPanelSplitter: View {
+        @Binding var width: Double
+        /// Предел расширения: половина текущей ширины detail-колонки.
+        var maxWidth: Double
+        /// Панель утянули почти в ноль — закрыть её.
+        var onCollapse: () -> Void
+
+        @State private var widthAtDragStart: Double?
+
+        static let minWidth = 220.0
+        /// Утащили заметно правее минимума — считаем жестом «свернуть».
+        private static let collapseThreshold = 160.0
+        /// Ширина при следующем открытии после сворачивания — удобная,
+        /// а не минимальная.
+        private static let reopenWidth = 300.0
+
+        var body: some View {
+            // Сплиттер — полноценный ребёнок HStack со своей 8-pt зоной
+            // захвата: overlay поверх 1-px Divider перекрывался соседями
+            // и не ловил мышь. Видимая линия — по центру зоны.
+            ZStack {
+                Rectangle()
+                    .fill(Color(nsColor: .separatorColor))
+                    .frame(width: 1)
+            }
+            .frame(width: 8)
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .onHover { inside in
+                if inside {
+                    NSCursor.resizeLeftRight.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
+            .highPriorityGesture(
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                    .onChanged { value in
+                        let start = widthAtDragStart ?? width
+                        widthAtDragStart = start
+                        // Панель справа: движение влево = шире.
+                        let proposed = start - value.translation.width
+                        if proposed < Self.collapseThreshold {
+                            widthAtDragStart = nil
+                            width = Self.reopenWidth
+                            onCollapse()
+                            return
+                        }
+                        width = min(
+                            max(proposed, Self.minWidth),
+                            max(maxWidth, Self.minWidth)
+                        )
+                    }
+                    .onEnded { _ in widthAtDragStart = nil }
+            )
+        }
+    }
+
+    /// Содержимое detail-колонки: канвас графа или открытый элемент
+    /// исследований (вынесено из body ради панели чата рядом).
+    @ViewBuilder
+    private var detailContent: some View {
+        switch document.selectedResearchItem {
+        case .interview(let id):
+            InterviewFormView(document: document, interviewID: id)
+        case .template(let id):
+            TemplateEditorView(document: document, templateID: id)
+        case .segment(let id):
+            SegmentEditorView(document: document, segmentID: id)
+        case .segmentMap:
+            SegmentMapView(document: document)
+        case nil:
+            CanvasRootView(document: document)
         }
     }
 

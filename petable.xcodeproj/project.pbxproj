@@ -13,10 +13,12 @@
 		66ACAE8195976D7C719E5D32 /* CanvasRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C70377BEAC79F596245F8956 /* CanvasRootView.swift */; };
 		7B55BEE04721BA91D1D33F2C /* AgentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E62A45FA71D4D0DD484A33F5 /* AgentService.swift */; };
 		82184708D4ACED543534C1D3 /* GraphCore in Frameworks */ = {isa = PBXBuildFile; productRef = 36C73F57FA1089A82679D3FD /* GraphCore */; };
+		8CD193EA4E65C5142B10BD61 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2868A061FB43B50F42D5122B /* Assets.xcassets */; };
 		900E3D2ADF383CAD72DF5DC8 /* ExportImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1331AC4697E53BAD68A9316F /* ExportImport.swift */; };
 		930AC76E00837B4E7908006A /* PetableApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECBCDF746F95FA51C02169F2 /* PetableApp.swift */; };
 		9D5E004F8ED6D6011C82B12A /* ProjectsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D79E12F8644248968D9CD2C3 /* ProjectsView.swift */; };
 		9DDC7ACAB3123B16C752B7CE /* EdgeShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6DADB00ADC81C9ACD5DD30C /* EdgeShape.swift */; };
+		A6F3D1C110EF637FA99C4AE0 /* AgentChatViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5569EF7D17D2C3983BED72E8 /* AgentChatViews.swift */; };
 		A946A0CE79277B538609A251 /* AgentViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52B817033A06DD9CB5F87525 /* AgentViews.swift */; };
 		BC2E5ECFEA80278D956B6A8D /* LevelColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DCB7854D3BB308FACCA6CA8 /* LevelColors.swift */; };
 		BC48987AD696E5470DA2F4AB /* SegmentViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD15B5C36F969484C7736B95 /* SegmentViews.swift */; };
@@ -37,10 +39,13 @@
 /* Begin PBXFileReference section */
 		047B9837F8FEFE53EDB0338C /* ProjectStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectStore.swift; sourceTree = "<group>"; };
 		1331AC4697E53BAD68A9316F /* ExportImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportImport.swift; sourceTree = "<group>"; };
+		2868A061FB43B50F42D5122B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		2F11456C586746FF698A909A /* ResearchViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResearchViews.swift; sourceTree = "<group>"; };
 		52B817033A06DD9CB5F87525 /* AgentViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentViews.swift; sourceTree = "<group>"; };
+		5569EF7D17D2C3983BED72E8 /* AgentChatViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentChatViews.swift; sourceTree = "<group>"; };
 		5784A5AD0A8680F74738F4F5 /* PetableDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetableDocument.swift; sourceTree = "<group>"; };
 		5EB6C462D7DAA6E097ACD327 /* petableUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = petableUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		6ECDA5BAE270450B89F06F57 /* petable */ = {isa = PBXFileReference; lastKnownFileType = folder; name = petable; path = .; sourceTree = SOURCE_ROOT; };
 		8DCB7854D3BB308FACCA6CA8 /* LevelColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LevelColors.swift; sourceTree = "<group>"; };
 		9569C7DB8D26BBD48DECBDA9 /* KeyboardFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardFlowUITests.swift; sourceTree = "<group>"; };
 		98C30A1BAAAF4FDF1990FED8 /* petable.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = petable.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -51,7 +56,6 @@
 		E62A45FA71D4D0DD484A33F5 /* AgentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentService.swift; sourceTree = "<group>"; };
 		E6DADB00ADC81C9ACD5DD30C /* EdgeShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EdgeShape.swift; sourceTree = "<group>"; };
 		ECBCDF746F95FA51C02169F2 /* PetableApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetableApp.swift; sourceTree = "<group>"; };
-		F888F1F16F2011D9CC61E7C3 /* sorted-dancing-wigderson */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "sorted-dancing-wigderson"; path = .; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -69,6 +73,7 @@
 		01773F1B3DC6944A5143EBE7 = {
 			isa = PBXGroup;
 			children = (
+				A2005D9425E3EA3CA24D741D /* App */,
 				1552D3B1E9C190B2D297339D /* Packages */,
 				79F1202848272FE7FFE5D280 /* Sources */,
 				C93896CB6104E9825BFE29E9 /* UITests */,
@@ -79,7 +84,7 @@
 		1552D3B1E9C190B2D297339D /* Packages */ = {
 			isa = PBXGroup;
 			children = (
-				F888F1F16F2011D9CC61E7C3 /* sorted-dancing-wigderson */,
+				6ECDA5BAE270450B89F06F57 /* petable */,
 			);
 			name = Packages;
 			sourceTree = "<group>";
@@ -87,6 +92,7 @@
 		79F1202848272FE7FFE5D280 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				5569EF7D17D2C3983BED72E8 /* AgentChatViews.swift */,
 				E62A45FA71D4D0DD484A33F5 /* AgentService.swift */,
 				52B817033A06DD9CB5F87525 /* AgentViews.swift */,
 				D48D8C6ACF85E367BFD35260 /* CanvasHostView.swift */,
@@ -103,6 +109,14 @@
 			);
 			name = Sources;
 			path = App/Sources;
+			sourceTree = "<group>";
+		};
+		A2005D9425E3EA3CA24D741D /* App */ = {
+			isa = PBXGroup;
+			children = (
+				2868A061FB43B50F42D5122B /* Assets.xcassets */,
+			);
+			path = App;
 			sourceTree = "<group>";
 		};
 		C93896CB6104E9825BFE29E9 /* UITests */ = {
@@ -149,6 +163,7 @@
 			buildConfigurationList = 3A64EB461D6C54B8B732BC8A /* Build configuration list for PBXNativeTarget "petable" */;
 			buildPhases = (
 				DA467A911BE9A0D35A0D3A9C /* Sources */,
+				1A94F7FB56B6B1B8CD8004D0 /* Resources */,
 				72326585BBE2C40A34F8699A /* Frameworks */,
 			);
 			buildRules = (
@@ -203,6 +218,17 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		1A94F7FB56B6B1B8CD8004D0 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8CD193EA4E65C5142B10BD61 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		8FD2904A24BDE5ECFA09AF3D /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -216,6 +242,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A6F3D1C110EF637FA99C4AE0 /* AgentChatViews.swift in Sources */,
 				7B55BEE04721BA91D1D33F2C /* AgentService.swift in Sources */,
 				A946A0CE79277B538609A251 /* AgentViews.swift in Sources */,
 				257681894B444D2784735B69 /* CanvasHostView.swift in Sources */,

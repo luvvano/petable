@@ -529,6 +529,112 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
         return interviewID
     }
 
+    /// Команды чат-агента (создать/править граф или интервью).
+    /// Возвращает человекочитаемый результат по каждой — для ленты чата.
+    @MainActor
+    func applyChatActions(_ actions: [AgentChatAction]) -> [String] {
+        actions.map { applyChatAction($0) }
+    }
+
+    @MainActor
+    private func applyChatAction(_ action: AgentChatAction) -> String {
+        switch action {
+        case .createGraph(let payloadGraph):
+            let graph = payloadGraph.makeWorkGraph()
+            guard graph.jobCount > 0 else {
+                return "⚠️ Граф не создан: агент прислал пустую структуру"
+            }
+            let stage = Envelope.Stage(
+                name: uniqueName(
+                    base: payloadGraph.name.isEmpty ? "Граф работ агента" : payloadGraph.name,
+                    existing: Set(graphStages.map(\.name)),
+                    firstWithoutNumber: true
+                ),
+                modifiedAt: Date(),
+                origin: .agent,
+                graph: graph
+            )
+            applyListChange {
+                stages.append(stage)
+                selectedGraphID = stage.id
+                selectedResearchItem = nil
+            }
+            return "Создан граф «\(stage.name)»"
+
+        case .updateGraph(let id, let payloadGraph):
+            guard let index = stages.firstIndex(where: {
+                $0.id == id && $0.type == Envelope.jobGraphStageType
+            }) else {
+                return "⚠️ Граф не найден (id \(id.uuidString.prefix(8))…)"
+            }
+            let graph = payloadGraph.makeWorkGraph()
+            guard graph.jobCount > 0 else {
+                return "⚠️ Граф «\(stages[index].name)» не изменён: пустая структура"
+            }
+            let newName = payloadGraph.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Правка идёт через сессию графа, если она уже создана: у неё
+            // свой снапшот, мимо неё изменение затёрлось бы следующим интентом.
+            if let session = sessions[id] {
+                session.replace(with: graph)
+            } else {
+                applyListChange {
+                    stages[index].graph = graph
+                    stages[index].modifiedAt = Date()
+                }
+            }
+            if !newName.isEmpty, stages[index].name != newName {
+                applyListChange { stages[index].name = newName }
+            }
+            return "Обновлён граф «\(stages[index].name)»"
+
+        case .createInterview(let templateID, let name, let placeholders, let answers):
+            guard let template = research.templates.first(where: { $0.id == templateID }) else {
+                return "⚠️ Интервью не создано: шаблон не найден"
+            }
+            let payload = AgentArtifactsPayload(
+                interviewName: name,
+                placeholders: placeholders,
+                answers: answers,
+                graph: .init(name: "", levels: [])
+            )
+            var interview = payload.makeInterview(template: template)
+            interview.name = uniqueName(
+                base: interview.name,
+                existing: Set(research.interviews.map(\.name)),
+                firstWithoutNumber: true
+            )
+            let interviewID = interview.id
+            applyListChange { [interview] in
+                research.interviews.append(interview)
+                selectedResearchItem = .interview(interviewID)
+            }
+            return "Создано интервью «\(interview.name)»"
+
+        case .updateInterview(let id, let placeholders, let answers):
+            guard let index = research.interviews.firstIndex(where: { $0.id == id }) else {
+                return "⚠️ Интервью не найдено (id \(id.uuidString.prefix(8))…)"
+            }
+            let knownFieldIDs = Set(
+                research.interviews[index].template.sections.flatMap(\.fields).map(\.id)
+            )
+            let knownAnswers = answers.filter { knownFieldIDs.contains($0.fieldID) }
+            guard !knownAnswers.isEmpty || !placeholders.isEmpty else {
+                return "⚠️ Интервью «\(research.interviews[index].name)» не изменено: нет валидных полей"
+            }
+            applyListChange {
+                for answer in knownAnswers {
+                    research.interviews[index].setAnswer(answer.answer, for: answer.fieldID)
+                }
+                for (key, value) in placeholders {
+                    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                    research.interviews[index].placeholderValues[key] = trimmed.isEmpty ? nil : trimmed
+                }
+                research.interviews[index].modifiedAt = Date()
+            }
+            return "Обновлено интервью «\(research.interviews[index].name)»"
+        }
+    }
+
     private func nextInterviewName() -> String {
         uniqueName(base: "Интервью", existing: Set(research.interviews.map(\.name)))
     }
