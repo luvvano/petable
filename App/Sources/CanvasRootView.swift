@@ -299,15 +299,18 @@ struct CanvasRootView: View {
                 // Горизонтально внутри полосы: вертикальный TextField нечитаем.
                 .position(x: bandInset + 116, y: top + bandHeight / 2)
         } else {
+            // Метрики × zoom + обратный scaleEffect — резкий текст при
+            // приближении (см. nodeLabel).
             Text(level.name?.uppercased() ?? "УРОВЕНЬ \(index + 1)")
-                .font(.system(size: 9, weight: .bold, design: .rounded))
-                .tracking(1.4)
+                .font(.system(size: 9 * scale, weight: .bold, design: .rounded))
+                .tracking(1.4 * scale)
                 .foregroundStyle(LevelColors.stroke(for: index).opacity(0.65))
                 .lineLimit(1)
                 .fixedSize()
-                .frame(maxWidth: bandHeight)
+                .frame(maxWidth: bandHeight * scale)
                 .contentShape(Rectangle())
                 .onTapGesture(count: 2) { beginLevelEditing(level) }
+                .scaleEffect(1 / scale)
                 .rotationEffect(.degrees(-90))
                 .position(x: bandInset - 12, y: top + bandHeight / 2)
                 .help("Двойной клик — переименовать уровень")
@@ -527,19 +530,22 @@ struct CanvasRootView: View {
                 && hypot($0.current.x - position.x, $0.current.y - position.y) <= diameter / 2 + 12
         } ?? false
 
+        // Круг рендерится в размере × zoom и сжимается обратно — резкие
+        // контуры при приближении (тот же приём, что у подписей).
         Circle()
             .fill(LevelColors.fill(for: level))
-            .overlay(Circle().strokeBorder(LevelColors.stroke(for: level), lineWidth: 2))
+            .overlay(Circle().strokeBorder(LevelColors.stroke(for: level), lineWidth: 2 * scale))
             .overlay {
                 if isSelected || isLinkTarget {
                     Circle()
-                        .strokeBorder(Color.accentColor.opacity(0.8), lineWidth: 2.5)
-                        .padding(-5)
-                        .shadow(color: Color.accentColor.opacity(0.45), radius: 6)
+                        .strokeBorder(Color.accentColor.opacity(0.8), lineWidth: 2.5 * scale)
+                        .padding(-5 * scale)
+                        .shadow(color: Color.accentColor.opacity(0.45), radius: 6 * scale)
                 }
             }
-            .shadow(color: .black.opacity(0.16), radius: 3, y: 1.5)
-            .frame(width: diameter, height: diameter)
+            .shadow(color: .black.opacity(0.16), radius: 3 * scale, y: 1.5 * scale)
+            .frame(width: diameter * scale, height: diameter * scale)
+            .scaleEffect(1 / scale)
             .scaleEffect(isHovered ? 1.06 : 1)
             .animation(.spring(duration: 0.25), value: isHovered)
             .position(position)
@@ -708,21 +714,25 @@ struct CanvasRootView: View {
 
     @ViewBuilder
     private func nodeLabel(_ job: JobNode, level: Int) -> some View {
+        // Шрифты и ширина умножены на zoom + обратный scaleEffect: текст
+        // растрируется в натуральном размере и остаётся резким при любом
+        // приближении (иначе внешний scaleEffect канваса растит растр 1x).
         VStack(spacing: 0) {
             if let role = job.role {
                 Text("\(role):")
-                    .font(.system(size: 10.5, weight: .semibold))
+                    .font(.system(size: 10.5 * scale, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
             Text(job.verb)
-                .font(.system(size: level == 0 ? 12 : 11, weight: level == 0 ? .semibold : .regular))
+                .font(.system(size: (level == 0 ? 12 : 11) * scale, weight: level == 0 ? .semibold : .regular))
                 // Резерв 3 строки — совпадает с labelReserve раскладки;
                 // длиннее — truncation, полный текст в редакторе.
                 .lineLimit(job.role == nil ? 3 : 2)
                 .truncationMode(.tail)
                 .multilineTextAlignment(.center)
         }
-        .frame(width: LayoutMetrics.columnWidth - 6)
+        .frame(width: (LayoutMetrics.columnWidth - 6) * scale)
+        .scaleEffect(1 / scale)
     }
 
     private func point(_ position: CGPoint?) -> CGPoint {
