@@ -241,7 +241,7 @@ public extension WorkGraph {
             GraphLevel(jobs: level.jobs.map { job in
                 let newID = UUID()
                 idMap[job.id] = newID
-                return JobNode(id: newID, verb: job.verb, role: job.role)
+                return JobNode(id: newID, verb: job.verb, role: job.role, details: job.details)
             })
         }
         let newEdges = edges.compactMap { edge -> JobEdge? in

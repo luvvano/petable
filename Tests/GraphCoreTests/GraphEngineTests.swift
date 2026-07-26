@@ -175,3 +175,212 @@ struct GraphEngineTests {
         #expect(GraphEngine.apply(.renameLevel(UUID(), name: "x"), to: graph) == nil)
     }
 }
+
+@Suite("Перемещение работы (drag&drop)")
+struct MoveJobTests {
+    @Test("move: на другой уровень в заданную позицию, рёбра сохраняются")
+    func moveAcrossLevels() throws {
+        let graph = Fixtures.closeMonth()
+        let job = graph.levels[1].jobs[1] // «категоризировать», 3 ребра вниз
+        let edgeCount = graph.edges.count
+
+        let result = try #require(GraphEngine.apply(.move(job.id, toLevel: 2, at: 1), to: graph))
+        #expect(result.focus == job.id)
+        #expect(result.graph.levelIndex(of: job.id) == 2)
+        #expect(result.graph.levels[2].jobs[1].id == job.id)
+        #expect(result.graph.levels[1].jobs.count == 4)
+        #expect(result.graph.edges.count == edgeCount)
+    }
+
+    @Test("move: внутри уровня — смена порядка")
+    func moveWithinLevel() throws {
+        let graph = Fixtures.closeMonth()
+        let first = graph.levels[1].jobs[0]
+
+        let result = try #require(GraphEngine.apply(.move(first.id, toLevel: 1, at: 3), to: graph))
+        #expect(result.graph.levels[1].jobs[3].id == first.id)
+        #expect(result.graph.levels[1].jobs.count == 5)
+    }
+
+    @Test("move: та же позиция — no-op, чужой уровень/работа — no-op, индекс clamp")
+    func moveEdgeCases() throws {
+        let graph = Fixtures.closeMonth()
+        let job = graph.levels[1].jobs[2]
+
+        // Та же позиция — no-op.
+        #expect(GraphEngine.apply(.move(job.id, toLevel: 1, at: 2), to: graph) == nil)
+        // Уровень за пределами / неизвестная работа — no-op.
+        #expect(GraphEngine.apply(.move(job.id, toLevel: 5, at: 0), to: graph) == nil)
+        #expect(GraphEngine.apply(.move(job.id, toLevel: -1, at: 0), to: graph) == nil)
+        #expect(GraphEngine.apply(.move(UUID(), toLevel: 0, at: 0), to: graph) == nil)
+
+        // Индекс больше числа работ — clamp в конец.
+        let moved = try #require(GraphEngine.apply(.move(job.id, toLevel: 2, at: 99), to: graph))
+        #expect(moved.graph.levels[2].jobs.last?.id == job.id)
+    }
+
+    @Test("move: пустой уровень принимает работу")
+    func moveToEmptyLevel() throws {
+        var graph = Fixtures.closeMonth()
+        graph.levels.append(GraphLevel())
+        let job = graph.levels[0].jobs[0]
+
+        let result = try #require(GraphEngine.apply(.move(job.id, toLevel: 3, at: 0), to: graph))
+        #expect(result.graph.levels[3].jobs.map(\.id) == [job.id])
+        #expect(result.graph.levels[0].jobs.isEmpty)
+    }
+}
+
+@Suite("Работы ниже и подграф")
+struct JobsBelowTests {
+    @Test("jobsBelow: корень — весь граф, средний узел — только своё поддерево")
+    func jobsBelowSubtree() throws {
+        let graph = Fixtures.closeMonth()
+        let root = graph.levels[0].jobs[0]
+        #expect(graph.jobsBelow(root.id).count == graph.jobCount)
+
+        let categorize = graph.levels[1].jobs[1]
+        let below = graph.jobsBelow(categorize.id)
+        #expect(below.count == 4) // сама работа + 3 дочерние
+        #expect(below.contains(categorize.id))
+        for child in graph.levels[2].jobs {
+            #expect(below.contains(child.id))
+        }
+        // Соседи по уровню не попадают.
+        #expect(!below.contains(graph.levels[1].jobs[0].id))
+    }
+
+    @Test("jobsBelow: горизонтальная связь на стартовом уровне не тянет соседа, вверх не поднимается")
+    func jobsBelowEdgeCases() throws {
+        var graph = Fixtures.closeMonth()
+        let categorize = graph.levels[1].jobs[1]
+        let sibling = graph.levels[1].jobs[2]
+        graph.edges.append(JobEdge(from: categorize.id, to: sibling.id))
+        // Связь «вправо» от стартовой работы — сосед не выделяется.
+        #expect(!graph.jobsBelow(categorize.id).contains(sibling.id))
+        // Та же связь ниже стартового уровня — учитывается.
+        let root = graph.levels[0].jobs[0]
+        #expect(graph.jobsBelow(root.id).contains(sibling.id))
+
+        // Связь вверх (ребёнок → корень) не поднимает выделение.
+        let child = graph.levels[2].jobs[0]
+        graph.edges.append(JobEdge(from: child.id, to: root.id))
+        #expect(!graph.jobsBelow(categorize.id).contains(root.id))
+    }
+
+    @Test("subgraph: остаются только выбранные работы и рёбра между ними, пустые уровни отброшены")
+    func subgraphKeeping() throws {
+        let graph = Fixtures.closeMonth()
+        let categorize = graph.levels[1].jobs[1]
+        let sub = graph.subgraph(keeping: graph.jobsBelow(categorize.id))
+
+        #expect(sub.levels.count == 2) // верхний уровень опустел и отброшен
+        #expect(sub.levels[0].jobs.map(\.id) == [categorize.id])
+        #expect(sub.levels[1].jobs.count == 3)
+        #expect(sub.edges.count == 3)
+        #expect(sub.edges.allSatisfy { $0.from == categorize.id })
+    }
+}
+
+@Suite("Карточка работы")
+struct JobDetailsTests {
+    private var sampleDetails: JobDetails {
+        JobDetails(
+            context: ["затишье, загрузка проседает"],
+            negativeEmotions: ["страх овербукинга"],
+            trigger: ["просела выдача на одной площадке"],
+            successCriteria: ["все объекты на новой площадке", "брони синхронизируются"],
+            inOrderTo: ["не зависеть от одного-двух каналов"],
+            positiveEmotions: ["предпринимательский аппетит", "спокойствие"],
+            frequency: "5 раз/год"
+        )
+    }
+
+    @Test("setDetails: заполняет карточку, фокус на работе")
+    func setDetails() throws {
+        let graph = Fixtures.closeMonth()
+        let job = graph.levels[1].jobs[0]
+
+        let result = try #require(GraphEngine.apply(.setDetails(job.id, details: sampleDetails), to: graph))
+        #expect(result.focus == job.id)
+        #expect(result.graph.job(job.id)?.details == sampleDetails)
+        // Остальные работы не тронуты.
+        #expect(result.graph.job(graph.levels[1].jobs[1].id)?.details.isEmpty == true)
+    }
+
+    @Test("setDetails: нормализация — trim элементов, пустые отброшены")
+    func setDetailsNormalizes() throws {
+        let graph = Fixtures.closeMonth()
+        let job = graph.levels[1].jobs[0]
+        let dirty = JobDetails(
+            context: ["  затишье  ", "", "   "],
+            successCriteria: ["критерий"],
+            frequency: "  5 раз/год  "
+        )
+
+        let result = try #require(GraphEngine.apply(.setDetails(job.id, details: dirty), to: graph))
+        let saved = try #require(result.graph.job(job.id)?.details)
+        #expect(saved.context == ["затишье"])
+        #expect(saved.frequency == "5 раз/год")
+
+        // Только мусор (пустые элементы) на пустой карточке — no-op.
+        let junk = JobDetails(context: ["", "  "])
+        #expect(GraphEngine.apply(.setDetails(job.id, details: junk), to: graph) == nil)
+    }
+
+    @Test("setDetails: та же карточка — no-op, неизвестная работа — no-op")
+    func setDetailsNoOp() throws {
+        let graph = Fixtures.closeMonth()
+        let job = graph.levels[1].jobs[0]
+
+        #expect(GraphEngine.apply(.setDetails(job.id, details: JobDetails()), to: graph) == nil)
+        let filled = try #require(GraphEngine.apply(.setDetails(job.id, details: sampleDetails), to: graph))
+        #expect(GraphEngine.apply(.setDetails(job.id, details: sampleDetails), to: filled.graph) == nil)
+        #expect(GraphEngine.apply(.setDetails(UUID(), details: sampleDetails), to: graph) == nil)
+    }
+
+    @Test("Codable: карточка переживает round-trip конверта, пустая — не пишется в JSON")
+    func codableRoundTrip() throws {
+        var graph = Fixtures.closeMonth()
+        let job = graph.levels[0].jobs[0]
+        graph = try #require(GraphEngine.apply(.setDetails(job.id, details: sampleDetails), to: graph)).graph
+
+        let data = try Envelope(graph: graph).encoded()
+        let decoded = try Envelope.decode(data)
+        #expect(decoded.jobGraph?.job(job.id)?.details == sampleDetails)
+
+        // Пустые карточки не сериализуются — ключа details нет в JSON.
+        let json = try #require(String(data: data, encoding: .utf8))
+        #expect(json.components(separatedBy: "\"details\"").count == 2)
+    }
+
+    @Test("Codable: узел без ключа details читается пустой карточкой")
+    func decodesLegacyNode() throws {
+        let json = #"{"id":"6F1F9C3B-2C9A-4B49-9B57-3A54A63C2B10","verb":"хочу сверить отчёты"}"#
+        let node = try JSONDecoder().decode(JobNode.self, from: Data(json.utf8))
+        #expect(node.details.isEmpty)
+    }
+
+    @Test("Codable: строковые поля раннего формата карточки мигрируют в списки по переводам строк")
+    func decodesLegacyStringDetails() throws {
+        let json = #"""
+        {"id":"6F1F9C3B-2C9A-4B49-9B57-3A54A63C2B10","verb":"хочу выйти на новую площадку",
+         "details":{"context":"затишье\nзагрузка проседает","frequency":"5 раз/год"}}
+        """#
+        let node = try JSONDecoder().decode(JobNode.self, from: Data(json.utf8))
+        #expect(node.details.context == ["затишье", "загрузка проседает"])
+        #expect(node.details.frequency == "5 раз/год")
+        #expect(node.details.trigger.isEmpty)
+    }
+
+    @Test("withRegeneratedIDs: карточка переезжает вместе с работой")
+    func regeneratedIDsKeepDetails() throws {
+        var graph = Fixtures.closeMonth()
+        let job = graph.levels[0].jobs[0]
+        graph = try #require(GraphEngine.apply(.setDetails(job.id, details: sampleDetails), to: graph)).graph
+
+        let copy = graph.withRegeneratedIDs()
+        #expect(copy.levels[0].jobs[0].details == sampleDetails)
+        #expect(copy.levels[0].jobs[0].id != job.id)
+    }
+}

@@ -32,13 +32,33 @@ struct CanvasRootView: View {
     @State private var selectedEdge: JobEdge?
     /// Активное связывание: drag от плюса узла к другому узлу.
     @State private var dragLink: DragLink?
+    /// Подсветка поддерева «работы ниже»: работы вне набора приглушаются.
+    /// nil — режим подсветки выключен.
+    @State private var highlightedJobs: Set<UUID>?
+    /// Карточка работы (двойной клик по узлу): id открытой + черновик
+    /// полей. Черновик коммитится одним интентом при закрытии карточки
+    /// и при выходе из режима редактирования.
+    @State private var detailsId: UUID?
+    @State private var detailsDraft = JobDetails()
+    /// Режим карточки: false — отформатированный просмотр, true — редактор
+    /// (карандаш в шапке). Пустая карточка открывается сразу в редакторе.
+    @State private var detailsEditing = false
     @StateObject private var focusBridge = CanvasFocusBridge()
+
+    /// Перетаскивание работы (зажать узел + drag): работа следует за
+    /// курсором, отпускание — перенос на уровень/позицию под курсором.
+    @State private var dragNode: NodeDrag?
 
     private static let contentSpace = "canvas-content"
 
     private struct DragLink {
         var from: UUID
         var fromPoint: CGPoint
+        var current: CGPoint
+    }
+
+    private struct NodeDrag {
+        var id: UUID
         var current: CGPoint
     }
 
@@ -171,6 +191,9 @@ struct CanvasRootView: View {
             selection = nil
             selectedEdge = nil
             dragLink = nil
+            dragNode = nil
+            highlightedJobs = nil
+            detailsId = nil
             autoEditFreshDocument()
         }
     }
@@ -188,8 +211,12 @@ struct CanvasRootView: View {
 
             // Полосы уровней — фон, событий не перехватывают: клики по
             // пустому месту уходят в CanvasHostView (deselect), hover не ломают.
+            // Полоса под перетаскиваемой работой подсвечена — цель переноса.
+            let dropLevel = dragNode.flatMap { drag in
+                dropTarget(for: drag.current, excluding: drag.id, positions: positions)?.level
+            }
             ForEach(Array(document.graph.levels.enumerated()), id: \.element.id) { index, _ in
-                bandBackground(index: index, width: size.width)
+                bandBackground(index: index, width: size.width, isDropTarget: index == dropLevel)
                     .allowsHitTesting(false)
             }
 
@@ -208,6 +235,12 @@ struct CanvasRootView: View {
             // Контролы уровней: добавить работу, вставить/удалить уровень.
             ForEach(Array(document.graph.levels.enumerated()), id: \.element.id) { index, level in
                 bandControls(index: index, level: level, positions: positions)
+            }
+
+            // Карточка работы — поверх узлов, справа от открытой работы.
+            if let detailsId, let detailsJob = document.graph.job(detailsId),
+               let detailsLevel = document.graph.levelIndex(of: detailsId) {
+                detailsCard(detailsJob, level: detailsLevel, at: point(positions[detailsId]))
             }
 
             // Резиновая линия: тянется от плюса к курсору при связывании.
@@ -257,17 +290,21 @@ struct CanvasRootView: View {
     }
 
     @ViewBuilder
-    private func bandBackground(index: Int, width: CGFloat) -> some View {
+    private func bandBackground(index: Int, width: CGFloat, isDropTarget: Bool = false) -> some View {
         let top = bandTop(index)
 
         RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .fill(LevelColors.fill(for: index).opacity(0.07))
+            .fill(LevelColors.fill(for: index).opacity(isDropTarget ? 0.16 : 0.07))
             .overlay(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(LevelColors.stroke(for: index).opacity(0.18), lineWidth: 1)
+                    .strokeBorder(
+                        LevelColors.stroke(for: index).opacity(isDropTarget ? 0.55 : 0.18),
+                        lineWidth: isDropTarget ? 1.5 : 1
+                    )
             )
             .frame(width: width - bandInset * 2, height: bandHeight)
             .offset(x: bandInset, y: top)
+            .animation(.easeOut(duration: 0.15), value: isDropTarget)
     }
 
     /// Имя уровня вертикально у левой кромки полосы — не пересекается
@@ -455,12 +492,17 @@ struct CanvasRootView: View {
                 : []
             let shape = EdgeShape(from: start, to: end, vertical: vertical, waypoints: waypoints)
             let isSelected = selectedEdge == edge
+            // Ребро приглушается, если хотя бы один конец вне подсветки.
+            let isDimmed = highlightedJobs.map {
+                !($0.contains(edge.from) && $0.contains(edge.to))
+            } ?? false
 
             shape
                 .stroke(
                     isSelected ? Color.accentColor : Color.gray.opacity(0.5),
                     style: StrokeStyle(lineWidth: isSelected ? 2.5 : 1.5, lineCap: .round)
                 )
+                .opacity(isDimmed ? 0.2 : 1)
                 // Хит-зона — сама линия, раздутая до 16pt; клики мимо линии
                 // проходят дальше (пустота, узлы).
                 .contentShape(EdgeHitShape(base: shape))
@@ -512,9 +554,12 @@ struct CanvasRootView: View {
     // MARK: Узлы
 
     @ViewBuilder
-    private func nodeView(_ job: JobNode, level: Int, at position: CGPoint) -> some View {
+    private func nodeView(_ job: JobNode, level: Int, at basePosition: CGPoint) -> some View {
         let diameter = LevelStyle.style(for: level).diameter
         let isSelected = selection == job.id
+        // Перетаскиваемая работа следует за курсором; остальные — на местах.
+        let isDragging = dragNode?.id == job.id
+        let position = isDragging ? (dragNode?.current ?? basePosition) : basePosition
         // Ховер — от позиции курсора, не от onHover: тот теряет exit-события
         // при частых пересборках канваса и «залипает».
         let isHovered = cursorWithin(position, diameter / 2 + 8)
@@ -522,13 +567,16 @@ struct CanvasRootView: View {
         let plusBelow = CGPoint(x: position.x - diameter / 2 - 14, y: position.y + diameter / 2 + 14)
         // Зоны плюсов держат кнопки видимыми по пути от круга до клика;
         // источник активного связывания не должен исчезнуть посреди drag.
-        let showsPlus = isSelected || isHovered || dragLink?.from == job.id
-            || cursorWithin(plusRight, 20) || cursorWithin(plusBelow, 20)
+        // Во время переноса работы плюсы спрятаны.
+        let showsPlus = dragNode == nil && (isSelected || isHovered || dragLink?.from == job.id
+            || cursorWithin(plusRight, 20) || cursorWithin(plusBelow, 20))
         // Узел под резиновой линией — подсветка цели связывания.
         let isLinkTarget = dragLink.map {
             $0.from != job.id
                 && hypot($0.current.x - position.x, $0.current.y - position.y) <= diameter / 2 + 12
         } ?? false
+        // Работа вне подсвеченного поддерева — приглушена.
+        let isDimmed = highlightedJobs.map { !$0.contains(job.id) } ?? false
 
         // Круг рендерится в размере × zoom и сжимается обратно — резкие
         // контуры при приближении (тот же приём, что у подписей).
@@ -543,13 +591,20 @@ struct CanvasRootView: View {
                         .shadow(color: Color.accentColor.opacity(0.45), radius: 6 * scale)
                 }
             }
-            .shadow(color: .black.opacity(0.16), radius: 3 * scale, y: 1.5 * scale)
+            .shadow(
+                color: .black.opacity(isDragging ? 0.32 : 0.16),
+                radius: (isDragging ? 9 : 3) * scale,
+                y: (isDragging ? 4 : 1.5) * scale
+            )
             .frame(width: diameter * scale, height: diameter * scale)
             .scaleEffect(1 / scale)
-            .scaleEffect(isHovered ? 1.06 : 1)
+            .scaleEffect(isDragging ? 1.12 : (isHovered ? 1.06 : 1))
             .animation(.spring(duration: 0.25), value: isHovered)
+            .animation(.spring(duration: 0.2), value: isDragging)
+            .opacity(isDimmed ? 0.25 : 1)
+            .zIndex(isDragging ? 10 : 0)
             .position(position)
-            .onTapGesture(count: 2) { beginEditing(job) }
+            .onTapGesture(count: 2) { openDetails(job) }
             // ⌘ проверяется внутри обычного тапа: отдельный
             // TapGesture().modifiers(.command) блокирует ВСЕ клики узла.
             .onTapGesture {
@@ -561,6 +616,7 @@ struct CanvasRootView: View {
             }
             .contextMenu {
                 Button("Редактировать") { beginEditing(job) }
+                Button("Карточка работы (двойной клик)") { openDetails(job) }
                 Divider()
                 Button("Работа справа (⌘Return)") {
                     commitEditingIfNeeded()
@@ -580,6 +636,15 @@ struct CanvasRootView: View {
                 Button("Сдвинуть вправо (⌘→)") {
                     document.perform(.reorder(job.id, direction: .right))
                 }
+                Divider()
+                Button("Выделить работы ниже") {
+                    highlightedJobs = document.graph.jobsBelow(job.id)
+                }
+                if let highlighted = highlightedJobs, highlighted.contains(job.id) {
+                    Button("Экспортировать PNG выделенных работ…") {
+                        exportHighlightedPNG(highlighted)
+                    }
+                }
                 if let selection, selection != job.id {
                     Divider()
                     Button(edgeExists(selection, job.id)
@@ -594,6 +659,7 @@ struct CanvasRootView: View {
                     selection = document.perform(.delete(job.id))
                 }
             }
+            .gesture(nodeDragGesture(job))
 
         if showsPlus {
             // Связанная работа справа — тот же уровень.
@@ -653,10 +719,14 @@ struct CanvasRootView: View {
                 // за границу канваса (под сайдбар).
                 .position(x: max(position.x, 145), y: position.y + diameter / 2 + 36)
         } else {
+            // Двойной клик по подписи — правка текста работы
+            // (по кругу — карточка).
             nodeLabel(job, level: level)
+                .opacity(isDimmed ? 0.25 : 1)
                 .position(x: position.x, y: position.y + diameter / 2 + 32)
                 .onTapGesture(count: 2) { beginEditing(job) }
                 .onTapGesture { select(job.id) }
+                .help("Двойной клик — изменить текст работы")
         }
     }
 
@@ -694,6 +764,61 @@ struct CanvasRootView: View {
                         focusBridge.focusCanvas()
                     }
             )
+    }
+
+    /// Перенос работы: зажать узел (long press) — работа «поднимается»,
+    /// drag ведёт её за курсором, отпускание — перенос на уровень и
+    /// позицию под курсором (тот же уровень — смена порядка).
+    private func nodeDragGesture(_ job: JobNode) -> some Gesture {
+        LongPressGesture(minimumDuration: 0.25)
+            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.contentSpace)))
+            .onChanged { value in
+                switch value {
+                case .second(true, nil):
+                    // Long press распознан: работа поднята, ждём движения.
+                    commitEditingIfNeeded()
+                    selection = job.id
+                    dragNode = NodeDrag(id: job.id, current: nodeCenter(of: job.id))
+                case .second(true, .some(let drag)):
+                    dragNode = NodeDrag(id: job.id, current: drag.location)
+                default:
+                    break
+                }
+            }
+            .onEnded { value in
+                defer { dragNode = nil }
+                guard case .second(true, .some(let drag)) = value else { return }
+                let positions = GraphLayout.layout(document.graph)
+                if let target = dropTarget(for: drag.location, excluding: job.id, positions: positions) {
+                    document.perform(.move(job.id, toLevel: target.level, at: target.index))
+                }
+                focusBridge.focusCanvas()
+            }
+    }
+
+    /// Текущий центр узла в координатах контента.
+    private func nodeCenter(of id: UUID) -> CGPoint {
+        point(GraphLayout.layout(document.graph)[id])
+    }
+
+    /// Целевая позиция перетаскиваемой работы: уровень — по y курсора,
+    /// индекс вставки — число работ уровня (без самой перетаскиваемой)
+    /// левее курсора. Совпадает с семантикой интента move.
+    private func dropTarget(
+        for location: CGPoint,
+        excluding dragged: UUID,
+        positions: [UUID: CGPoint]
+    ) -> (level: Int, index: Int)? {
+        let levels = document.graph.levels
+        guard !levels.isEmpty else { return nil }
+        let raw = Int(((location.y - bandTop(0)) / LayoutMetrics.rowHeight).rounded(.down))
+        let level = min(max(raw, 0), levels.count - 1)
+        let index = levels[level].jobs
+            .filter { $0.id != dragged }
+            .compactMap { positions[$0.id] }
+            .filter { point($0).x < location.x }
+            .count
+        return (level, index)
     }
 
     /// Узел, чей круг (с небольшим допуском) накрывает точку контента.
@@ -820,10 +945,19 @@ struct CanvasRootView: View {
         if selectedEdge != nil {
             return "Delete — удалить связь · Esc — снять выделение"
         }
-        if selection != nil {
-            return "Tab — декомпозиция · ⌘Return — работа справа · Return — текст · ⌘-клик — связь · Delete — удалить"
+        if highlightedJobs != nil {
+            return "Правый клик по выделенной работе — экспорт PNG · Esc — снять выделение"
         }
-        return "Двойной клик — новая работа · Tab — работа сверху · драг — панорама · ⌘-скролл — zoom"
+        if dragNode != nil {
+            return "Отпустите работу на нужном уровне и позиции — перенос"
+        }
+        if detailsId != nil {
+            return "Карточка работы: Esc или ✕ — закрыть и сохранить"
+        }
+        if selection != nil {
+            return "Двойной клик — карточка · по подписи — текст · зажать — перенос · Tab — декомпозиция · Delete — удалить"
+        }
+        return "Двойной клик — новая работа · Tab — работа сверху · зажать работу — перенос · драг — панорама"
     }
 
     /// Zoom от центра видимой области (кнопки и меню, без курсора).
@@ -939,6 +1073,14 @@ struct CanvasRootView: View {
             zoomStep(1.25)
             return true
         case .escape:
+            if detailsId != nil {
+                closeDetails()
+                return true
+            }
+            if highlightedJobs != nil {
+                highlightedJobs = nil
+                return true
+            }
             selection = nil
             selectedEdge = nil
             return true
@@ -1008,10 +1150,333 @@ struct CanvasRootView: View {
         focusBridge.focusCanvas()
     }
 
+    /// PNG только из подсвеченных работ: подграф рендерится тем же
+    /// снапшотом, что и полный экспорт.
+    private func exportHighlightedPNG(_ ids: Set<UUID>) {
+        let stageName = document.graphStages
+            .first { $0.id == document.selectedGraphID }?.name ?? "Граф"
+        ExportImport.exportGraphPNG(
+            name: "\(stageName) — выделенные работы",
+            graph: document.graph.subgraph(keeping: ids)
+        )
+    }
+
     private func edgeExists(_ a: UUID, _ b: UUID) -> Bool {
         document.graph.edges.contains {
             ($0.from == a && $0.to == b) || ($0.from == b && $0.to == a)
         }
+    }
+
+    // MARK: - Карточка работы
+
+    private var detailsCardSize: CGSize { CGSize(width: 340, height: 480) }
+
+    /// Карточка описания работы по AJTBD: «когда / хочу / чтобы» + частота.
+    /// Открывается справа от узла в режиме просмотра (отформатированный
+    /// текст с буллетами); карандаш в шапке переключает в редактор.
+    /// Закрытие (✕, Esc, двойной клик по другому узлу) и выход из
+    /// редактора коммитят черновик одним интентом.
+    @ViewBuilder
+    private func detailsCard(_ job: JobNode, level: Int, at position: CGPoint) -> some View {
+        let diameter = LevelStyle.style(for: level).diameter
+        let x = position.x + diameter / 2 + detailsCardSize.width / 2 + 26
+        // Верх карточки — у верха узла; у верхней кромки контента прижимается.
+        let y = max(
+            position.y - diameter / 2 - 10 + detailsCardSize.height / 2,
+            detailsCardSize.height / 2 + 12
+        )
+
+        VStack(spacing: 0) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(job.displayText.isEmpty ? "Карточка работы" : job.displayText)
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                detailsHeaderButton(
+                    icon: detailsEditing ? "checkmark" : "pencil",
+                    help: detailsEditing ? "Готово — сохранить и вернуться к просмотру" : "Редактировать карточку"
+                ) {
+                    toggleDetailsEditing()
+                }
+                detailsHeaderButton(icon: "xmark", help: "Закрыть карточку (Esc)") {
+                    closeDetails()
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+
+            Divider()
+
+            ScrollView {
+                if detailsEditing {
+                    detailsEditForm
+                } else {
+                    detailsReadView(for: job)
+                }
+            }
+        }
+        .frame(width: detailsCardSize.width, height: detailsCardSize.height)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(.regularMaterial)
+                .shadow(color: .black.opacity(0.25), radius: 14, y: 4)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+        )
+        .onExitCommand { closeDetails() }
+        .position(x: x, y: y)
+        .transition(.scale(scale: 0.95, anchor: .leading).combined(with: .opacity))
+    }
+
+    private func detailsHeaderButton(
+        icon: String,
+        help: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(.secondary)
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(Color.primary.opacity(0.08)))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+    }
+
+    // MARK: Карточка — просмотр
+
+    /// Отформатированный вид карточки: жирные «когда/хочу/чтобы»,
+    /// подписи полей, элементы — буллеты. Все секции видны всегда;
+    /// пустые поля показываются с плейсхолдером «—». Заголовок «хочу»
+    /// включает название работы без её собственного префикса «хочу».
+    @ViewBuilder
+    private func detailsReadView(for job: JobNode) -> some View {
+        let details = detailsDraft
+
+        VStack(alignment: .leading, spacing: 14) {
+            detailsReadSection("когда") {
+                detailsReadField("я в контексте:", items: details.context)
+                detailsReadField("испытываю негативные эмоции:", items: details.negativeEmotions)
+                detailsReadField("случился триггер:", items: details.trigger)
+            }
+            detailsReadSection(wantsSectionTitle(for: job)) {
+                detailsReadField("с такими критериями успеха:", items: details.successCriteria)
+            }
+            detailsReadSection("чтобы") {
+                detailsReadField(nil, items: details.inOrderTo)
+                detailsReadField("и чувствовать себя:", items: details.positiveEmotions)
+            }
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text("Частота выполнения работы: ").bold()
+                    .font(.system(size: 11.5))
+                if details.frequency.isEmpty {
+                    Text("—")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.tertiary)
+                } else {
+                    Text(details.frequency)
+                        .font(.system(size: 11.5))
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+    }
+
+    /// Заголовок секции «хочу»: «хочу {название работы без ведущего „хочу"}».
+    /// Если после отрезания префикса ничего не осталось — просто «хочу».
+    private func wantsSectionTitle(for job: JobNode) -> String {
+        var name = job.verb.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let range = name.range(of: "хочу", options: [.caseInsensitive, .anchored]) {
+            name = String(name[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return name.isEmpty ? "хочу" : "хочу \(name)"
+    }
+
+    @ViewBuilder
+    private func detailsReadSection(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 11.5, weight: .bold))
+            content()
+        }
+    }
+
+    /// Подпись поля + элементы-буллеты. Пустой список — плейсхолдер «—».
+    @ViewBuilder
+    private func detailsReadField(_ label: String?, items: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if let label {
+                Text(label)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            if items.isEmpty {
+                Text("—")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.tertiary)
+                    .padding(.leading, 10)
+            } else {
+                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text("•")
+                            .font(.system(size: 11.5, weight: .semibold))
+                        Text(item)
+                            .font(.system(size: 11.5))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.leading, 10)
+                }
+            }
+        }
+    }
+
+    // MARK: Карточка — редактор
+
+    private var detailsEditForm: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            detailsEditSection("Когда") {
+                detailsListEditor("я в контексте", items: $detailsDraft.context)
+                detailsListEditor("испытываю негативные эмоции", items: $detailsDraft.negativeEmotions)
+                detailsListEditor("случился триггер", items: $detailsDraft.trigger)
+            }
+            detailsEditSection("Хочу") {
+                detailsListEditor("с такими критериями успеха", items: $detailsDraft.successCriteria)
+            }
+            detailsEditSection("Чтобы") {
+                detailsListEditor("ради чего выполняется работа", items: $detailsDraft.inOrderTo)
+                detailsListEditor("и чувствовать себя", items: $detailsDraft.positiveEmotions)
+            }
+            detailsEditSection("Частота выполнения работы") {
+                TextField("5 раз/год", text: $detailsDraft.frequency)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 11.5))
+                    .padding(6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color.primary.opacity(0.05))
+                    )
+            }
+        }
+        .padding(14)
+    }
+
+    @ViewBuilder
+    private func detailsEditSection(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .tracking(0.8)
+                .textCase(.uppercase)
+                .foregroundStyle(.secondary)
+            content()
+        }
+    }
+
+    /// Редактор поля-списка: каждый элемент — строка с буллетом,
+    /// ✕ удаляет элемент, «+ элемент» добавляет пустой в конец,
+    /// Return в строке — тоже добавляет следующий элемент.
+    private func detailsListEditor(_ label: String, items: Binding<[String]>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.system(size: 10.5))
+                .foregroundStyle(.secondary)
+            ForEach(items.wrappedValue.indices, id: \.self) { index in
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text("•")
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    TextField("элемент", text: itemBinding(items, index), axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 11.5))
+                        .lineLimit(1...6)
+                        .onSubmit { items.wrappedValue.append("") }
+                    Button {
+                        guard index < items.wrappedValue.count else { return }
+                        items.wrappedValue.remove(at: index)
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 7, weight: .bold))
+                            .foregroundStyle(.tertiary)
+                            .frame(width: 14, height: 14)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Удалить элемент")
+                }
+                .padding(.vertical, 3)
+                .padding(.horizontal, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color.primary.opacity(0.05))
+                )
+            }
+            Button {
+                items.wrappedValue.append("")
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 8, weight: .bold))
+                    Text("элемент")
+                        .font(.system(size: 10.5))
+                }
+                .foregroundStyle(Color.accentColor)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    /// Биндинг элемента списка с защитой от гонки индексов: ForEach
+    /// может дёрнуть строку в момент удаления элемента.
+    private func itemBinding(_ items: Binding<[String]>, _ index: Int) -> Binding<String> {
+        Binding(
+            get: { index < items.wrappedValue.count ? items.wrappedValue[index] : "" },
+            set: { if index < items.wrappedValue.count { items.wrappedValue[index] = $0 } }
+        )
+    }
+
+    // MARK: Карточка — открытие/коммит
+
+    private func openDetails(_ job: JobNode) {
+        commitEditingIfNeeded()
+        guard detailsId != job.id else { return }
+        commitDetailsIfNeeded()
+        selection = job.id
+        detailsDraft = job.details
+        // Пустую карточку форматировать нечего — сразу редактор.
+        detailsEditing = job.details.isEmpty
+        detailsId = job.id
+    }
+
+    /// Карандаш/галочка в шапке: выход из редактора коммитит черновик
+    /// (карточка остаётся открытой в режиме просмотра).
+    private func toggleDetailsEditing() {
+        if detailsEditing {
+            detailsDraft = detailsDraft.normalized()
+            if let id = detailsId {
+                document.perform(.setDetails(id, details: detailsDraft))
+            }
+        }
+        detailsEditing.toggle()
+    }
+
+    private func closeDetails() {
+        commitDetailsIfNeeded()
+        focusBridge.focusCanvas()
+    }
+
+    /// Коммит черновика карточки: одна запись в undo-стеке на карточку;
+    /// без изменений (или работа удалена) — движок вернёт no-op.
+    private func commitDetailsIfNeeded() {
+        guard let id = detailsId else { return }
+        detailsId = nil
+        detailsEditing = false
+        document.perform(.setDetails(id, details: detailsDraft))
     }
 
     // MARK: - Инлайн-редактирование

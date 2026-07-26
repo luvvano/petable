@@ -21,6 +21,10 @@ public enum GraphIntent: Equatable, Sendable {
     case addConnectedBelow(of: UUID)
     /// Сдвиг работы влево/вправо внутри уровня.
     case reorder(UUID, direction: ReorderDirection)
+    /// Перемещение работы (drag&drop): на уровень `toLevel` в позицию
+    /// `at` порядка jobs. Индекс за пределами — clamp; рёбра сохраняются;
+    /// позиция не меняется — no-op.
+    case move(UUID, toLevel: Int, at: Int)
     /// Удаляет работу и все её связи. Уровень остаётся, даже пустой.
     case delete(UUID)
     /// Связь между существующими работами: есть (в любом направлении) —
@@ -29,6 +33,9 @@ public enum GraphIntent: Equatable, Sendable {
     /// Разбирает `raw` грамматикой role:. Пустая строка на только что
     /// созданном (пустом) узле — удаление, на существующем — no-op.
     case setText(UUID, raw: String)
+    /// Полная замена карточки работы. Карточка нормализуется (trim,
+    /// пустые элементы списков отброшены); совпадает с текущей — no-op.
+    case setDetails(UUID, details: JobDetails)
     /// Имя уровня. Пустая строка (после trim) — сброс к дефолту «УРОВЕНЬ N».
     case renameLevel(UUID, name: String)
 }
@@ -103,6 +110,18 @@ public enum GraphEngine {
             copy.levels[levelIndex].jobs.swapAt(index, target)
             return GraphResult(graph: copy, focus: id)
 
+        case let .move(id, toLevel, at: insertAt):
+            guard toLevel >= 0, toLevel < graph.levels.count,
+                  let fromLevel = graph.levelIndex(of: id),
+                  let jobIndex = graph.levels[fromLevel].jobs.firstIndex(where: { $0.id == id })
+            else { return nil }
+            var copy = graph
+            let job = copy.levels[fromLevel].jobs.remove(at: jobIndex)
+            let clamped = min(max(insertAt, 0), copy.levels[toLevel].jobs.count)
+            copy.levels[toLevel].jobs.insert(job, at: clamped)
+            guard copy != graph else { return nil }
+            return GraphResult(graph: copy, focus: id)
+
         case let .delete(id):
             guard let levelIndex = graph.levelIndex(of: id) else { return nil }
             var copy = graph
@@ -142,6 +161,18 @@ public enum GraphEngine {
                 where copy.levels[levelIndex].jobs[jobIndex].id == id {
                     copy.levels[levelIndex].jobs[jobIndex].verb = verb
                     copy.levels[levelIndex].jobs[jobIndex].role = role
+                }
+            }
+            return GraphResult(graph: copy, focus: id)
+
+        case let .setDetails(id, details):
+            let normalized = details.normalized()
+            guard let job = graph.job(id), job.details != normalized else { return nil }
+            var copy = graph
+            for levelIndex in copy.levels.indices {
+                for jobIndex in copy.levels[levelIndex].jobs.indices
+                where copy.levels[levelIndex].jobs[jobIndex].id == id {
+                    copy.levels[levelIndex].jobs[jobIndex].details = normalized
                 }
             }
             return GraphResult(graph: copy, focus: id)

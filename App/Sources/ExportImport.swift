@@ -170,11 +170,15 @@ enum ExportImport {
     /// Тема картинки — текущая тема приложения (ImageRenderer сам
     /// её не наследует, среда задаётся явно).
     static func exportGraphPNG(_ stage: Envelope.Stage) {
-        guard let url = runSavePanel(suggestedName: stage.name, type: .png) else { return }
+        exportGraphPNG(name: stage.name, graph: stage.graph)
+    }
+
+    static func exportGraphPNG(name: String, graph: WorkGraph) {
+        guard let url = runSavePanel(suggestedName: name, type: .png) else { return }
         let isDark = NSApp.effectiveAppearance
             .bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         let renderer = ImageRenderer(
-            content: GraphSnapshotView(graph: stage.graph)
+            content: GraphSnapshotView(graph: graph)
                 .environment(\.colorScheme, isDark ? .dark : .light)
         )
         renderer.scale = 2
