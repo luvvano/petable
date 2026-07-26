@@ -231,21 +231,34 @@ public struct WorkGraphExportFile: Codable, Equatable, Sendable {
 }
 
 public extension WorkGraph {
-    /// Копия графа со свежими id уровней и узлов — для импорта: один
-    /// файл можно импортировать несколько раз без коллизий id внутри
+    /// Копия графа со свежими id уровней, областей и узлов — для импорта:
+    /// один файл можно импортировать несколько раз без коллизий id внутри
     /// проекта. Рёбра переписываются на новые id; рёбра, ссылающиеся
     /// на несуществующие узлы (битый файл), отбрасываются.
     func withRegeneratedIDs() -> WorkGraph {
         var idMap: [UUID: UUID] = [:]
         let newLevels = levels.map { level in
-            GraphLevel(
+            var zoneMap: [UUID: UUID] = [:]
+            let newZones = level.zones.map { zone -> LevelZone in
+                let newID = UUID()
+                zoneMap[zone.id] = newID
+                return LevelZone(id: newID, name: zone.name)
+            }
+            return GraphLevel(
                 jobs: level.jobs.map { job in
                     let newID = UUID()
                     idMap[job.id] = newID
-                    return JobNode(id: newID, verb: job.verb, role: job.role, details: job.details)
+                    return JobNode(
+                        id: newID,
+                        verb: job.verb,
+                        role: job.role,
+                        details: job.details,
+                        zoneID: job.zoneID.flatMap { zoneMap[$0] }
+                    )
                 },
                 name: level.name,
-                isCore: level.isCore
+                isCore: level.isCore,
+                zones: newZones
             )
         }
         let newEdges = edges.compactMap { edge -> JobEdge? in

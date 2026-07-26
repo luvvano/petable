@@ -16,6 +16,7 @@ struct GraphSessionTests {
             .delete(source.id),
             .toggleEdge(from: source.id, to: graph.levels[1].jobs[0].id),
             .setText(source.id, raw: "аудитор: хочу пересчитать"),
+            .addZone(level: graph.levels[1].id),
         ]
     }
 

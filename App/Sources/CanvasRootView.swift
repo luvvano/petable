@@ -19,6 +19,10 @@ struct CanvasRootView: View {
     @State private var editingLevelId: UUID?
     @State private var levelDraft = ""
     @FocusState private var levelEditorFocused: Bool
+    /// Инлайн-переименование области уровня (двойной клик по её имени).
+    @State private var editingZoneId: UUID?
+    @State private var zoneDraft = ""
+    @FocusState private var zoneEditorFocused: Bool
 
     @State private var scale: CGFloat = 1
     @State private var offset: CGSize = .zero
@@ -69,7 +73,7 @@ struct CanvasRootView: View {
     private var bandHeight: CGFloat { LayoutMetrics.rowHeight - 10 }
 
     var body: some View {
-        let positions = GraphLayout.layout(document.graph)
+        let geometry = GraphLayout.geometry(document.graph)
 
         ZStack(alignment: .topLeading) {
             CanvasHostView(
@@ -106,7 +110,7 @@ struct CanvasRootView: View {
                 focusBridge: focusBridge
             )
 
-            graphContent(positions)
+            graphContent(geometry)
                 .scaleEffect(scale, anchor: .topLeading)
                 .offset(offset)
                 .allowsHitTesting(true)
@@ -183,11 +187,15 @@ struct CanvasRootView: View {
         .onChange(of: levelEditorFocused) { _, focused in
             if !focused { commitLevelEditingIfNeeded() }
         }
+        .onChange(of: zoneEditorFocused) { _, focused in
+            if !focused { commitZoneEditingIfNeeded() }
+        }
         .onChange(of: document.selectedGraphID) { _, _ in
             // Смена графа: правка чужого узла невозможна — редактор
             // сбрасывается без коммита, новый пустой граф сразу в редакторе.
             editingId = nil
             editingLevelId = nil
+            editingZoneId = nil
             selection = nil
             selectedEdge = nil
             dragLink = nil
@@ -201,8 +209,9 @@ struct CanvasRootView: View {
     // MARK: - Рендер
 
     @ViewBuilder
-    private func graphContent(_ positions: [UUID: CGPoint]) -> some View {
-        let size = contentSize(positions)
+    private func graphContent(_ geometry: GraphLayout.Geometry) -> some View {
+        let positions = geometry.positions
+        let size = contentSize(geometry)
 
         ZStack(alignment: .topLeading) {
             // Точечная сетка — ощущение бесконечной доски; масштабируется
@@ -212,12 +221,32 @@ struct CanvasRootView: View {
             // Полосы уровней — фон, событий не перехватывают: клики по
             // пустому месту уходят в CanvasHostView (deselect), hover не ломают.
             // Полоса под перетаскиваемой работой подсвечена — цель переноса.
-            let dropLevel = dragNode.flatMap { drag in
-                dropTarget(for: drag.current, excluding: drag.id, positions: positions)?.level
+            let drop = dragNode.flatMap { drag in
+                dropTarget(for: drag.current, excluding: drag.id, geometry: geometry)
             }
             ForEach(Array(document.graph.levels.enumerated()), id: \.element.id) { index, _ in
-                bandBackground(index: index, width: size.width, isDropTarget: index == dropLevel)
-                    .allowsHitTesting(false)
+                bandBackground(
+                    index: index,
+                    width: size.width,
+                    // Целится в область — подсвечена её рамка, не вся полоса.
+                    isDropTarget: index == drop?.level && drop?.zone == nil
+                )
+                .allowsHitTesting(false)
+            }
+
+            // Рамки областей: та же полоса, но отдельная область — работы
+            // того же уровня, которые продукт не выполняет.
+            ForEach(document.graph.levels) { level in
+                ForEach(level.zones) { zone in
+                    if let span = geometry.zones[zone.id] {
+                        zoneBackground(
+                            zone,
+                            span: span,
+                            isDropTarget: drop?.zone == zone.id
+                        )
+                        .allowsHitTesting(false)
+                    }
+                }
             }
 
             // Рёбра: animatable Shape, интерполируются тем же spring, что и круги.
@@ -232,9 +261,9 @@ struct CanvasRootView: View {
                 }
             }
 
-            // Контролы уровней: добавить работу, вставить/удалить уровень.
+            // Контролы уровней: добавить работу/область, вставить/удалить уровень.
             ForEach(Array(document.graph.levels.enumerated()), id: \.element.id) { index, level in
-                bandControls(index: index, level: level, positions: positions)
+                bandControls(index: index, level: level, geometry: geometry)
             }
 
             // Карточка работы — поверх узлов, справа от открытой работы.
@@ -307,6 +336,116 @@ struct CanvasRootView: View {
             .animation(.easeOut(duration: 0.15), value: isDropTarget)
     }
 
+    // MARK: Области уровня
+
+    /// Вертикальные отступы рамки области от кромок полосы уровня.
+    private let zoneInset: CGFloat = 7
+    private var zoneHeight: CGFloat { bandHeight - zoneInset * 2 }
+
+    private func zoneRect(_ span: GraphLayout.ZoneSpan) -> CGRect {
+        CGRect(
+            x: span.minX + contentPadding,
+            y: bandTop(span.levelIndex) + zoneInset,
+            width: span.width,
+            height: zoneHeight
+        )
+    }
+
+    /// Рамка области внутри полосы уровня: тот же ряд (уровень тот же),
+    /// но отдельная область с собственным именем и пунктирным контуром —
+    /// работы, которые продукт не выполняет.
+    @ViewBuilder
+    private func zoneBackground(
+        _ zone: LevelZone,
+        span: GraphLayout.ZoneSpan,
+        isDropTarget: Bool
+    ) -> some View {
+        let rect = zoneRect(span)
+
+        RoundedRectangle(cornerRadius: 13, style: .continuous)
+            .fill(LevelColors.zoneFill.opacity(isDropTarget ? 0.2 : 0.1))
+            .overlay(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .strokeBorder(
+                        LevelColors.zoneStroke.opacity(isDropTarget ? 0.85 : 0.5),
+                        style: StrokeStyle(
+                            lineWidth: isDropTarget ? 1.8 : 1.3,
+                            dash: [6, 5]
+                        )
+                    )
+            )
+            .frame(width: rect.width, height: rect.height)
+            .position(x: rect.midX, y: rect.midY)
+            .animation(.easeOut(duration: 0.15), value: isDropTarget)
+    }
+
+    /// Имя области — горизонтально у верхней кромки её рамки.
+    /// Двойной клик — переименование (как у уровня).
+    @ViewBuilder
+    private func zoneLabel(_ zone: LevelZone, span: GraphLayout.ZoneSpan) -> some View {
+        let rect = zoneRect(span)
+
+        if editingZoneId == zone.id {
+            TextField(LevelZone.defaultName, text: $zoneDraft)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .multilineTextAlignment(.center)
+                .focused($zoneEditorFocused)
+                .onSubmit { commitZoneEditing() }
+                .onExitCommand { cancelZoneEditing() }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .frame(width: 200)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(.regularMaterial)
+                        .shadow(color: .black.opacity(0.22), radius: 10, y: 3)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(Color.accentColor.opacity(0.6), lineWidth: 1.5)
+                )
+                .position(x: rect.midX, y: rect.minY - 2)
+        } else {
+            // Метрики × zoom + обратный scaleEffect — резкий текст (см. nodeLabel).
+            // События ловит только сама плашка: пустая часть контейнера
+            // не перехватывает клики по канвасу.
+            let badge = Text(zone.resolvedName.uppercased())
+                .font(.system(size: 9 * scale, weight: .bold, design: .rounded))
+                .tracking(1.2 * scale)
+                .foregroundStyle(LevelColors.zoneStroke.opacity(0.95))
+                .lineLimit(1)
+                .fixedSize()
+                .padding(.horizontal, 7 * scale)
+                .padding(.vertical, 2.5 * scale)
+                .background(
+                    Capsule().fill(Color(nsColor: .textBackgroundColor).opacity(0.9))
+                )
+                .overlay(
+                    Capsule().strokeBorder(LevelColors.zoneStroke.opacity(0.35), lineWidth: 1)
+                )
+                .contentShape(Capsule())
+                .onTapGesture(count: 2) { beginZoneEditing(zone) }
+                .contextMenu {
+                    Button("Переименовать область") { beginZoneEditing(zone) }
+                    Button("Убрать область (работы останутся на уровне)") {
+                        commitEditingIfNeeded()
+                        document.perform(.deleteZone(zone.id))
+                    }
+                }
+                .help("Отдельная область уровня: работы того же уровня, "
+                      + "которые продукт не выполняет целиком. "
+                      + "Двойной клик — переименовать")
+
+            // Контейнер известной ширины — плашка липнет к левому
+            // верхнему углу рамки при любой её длине.
+            badge
+                .frame(width: rect.width * scale, alignment: .leading)
+                .scaleEffect(1 / scale)
+                .position(x: rect.midX, y: rect.minY)
+        }
+    }
+
     /// Имя уровня вертикально у левой кромки полосы — не пересекается
     /// ни с узлами, ни с подписями при любой плотности графа.
     /// Двойной клик — инлайн-переименование; рендерится в слое контролов
@@ -360,6 +499,13 @@ struct CanvasRootView: View {
                             document.perform(.setCoreLevel(level.id))
                         }
                     }
+                    Divider()
+                    Button("Добавить область (тот же уровень, продукт не выполняет)") {
+                        commitEditingIfNeeded()
+                        if let newId = document.perform(.addZone(level: level.id)) {
+                            startEditingNew(newId)
+                        }
+                    }
                 }
                 .scaleEffect(1 / scale)
                 .rotationEffect(.degrees(-90))
@@ -375,18 +521,38 @@ struct CanvasRootView: View {
     /// (proximity-reveal) — канвас остаётся чистым, кнопка находится
     /// движением в её сторону.
     @ViewBuilder
-    private func bandControls(index: Int, level: GraphLevel, positions: [UUID: CGPoint]) -> some View {
+    private func bandControls(index: Int, level: GraphLevel, geometry: GraphLayout.Geometry) -> some View {
+        let positions = geometry.positions
         let top = bandTop(index)
         let nodeY = top + nodeOffsetInBand
-        let lastX = level.jobs.compactMap { positions[$0.id]?.x }.max().map { $0 + contentPadding }
+        // Правый край занятого места на полосе: работы и рамки областей.
+        let lastJobX = level.jobs(in: nil).compactMap { positions[$0.id]?.x }.max()
+            .map { $0 + contentPadding }
+        let zoneEdges = level.zones.compactMap { zone in
+            geometry.zones[zone.id].map { $0.maxX + contentPadding }
+        }
+        let lastX = ([lastJobX].compactMap { $0 } + zoneEdges).max()
 
         levelLabel(index: index, level: level, top: top)
 
-        // Автономная работа — в конец уровня.
-        let addJobPoint = CGPoint(x: (lastX ?? contentPadding - 40) + 96, y: nodeY)
+        // Автономная работа — в конец основной области уровня.
+        let addJobPoint = CGPoint(x: (lastJobX ?? contentPadding - 40) + 96, y: nodeY)
         addJobButton(level: level)
             .proximityReveal(reveal(near: addJobPoint))
             .position(addJobPoint)
+
+        // Новая область уровня — правее всего содержимого полосы.
+        let addZonePoint = CGPoint(x: (lastX ?? contentPadding - 40) + 220, y: nodeY)
+        addZoneButton(level: level)
+            .proximityReveal(reveal(near: addZonePoint))
+            .position(addZonePoint)
+
+        // Контролы каждой области: имя, «+ работа» внутри рамки, удаление.
+        ForEach(level.zones) { zone in
+            if let span = geometry.zones[zone.id] {
+                zoneControls(zone, span: span, levelIndex: index)
+            }
+        }
 
         // Вставка уровня: слева на кромке — над самой верхней полосой
         // + под каждой (кромка между полосами — одна кнопка, тот же индекс).
@@ -442,27 +608,115 @@ struct CanvasRootView: View {
     }
 
     private func addJobButton(level: GraphLevel) -> some View {
-        Button {
+        plusCapsule(
+            title: "работа",
+            tint: .accentColor,
+            help: "Добавить отдельную работу на этот уровень"
+        ) {
             commitEditingIfNeeded()
             if let newId = document.perform(.addJob(level: level.id)) {
                 startEditingNew(newId)
             }
-        } label: {
+        }
+    }
+
+    /// Новая область уровня: та же полоса, отдельная рамка — малые работы
+    /// рядом с кóровыми.
+    private func addZoneButton(level: GraphLevel) -> some View {
+        plusCapsule(
+            title: "область",
+            tint: LevelColors.zoneStroke,
+            labelColor: LevelColors.zoneStroke,
+            help:"Добавить область на этом же уровне — работы того же "
+                + "уровня, которые продукт не выполняет целиком "
+                + "(например, малые работы рядом с кóровыми)"
+        ) {
+            commitEditingIfNeeded()
+            if let newId = document.perform(.addZone(level: level.id)) {
+                startEditingNew(newId)
+            }
+        }
+    }
+
+    /// Контролы области: имя сверху, «+ работа» у правой кромки рамки,
+    /// корзина у пустой области.
+    @ViewBuilder
+    private func zoneControls(
+        _ zone: LevelZone,
+        span: GraphLayout.ZoneSpan,
+        levelIndex: Int
+    ) -> some View {
+        let rect = zoneRect(span)
+        let isEmpty = document.graph.levels[levelIndex].jobs(in: zone.id).isEmpty
+
+        zoneLabel(zone, span: span)
+
+        let addPoint = CGPoint(x: rect.maxX + 46, y: rect.midY)
+        plusCapsule(
+            title: "работа",
+            tint: LevelColors.zoneStroke,
+            labelColor: LevelColors.zoneStroke,
+            help:"Добавить работу в область «\(zone.resolvedName)»"
+        ) {
+            commitEditingIfNeeded()
+            if let newId = document.perform(.addJob(
+                level: document.graph.levels[levelIndex].id,
+                zone: zone.id
+            )) {
+                startEditingNew(newId)
+            }
+        }
+        .proximityReveal(reveal(near: addPoint))
+        .position(addPoint)
+
+        if isEmpty {
+            let trashPoint = CGPoint(x: rect.maxX + 120, y: rect.midY)
+            Button {
+                document.perform(.deleteZone(zone.id))
+            } label: {
+                Image(systemName: "trash")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22, height: 22)
+                    .background(Circle().fill(.ultraThinMaterial))
+                    .overlay(Circle().strokeBorder(Color.secondary.opacity(0.35), lineWidth: 1))
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .modifier(HoverPulse())
+            .help("Убрать пустую область")
+            .proximityReveal(reveal(near: trashPoint))
+            .position(trashPoint)
+        }
+    }
+
+    /// Капсула «+ что-то» — общий вид кнопок добавления на полосе.
+    /// `tint` красит контур; текст области — тем же цветом, чтобы кнопка
+    /// читалась как относящаяся к рамке, а не к уровню.
+    private func plusCapsule(
+        title: String,
+        tint: Color,
+        labelColor: Color? = nil,
+        help: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
             HStack(spacing: 5) {
                 Image(systemName: "plus")
                     .font(.system(size: 9, weight: .bold))
-                Text("работа")
+                Text(title)
                     .font(.system(size: 11, weight: .medium, design: .rounded))
             }
+            .foregroundStyle(labelColor ?? Color.primary)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(Capsule().fill(.ultraThinMaterial))
-            .overlay(Capsule().strokeBorder(Color.accentColor.opacity(0.4), lineWidth: 1))
+            .overlay(Capsule().strokeBorder(tint.opacity(0.4), lineWidth: 1))
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .modifier(HoverPulse(idleOpacity: 0.9))
-        .help("Добавить отдельную работу на этот уровень")
+        .help(help)
     }
 
     /// Компактный плюс на левой кромке между полосами.
@@ -594,11 +848,23 @@ struct CanvasRootView: View {
         // Работа вне подсвеченного поддерева — приглушена.
         let isDimmed = highlightedJobs.map { !$0.contains(job.id) } ?? false
 
+        // Работа в области уровня: размер тот же (уровень тот же),
+        // контур пунктирный — продукт её не выполняет.
+        let inZone = job.zoneID != nil
+
         // Круг рендерится в размере × zoom и сжимается обратно — резкие
         // контуры при приближении (тот же приём, что у подписей).
         Circle()
             .fill(LevelColors.fill(for: level))
-            .overlay(Circle().strokeBorder(LevelColors.stroke(for: level), lineWidth: 2 * scale))
+            .overlay(
+                Circle().strokeBorder(
+                    inZone ? LevelColors.zoneStroke : LevelColors.stroke(for: level),
+                    style: StrokeStyle(
+                        lineWidth: 2 * scale,
+                        dash: inZone ? [4 * scale, 3 * scale] : []
+                    )
+                )
+            )
             .overlay {
                 if isSelected || isLinkTarget {
                     Circle()
@@ -652,6 +918,7 @@ struct CanvasRootView: View {
                 Button("Сдвинуть вправо (⌘→)") {
                     document.perform(.reorder(job.id, direction: .right))
                 }
+                zoneMenuItems(for: job, level: level)
                 Divider()
                 Button("Выделить работы ниже") {
                     highlightedJobs = document.graph.jobsBelow(job.id)
@@ -746,6 +1013,30 @@ struct CanvasRootView: View {
         }
     }
 
+    /// Пункты меню про области уровня: перенести работу в область
+    /// (уровень тот же, продукт её не выполняет) или вернуть в основную.
+    @ViewBuilder
+    private func zoneMenuItems(for job: JobNode, level: Int) -> some View {
+        let zones = document.graph.levels[level].zones
+        if !zones.isEmpty || job.zoneID != nil {
+            Divider()
+            ForEach(zones) { zone in
+                if zone.id != job.zoneID {
+                    Button("Перенести в область «\(zone.resolvedName)»") {
+                        commitEditingIfNeeded()
+                        document.perform(.setJobZone(job.id, zone: zone.id))
+                    }
+                }
+            }
+            if job.zoneID != nil {
+                Button("Вернуть в основную область уровня") {
+                    commitEditingIfNeeded()
+                    document.perform(.setJobZone(job.id, zone: nil))
+                }
+            }
+        }
+    }
+
     /// Плюс у узла: клик — новая связанная работа, drag до другого узла —
     /// связь с ним (toggle: повторный drag по той же паре убирает).
     private func nodePlusControl(
@@ -804,9 +1095,14 @@ struct CanvasRootView: View {
             .onEnded { value in
                 defer { dragNode = nil }
                 guard case .second(true, .some(let drag)) = value else { return }
-                let positions = GraphLayout.layout(document.graph)
-                if let target = dropTarget(for: drag.location, excluding: job.id, positions: positions) {
-                    document.perform(.move(job.id, toLevel: target.level, at: target.index))
+                let geometry = GraphLayout.geometry(document.graph)
+                if let target = dropTarget(for: drag.location, excluding: job.id, geometry: geometry) {
+                    document.perform(.move(
+                        job.id,
+                        toLevel: target.level,
+                        zone: target.zone,
+                        at: target.index
+                    ))
                 }
                 focusBridge.focusCanvas()
             }
@@ -818,23 +1114,29 @@ struct CanvasRootView: View {
     }
 
     /// Целевая позиция перетаскиваемой работы: уровень — по y курсора,
-    /// индекс вставки — число работ уровня (без самой перетаскиваемой)
-    /// левее курсора. Совпадает с семантикой интента move.
+    /// область — по рамке под курсором (её нет — основная область),
+    /// индекс вставки — число работ этой области (без самой
+    /// перетаскиваемой) левее курсора. Совпадает с семантикой интента move.
     private func dropTarget(
         for location: CGPoint,
         excluding dragged: UUID,
-        positions: [UUID: CGPoint]
-    ) -> (level: Int, index: Int)? {
+        geometry: GraphLayout.Geometry
+    ) -> (level: Int, zone: UUID?, index: Int)? {
         let levels = document.graph.levels
         guard !levels.isEmpty else { return nil }
         let raw = Int(((location.y - bandTop(0)) / LayoutMetrics.rowHeight).rounded(.down))
         let level = min(max(raw, 0), levels.count - 1)
-        let index = levels[level].jobs
+        let zone = levels[level].zones.first { zone in
+            guard let span = geometry.zones[zone.id] else { return false }
+            let rect = zoneRect(span)
+            return location.x >= rect.minX && location.x <= rect.maxX
+        }?.id
+        let index = levels[level].jobs(in: zone)
             .filter { $0.id != dragged }
-            .compactMap { positions[$0.id] }
+            .compactMap { geometry.positions[$0.id] }
             .filter { point($0).x < location.x }
             .count
-        return (level, index)
+        return (level, zone, index)
     }
 
     /// Узел, чей круг (с небольшим допуском) накрывает точку контента.
@@ -881,8 +1183,13 @@ struct CanvasRootView: View {
         return CGPoint(x: position.x + contentPadding, y: position.y + contentPadding)
     }
 
-    private func contentSize(_ positions: [UUID: CGPoint]) -> CGSize {
-        let maxX = (positions.values.map(\.x).max() ?? 0) + contentPadding * 2 + 220
+    /// Ширину задаёт самое правое содержимое: работа или рамка области.
+    private func contentSize(_ geometry: GraphLayout.Geometry) -> CGSize {
+        let rightEdge = max(
+            geometry.positions.values.map(\.x).max() ?? 0,
+            geometry.zones.values.map(\.maxX).max() ?? 0
+        )
+        let maxX = rightEdge + contentPadding * 2 + 220
         let bottom = bandTop(max(document.graph.levels.count - 1, 0)) + bandHeight + contentPadding
         return CGSize(width: max(maxX, 900), height: max(bottom, 600))
     }
@@ -992,7 +1299,7 @@ struct CanvasRootView: View {
     /// Вписать весь граф в окно: масштаб не больше 100%, контент по центру.
     private func zoomToFit() {
         guard viewportSize.width > 0, viewportSize.height > 0 else { return }
-        let content = contentSize(GraphLayout.layout(document.graph))
+        let content = contentSize(GraphLayout.geometry(document.graph))
         let fit = min(
             viewportSize.width / content.width,
             viewportSize.height / content.height
@@ -1552,6 +1859,32 @@ struct CanvasRootView: View {
 
     private func cancelLevelEditing() {
         editingLevelId = nil
+        focusBridge.focusCanvas()
+    }
+
+    // MARK: - Переименование области уровня
+
+    private func beginZoneEditing(_ zone: LevelZone) {
+        commitEditingIfNeeded()
+        zoneDraft = zone.name ?? ""
+        editingZoneId = zone.id
+        zoneEditorFocused = true
+    }
+
+    private func commitZoneEditing() {
+        guard let id = editingZoneId else { return }
+        editingZoneId = nil
+        // Движок сам решает: пустое имя → сброс к «SMALL JOBS», без изменений → no-op.
+        document.perform(.renameZone(id, name: zoneDraft))
+        focusBridge.focusCanvas()
+    }
+
+    private func commitZoneEditingIfNeeded() {
+        if editingZoneId != nil { commitZoneEditing() }
+    }
+
+    private func cancelZoneEditing() {
+        editingZoneId = nil
         focusBridge.focusCanvas()
     }
 

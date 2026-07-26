@@ -104,12 +104,22 @@ public struct JobNode: Codable, Equatable, Identifiable, Sendable {
     public var role: String?
     /// Карточка работы; у старых файлов и новых узлов — пустая.
     public var details: JobDetails
+    /// Область уровня, в которой лежит работа; nil — основная область
+    /// (её выполняет продукт). Зона всегда принадлежит тому же уровню.
+    public var zoneID: UUID?
 
-    public init(id: UUID = UUID(), verb: String, role: String? = nil, details: JobDetails = JobDetails()) {
+    public init(
+        id: UUID = UUID(),
+        verb: String,
+        role: String? = nil,
+        details: JobDetails = JobDetails(),
+        zoneID: UUID? = nil
+    ) {
         self.id = id
         self.verb = verb
         self.role = role
         self.details = details
+        self.zoneID = zoneID
     }
 
     /// Комбинированная строка для инлайн-редактора: `role: verb` или `verb`.
@@ -118,15 +128,17 @@ public struct JobNode: Codable, Equatable, Identifiable, Sendable {
         return verb
     }
 
-    enum CodingKeys: String, CodingKey { case id, verb, role, details }
+    enum CodingKeys: String, CodingKey { case id, verb, role, details, zoneID }
 
-    /// Файлы до появления карточки не имеют ключа `details`.
+    /// Файлы до появления карточки не имеют ключа `details`,
+    /// файлы до v8 — ключа `zoneID`.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         verb = try container.decode(String.self, forKey: .verb)
         role = try container.decodeIfPresent(String.self, forKey: .role)
         details = try container.decodeIfPresent(JobDetails.self, forKey: .details) ?? JobDetails()
+        zoneID = try container.decodeIfPresent(UUID.self, forKey: .zoneID)
     }
 
     /// Пустая карточка в JSON не пишется — файлы без описаний не растут.
@@ -138,7 +150,27 @@ public struct JobNode: Codable, Equatable, Identifiable, Sendable {
         if !details.isEmpty {
             try container.encode(details, forKey: .details)
         }
+        try container.encodeIfPresent(zoneID, forKey: .zoneID)
     }
+}
+
+/// Область внутри уровня — отдельная рамка на той же полосе со своим
+/// именем. Смысл по AJTBD: работы того же уровня, которые продукт
+/// не выполняет (малые работы рядом с кóровыми). Уровень остаётся один —
+/// меняется только покрытие продуктом, и это видно на канвасе.
+public struct LevelZone: Codable, Equatable, Identifiable, Sendable {
+    public static let defaultName = "SMALL JOBS"
+
+    public var id: UUID
+    /// Пользовательское имя; nil — отображается `defaultName`.
+    public var name: String?
+
+    public init(id: UUID = UUID(), name: String? = nil) {
+        self.id = id
+        self.name = name
+    }
+
+    public var resolvedName: String { name ?? Self.defaultName }
 }
 
 /// Уровень графа — горизонтальная полоса. Порядок `jobs` = слева направо.
@@ -147,31 +179,45 @@ public struct JobNode: Codable, Equatable, Identifiable, Sendable {
 /// `isCore` — уровень кóровых работ: продукт выполняет их целиком.
 /// Такой уровень в графе ровно один — инвариант держит
 /// `WorkGraph.ensureCoreLevel()`, вызываемый на границах документа.
+/// `zones` — отдельные области внутри полосы (см. `LevelZone`): работы
+/// того же уровня, которые продукт не выполняет.
 public struct GraphLevel: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
+    /// Работы уровня слева направо. Сгруппированы по областям: сначала
+    /// основная область (zoneID == nil), затем работы зон в порядке
+    /// `zones` — инвариант держит `normalizeZones()`.
     public var jobs: [JobNode]
     public var name: String?
     public var isCore: Bool
+    public var zones: [LevelZone]
 
-    public init(id: UUID = UUID(), jobs: [JobNode] = [], name: String? = nil, isCore: Bool = false) {
+    public init(
+        id: UUID = UUID(),
+        jobs: [JobNode] = [],
+        name: String? = nil,
+        isCore: Bool = false,
+        zones: [LevelZone] = []
+    ) {
         self.id = id
         self.jobs = jobs
         self.name = name
         self.isCore = isCore
+        self.zones = zones
     }
 
-    enum CodingKeys: String, CodingKey { case id, jobs, name, isCore }
+    enum CodingKeys: String, CodingKey { case id, jobs, name, isCore, zones }
 
-    /// Файлы до v7 не имеют ключа `isCore`.
+    /// Файлы до v7 не имеют ключа `isCore`, до v8 — ключа `zones`.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         jobs = try container.decode([JobNode].self, forKey: .jobs)
         name = try container.decodeIfPresent(String.self, forKey: .name)
         isCore = try container.decodeIfPresent(Bool.self, forKey: .isCore) ?? false
+        zones = try container.decodeIfPresent([LevelZone].self, forKey: .zones) ?? []
     }
 
-    /// false в JSON не пишется — как пустая карточка узла.
+    /// false и пустой список зон в JSON не пишутся — как пустая карточка узла.
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
@@ -180,6 +226,54 @@ public struct GraphLevel: Codable, Equatable, Identifiable, Sendable {
         if isCore {
             try container.encode(isCore, forKey: .isCore)
         }
+        if !zones.isEmpty {
+            try container.encode(zones, forKey: .zones)
+        }
+    }
+}
+
+// MARK: - Области уровня
+
+public extension GraphLevel {
+    /// Области уровня слева направо: nil — основная (её выполняет
+    /// продукт), дальше зоны в порядке `zones`.
+    var groupIDs: [UUID?] { [nil] + zones.map { Optional($0.id) } }
+
+    /// Порядковый номер области: 0 — основная, дальше зоны по порядку.
+    /// Неизвестная зона считается основной областью (битый файл).
+    func groupOrder(_ zoneID: UUID?) -> Int {
+        guard let zoneID, let index = zones.firstIndex(where: { $0.id == zoneID }) else { return 0 }
+        return index + 1
+    }
+
+    func jobs(in zoneID: UUID?) -> [JobNode] {
+        jobs.filter { $0.zoneID == zoneID }
+    }
+
+    func zone(_ zoneID: UUID) -> LevelZone? {
+        zones.first { $0.id == zoneID }
+    }
+
+    /// Индекс в массиве `jobs`, куда встаёт работа области `zoneID`,
+    /// вставляемая на позицию `index` внутри своей области.
+    func insertionIndex(zone zoneID: UUID?, at index: Int) -> Int {
+        let order = groupOrder(zoneID)
+        let before = jobs.filter { groupOrder($0.zoneID) < order }.count
+        let inGroup = jobs.filter { groupOrder($0.zoneID) == order }.count
+        return before + min(max(index, 0), inGroup)
+    }
+
+    /// Инвариант порядка: ссылки на несуществующие зоны сбрасываются,
+    /// работы группируются по областям (порядок внутри области сохраняется).
+    mutating func normalizeZones() {
+        let known = Set(zones.map(\.id))
+        for index in jobs.indices {
+            if let zoneID = jobs[index].zoneID, !known.contains(zoneID) {
+                jobs[index].zoneID = nil
+            }
+        }
+        guard !zones.isEmpty else { return }
+        jobs = groupIDs.flatMap { id in jobs.filter { $0.zoneID == id } }
     }
 }
 
@@ -262,6 +356,35 @@ public extension WorkGraph {
         levels.firstIndex { $0.id == levelID }
     }
 
+    /// Инвариант областей на всех уровнях. Вызывается там же, где
+    /// `ensureCoreLevel()` — на границах документа.
+    mutating func normalizeZones() {
+        for index in levels.indices {
+            levels[index].normalizeZones()
+        }
+    }
+
+    /// Область, в которой лежит работа; nil — основная область уровня
+    /// (или работы нет).
+    func zone(of jobID: UUID) -> UUID? {
+        for level in levels {
+            if let job = level.jobs.first(where: { $0.id == jobID }) { return job.zoneID }
+        }
+        return nil
+    }
+
+    /// Индекс уровня, которому принадлежит область.
+    func levelIndex(zone zoneID: UUID) -> Int? {
+        levels.firstIndex { $0.zones.contains { $0.id == zoneID } }
+    }
+
+    func zone(id zoneID: UUID) -> LevelZone? {
+        for level in levels {
+            if let zone = level.zone(zoneID) { return zone }
+        }
+        return nil
+    }
+
     /// Входящие связи работы (родители/предшественники).
     func sources(of jobID: UUID) -> [UUID] {
         edges.filter { $0.to == jobID }.map(\.from)
@@ -295,15 +418,17 @@ public extension WorkGraph {
     }
 
     /// Подграф из указанных работ: рёбра сохраняются только между
-    /// оставшимися работами, опустевшие уровни отбрасываются.
+    /// оставшимися работами, опустевшие уровни и области отбрасываются.
     func subgraph(keeping ids: Set<UUID>) -> WorkGraph {
         let levels = self.levels
-            .map {
-                GraphLevel(
-                    id: $0.id,
-                    jobs: $0.jobs.filter { ids.contains($0.id) },
-                    name: $0.name,
-                    isCore: $0.isCore
+            .map { level -> GraphLevel in
+                let jobs = level.jobs.filter { ids.contains($0.id) }
+                return GraphLevel(
+                    id: level.id,
+                    jobs: jobs,
+                    name: level.name,
+                    isCore: level.isCore,
+                    zones: level.zones.filter { zone in jobs.contains { $0.zoneID == zone.id } }
                 )
             }
             .filter { !$0.jobs.isEmpty }

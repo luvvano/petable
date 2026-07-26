@@ -567,7 +567,10 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
             }) else {
                 return "⚠️ Граф не найден (id \(id.uuidString.prefix(8))…)"
             }
-            let graph = payloadGraph.makeWorkGraph()
+            // Перенос карточек/имён уровней: замена структуры не должна
+            // стирать наработки на совпадающих узлах.
+            let current = sessions[id]?.graph ?? stages[index].graph
+            let graph = payloadGraph.makeWorkGraph(preservingFrom: current)
             guard graph.jobCount > 0 else {
                 return "⚠️ Граф «\(stages[index].name)» не изменён: пустая структура"
             }
@@ -609,6 +612,35 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
                 selectedResearchItem = .interview(interviewID)
             }
             return "Создано интервью «\(interview.name)»"
+
+        case .updateJob(let graphID, let level, let index, let card):
+            guard let stageIndex = stages.firstIndex(where: {
+                $0.id == graphID && $0.type == Envelope.jobGraphStageType
+            }) else {
+                return "⚠️ Граф не найден (id \(graphID.uuidString.prefix(8))…)"
+            }
+            let stageName = stages[stageIndex].name
+            // У открытого графа актуальное состояние — в сессии.
+            let graph = sessions[graphID]?.graph ?? stages[stageIndex].graph
+            guard graph.levels.indices.contains(level),
+                  graph.levels[level].jobs.indices.contains(index)
+            else {
+                return "⚠️ В графе «\(stageName)» нет работы \(level).\(index)"
+            }
+            let job = graph.levels[level].jobs[index]
+            let merged = card.merged(into: job.details)
+            guard merged != job.details else {
+                return "Карточка «\(job.displayText)» уже в этом состоянии"
+            }
+            if let session = sessions[graphID] {
+                session.perform(.setDetails(job.id, details: merged))
+            } else {
+                applyListChange {
+                    stages[stageIndex].graph.levels[level].jobs[index].details = merged
+                    stages[stageIndex].modifiedAt = Date()
+                }
+            }
+            return "Обновлена карточка «\(job.displayText)» в графе «\(stageName)»"
 
         case .updateInterview(let id, let placeholders, let answers):
             guard let index = research.interviews.firstIndex(where: { $0.id == id }) else {

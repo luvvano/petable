@@ -15,9 +15,12 @@ import Foundation
 /// v7: `isCore` у уровня графа — core-уровень (работы, которые продукт
 /// выполняет целиком) есть в каждом графе; старые файлы получают его
 /// при чтении (уровень с именем «core …» или верхний).
-/// v1–v6 читаются и мигрируют на лету; запись всегда в v7.
+/// v8: `zones` у уровня и `zoneID` у работы — отдельные области внутри
+/// полосы уровня (малые работы рядом с кóровыми: уровень тот же, продукт
+/// их не выполняет). Старые файлы читаются без областей.
+/// v1–v7 читаются и мигрируют на лету; запись всегда в v8.
 public struct Envelope: Codable, Equatable, Sendable {
-    public static let currentVersion = 7
+    public static let currentVersion = 8
     public static let jobGraphStageType = "jobGraph"
     public static let defaultGraphName = "Граф работ"
 
@@ -55,6 +58,7 @@ public struct Envelope: Codable, Equatable, Sendable {
             self.origin = origin
             var normalized = graph
             normalized.ensureCoreLevel()
+            normalized.normalizeZones()
             self.graph = normalized
         }
 
@@ -75,6 +79,7 @@ public struct Envelope: Codable, Equatable, Sendable {
             self.origin = try container.decodeIfPresent(ArtifactOrigin.self, forKey: .origin)
             var graph = try container.decode(WorkGraph.self, forKey: .graph)
             graph.ensureCoreLevel() // файлы до v7 без core-уровня
+            graph.normalizeZones() // порядок работ по областям (v8)
             self.graph = graph
         }
     }

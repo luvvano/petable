@@ -29,4 +29,12 @@ public enum LayoutMetrics {
     public static let labelReserve: CGFloat = 50
     /// Полная высота ряда уровня: максимальный круг + подпись + зазор.
     public static let rowHeight: CGFloat = 150
+    /// Зазор между областями одного уровня — сверх обычной дистанции
+    /// колонок: рамки соседних областей не должны слипаться.
+    public static let zoneGap: CGFloat = 54
+    /// Отступ рамки области от крайних работ внутри неё.
+    public static let zonePadding: CGFloat = 14
+    /// Ширина рамки области без работ — место под неё резервируется,
+    /// иначе пустая область схлопнулась бы под соседние узлы.
+    public static let emptyZoneWidth: CGFloat = 150
 }

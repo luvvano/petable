@@ -22,4 +22,10 @@ enum LevelColors {
         default: return Color.gray
         }
     }
+
+    /// Область уровня (LevelZone) — работы того же уровня, которые
+    /// продукт не выполняет. Цвет намеренно вне шкалы уровней: рамка
+    /// читается как «другая область», а не «другой уровень».
+    static let zoneFill = Color(red: 0.58, green: 0.51, blue: 0.85)
+    static let zoneStroke = Color(red: 0.44, green: 0.36, blue: 0.74)
 }

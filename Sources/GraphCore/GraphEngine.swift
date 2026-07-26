@@ -13,19 +13,24 @@ public enum GraphIntent: Equatable, Sendable {
     /// Удалить уровень. Только пустой, не единственный и не core —
     /// иначе no-op.
     case deleteLevel(UUID)
-    /// Автономная работа: добавляется в конец уровня, ни с чем не связана.
-    case addJob(level: UUID)
+    /// Автономная работа: добавляется в конец уровня (или в конец его
+    /// области `zone`), ни с чем не связана.
+    case addJob(level: UUID, zone: UUID? = nil)
     /// Связанная работа справа на том же уровне + ребро от исходной.
     case addConnectedRight(of: UUID)
     /// Связанная работа на уровне ниже + ребро от исходной.
     /// Если исходная на нижнем уровне — уровень создаётся.
     case addConnectedBelow(of: UUID)
-    /// Сдвиг работы влево/вправо внутри уровня.
+    /// Сдвиг работы влево/вправо внутри своей области уровня —
+    /// через границу области работа не перепрыгивает (для этого
+    /// `setJobZone` или перетаскивание).
     case reorder(UUID, direction: ReorderDirection)
-    /// Перемещение работы (drag&drop): на уровень `toLevel` в позицию
-    /// `at` порядка jobs. Индекс за пределами — clamp; рёбра сохраняются;
-    /// позиция не меняется — no-op.
-    case move(UUID, toLevel: Int, at: Int)
+    /// Перемещение работы (drag&drop): на уровень `toLevel`, в область
+    /// `zone` (nil — основная область уровня), в позицию `at` внутри этой
+    /// области. Индекс за пределами — clamp; зона чужого уровня — работа
+    /// уходит в основную область; рёбра сохраняются; ничего не изменилось —
+    /// no-op.
+    case move(UUID, toLevel: Int, zone: UUID? = nil, at: Int)
     /// Удаляет работу и все её связи. Уровень остаётся, даже пустой.
     case delete(UUID)
     /// Связь между существующими работами: есть (в любом направлении) —
@@ -42,6 +47,18 @@ public enum GraphIntent: Equatable, Sendable {
     /// Назначить уровень core-уровнем: отметка снимается с прежнего —
     /// core в графе всегда один. Уже core — no-op.
     case setCoreLevel(UUID)
+    /// Новая область на уровне — рамка «тот же уровень, другое покрытие
+    /// продуктом» (малые работы рядом с кóровыми). Создаётся сразу
+    /// с одной пустой работой: фокус на неё, можно печатать.
+    case addZone(level: UUID)
+    /// Имя области. Пустая строка (после trim) — сброс к «SMALL JOBS».
+    case renameZone(UUID, name: String)
+    /// Удалить область. Её работы остаются на уровне и переходят
+    /// в основную область — рамка снимается, наработки не теряются.
+    case deleteZone(UUID)
+    /// Перенести работу в область своего уровня (nil — обратно
+    /// в основную). Зона чужого уровня или та же область — no-op.
+    case setJobZone(UUID, zone: UUID?)
 }
 
 public enum ReorderDirection: Equatable, Sendable {
@@ -76,16 +93,23 @@ public enum GraphEngine {
             copy.levels.remove(at: index)
             return GraphResult(graph: copy, focus: nil)
 
-        case let .addJob(level: levelID):
+        case let .addJob(level: levelID, zone: zoneID):
             guard let index = graph.levelIndex(id: levelID) else { return nil }
-            let job = JobNode(verb: "")
+            // Область чужого уровня игнорируется — работа уходит в основную.
+            let zone = zoneID.flatMap { graph.levels[index].zone($0)?.id }
+            let job = JobNode(verb: "", zoneID: zone)
             var copy = graph
-            copy.levels[index].jobs.append(job)
+            let insertAt = copy.levels[index].insertionIndex(zone: zone, at: .max)
+            copy.levels[index].jobs.insert(job, at: insertAt)
             return GraphResult(graph: copy, focus: job.id)
 
         case let .addConnectedRight(of: sourceID):
-            guard let levelIndex = graph.levelIndex(of: sourceID) else { return nil }
-            let job = JobNode(verb: "")
+            guard let levelIndex = graph.levelIndex(of: sourceID),
+                  let source = graph.job(sourceID)
+            else { return nil }
+            // Связанная работа — сосед по области: продолжение той же
+            // последовательности, а не переход в другую область.
+            let job = JobNode(verb: "", zoneID: source.zoneID)
             var copy = graph
             let jobs = copy.levels[levelIndex].jobs
             let insertAt = (jobs.firstIndex { $0.id == sourceID }.map { $0 + 1 }) ?? jobs.count
@@ -100,29 +124,40 @@ public enum GraphEngine {
             if below == copy.levels.count {
                 copy.levels.append(GraphLevel())
             }
+            // Уровень ниже — другая полоса, области не наследуются.
             let job = JobNode(verb: "")
-            copy.levels[below].jobs.append(job)
+            let insertAt = copy.levels[below].insertionIndex(zone: nil, at: .max)
+            copy.levels[below].jobs.insert(job, at: insertAt)
             copy.edges.append(JobEdge(from: sourceID, to: job.id))
             return GraphResult(graph: copy, focus: job.id)
 
         case let .reorder(id, direction):
             guard let levelIndex = graph.levelIndex(of: id),
-                  let index = graph.levels[levelIndex].jobs.firstIndex(where: { $0.id == id })
+                  let job = graph.job(id)
             else { return nil }
-            let target = direction == .left ? index - 1 : index + 1
-            guard target >= 0, target < graph.levels[levelIndex].jobs.count else { return nil }
+            // Соседи ищутся внутри области: сдвиг не выкидывает работу
+            // из своей рамки.
+            let group = Array(graph.levels[levelIndex].jobs.indices)
+                .filter { graph.levels[levelIndex].jobs[$0].zoneID == job.zoneID }
+            guard let position = group.firstIndex(where: {
+                graph.levels[levelIndex].jobs[$0].id == id
+            }) else { return nil }
+            let target = direction == .left ? position - 1 : position + 1
+            guard target >= 0, target < group.count else { return nil }
             var copy = graph
-            copy.levels[levelIndex].jobs.swapAt(index, target)
+            copy.levels[levelIndex].jobs.swapAt(group[position], group[target])
             return GraphResult(graph: copy, focus: id)
 
-        case let .move(id, toLevel, at: insertAt):
+        case let .move(id, toLevel, zone: zoneID, at: insertAt):
             guard toLevel >= 0, toLevel < graph.levels.count,
                   let fromLevel = graph.levelIndex(of: id),
                   let jobIndex = graph.levels[fromLevel].jobs.firstIndex(where: { $0.id == id })
             else { return nil }
             var copy = graph
-            let job = copy.levels[fromLevel].jobs.remove(at: jobIndex)
-            let clamped = min(max(insertAt, 0), copy.levels[toLevel].jobs.count)
+            var job = copy.levels[fromLevel].jobs.remove(at: jobIndex)
+            // Область чужого уровня игнорируется — работа уходит в основную.
+            job.zoneID = zoneID.flatMap { copy.levels[toLevel].zone($0)?.id }
+            let clamped = copy.levels[toLevel].insertionIndex(zone: job.zoneID, at: insertAt)
             copy.levels[toLevel].jobs.insert(job, at: clamped)
             guard copy != graph else { return nil }
             return GraphResult(graph: copy, focus: id)
@@ -200,6 +235,51 @@ public enum GraphEngine {
                 copy.levels[levelIndex].isCore = copy.levels[levelIndex].id == id
             }
             return GraphResult(graph: copy, focus: nil)
+
+        case let .addZone(level: levelID):
+            guard let index = graph.levelIndex(id: levelID) else { return nil }
+            let zone = LevelZone()
+            // Пустая рамка бесполезна — область появляется сразу
+            // с работой в режиме редактирования.
+            let job = JobNode(verb: "", zoneID: zone.id)
+            var copy = graph
+            copy.levels[index].zones.append(zone)
+            copy.levels[index].jobs.append(job)
+            return GraphResult(graph: copy, focus: job.id)
+
+        case let .renameZone(id, name):
+            guard let levelIndex = graph.levelIndex(zone: id),
+                  let zoneIndex = graph.levels[levelIndex].zones.firstIndex(where: { $0.id == id })
+            else { return nil }
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let newName = trimmed.isEmpty ? nil : trimmed
+            guard graph.levels[levelIndex].zones[zoneIndex].name != newName else { return nil }
+            var copy = graph
+            copy.levels[levelIndex].zones[zoneIndex].name = newName
+            return GraphResult(graph: copy, focus: nil)
+
+        case let .deleteZone(id):
+            guard let levelIndex = graph.levelIndex(zone: id) else { return nil }
+            var copy = graph
+            copy.levels[levelIndex].zones.removeAll { $0.id == id }
+            // normalizeZones вернёт осиротевшие работы в основную область
+            // и восстановит порядок.
+            copy.levels[levelIndex].normalizeZones()
+            return GraphResult(graph: copy, focus: nil)
+
+        case let .setJobZone(id, zone: zoneID):
+            guard let levelIndex = graph.levelIndex(of: id),
+                  let jobIndex = graph.levels[levelIndex].jobs.firstIndex(where: { $0.id == id })
+            else { return nil }
+            // Область только своего уровня; та же область — no-op.
+            let target = zoneID.flatMap { graph.levels[levelIndex].zone($0)?.id }
+            guard zoneID == nil || target != nil,
+                  graph.levels[levelIndex].jobs[jobIndex].zoneID != target
+            else { return nil }
+            var copy = graph
+            copy.levels[levelIndex].jobs[jobIndex].zoneID = target
+            copy.levels[levelIndex].normalizeZones()
+            return GraphResult(graph: copy, focus: id)
         }
     }
 }

@@ -12,17 +12,28 @@ struct GraphSnapshotView: View {
     private let contentPadding: CGFloat = 90
     private let bandInset: CGFloat = 24
     private let nodeOffsetInBand: CGFloat = 50
+    private let zoneInset: CGFloat = 7
     private var bandHeight: CGFloat { LayoutMetrics.rowHeight - 10 }
 
     var body: some View {
-        let positions = GraphLayout.layout(graph)
-        let size = contentSize(positions)
+        let geometry = GraphLayout.geometry(graph)
+        let positions = geometry.positions
+        let size = contentSize(geometry)
 
         ZStack(alignment: .topLeading) {
             Color(nsColor: .windowBackgroundColor)
 
             ForEach(Array(graph.levels.enumerated()), id: \.element.id) { index, level in
                 band(index: index, level: level, width: size.width)
+            }
+
+            // Области уровней — тот же ряд, отдельная пунктирная рамка.
+            ForEach(Array(graph.levels.enumerated()), id: \.element.id) { index, level in
+                ForEach(level.zones) { zone in
+                    if let span = geometry.zones[zone.id] {
+                        zoneBand(zone, span: span)
+                    }
+                }
             }
 
             ForEach(graph.edges, id: \.self) { edge in
@@ -49,8 +60,12 @@ struct GraphSnapshotView: View {
         contentPadding + CGFloat(index) * LayoutMetrics.rowHeight - nodeOffsetInBand
     }
 
-    private func contentSize(_ positions: [UUID: CGPoint]) -> CGSize {
-        let maxX = (positions.values.map(\.x).max() ?? 0) + contentPadding * 2
+    private func contentSize(_ geometry: GraphLayout.Geometry) -> CGSize {
+        let rightEdge = max(
+            geometry.positions.values.map(\.x).max() ?? 0,
+            geometry.zones.values.map(\.maxX).max() ?? 0
+        )
+        let maxX = rightEdge + contentPadding * 2
         let bottom = bandTop(max(graph.levels.count - 1, 0)) + bandHeight + contentPadding - nodeOffsetInBand
         return CGSize(width: max(maxX, 600), height: max(bottom, 400))
     }
@@ -78,6 +93,42 @@ struct GraphSnapshotView: View {
             .fixedSize()
             .rotationEffect(.degrees(-90))
             .position(x: bandInset - 12, y: top + bandHeight / 2)
+    }
+
+    /// Рамка области уровня + её имя — та же геометрия, что на канвасе.
+    @ViewBuilder
+    private func zoneBand(_ zone: LevelZone, span: GraphLayout.ZoneSpan) -> some View {
+        let rect = CGRect(
+            x: span.minX + contentPadding,
+            y: bandTop(span.levelIndex) + zoneInset,
+            width: span.width,
+            height: bandHeight - zoneInset * 2
+        )
+
+        RoundedRectangle(cornerRadius: 13, style: .continuous)
+            .fill(LevelColors.zoneFill.opacity(0.1))
+            .overlay(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .strokeBorder(
+                        LevelColors.zoneStroke.opacity(0.5),
+                        style: StrokeStyle(lineWidth: 1.3, dash: [6, 5])
+                    )
+            )
+            .frame(width: rect.width, height: rect.height)
+            .position(x: rect.midX, y: rect.midY)
+
+        Text(zone.resolvedName.uppercased())
+            .font(.system(size: 9, weight: .bold, design: .rounded))
+            .tracking(1.2)
+            .foregroundStyle(LevelColors.zoneStroke.opacity(0.95))
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2.5)
+            .background(Capsule().fill(Color(nsColor: .windowBackgroundColor)))
+            .overlay(Capsule().strokeBorder(LevelColors.zoneStroke.opacity(0.35), lineWidth: 1))
+            .frame(width: rect.width, alignment: .leading)
+            .position(x: rect.midX, y: rect.minY)
     }
 
     // MARK: Рёбра
@@ -121,9 +172,18 @@ struct GraphSnapshotView: View {
     private func nodeView(_ job: JobNode, level: Int, at position: CGPoint) -> some View {
         let diameter = LevelStyle.style(for: level).diameter
 
+        // Работа в области уровня: тот же размер, пунктирный контур —
+        // продукт её не выполняет.
+        let inZone = job.zoneID != nil
+
         Circle()
             .fill(LevelColors.fill(for: level))
-            .overlay(Circle().strokeBorder(LevelColors.stroke(for: level), lineWidth: 2))
+            .overlay(
+                Circle().strokeBorder(
+                    inZone ? LevelColors.zoneStroke : LevelColors.stroke(for: level),
+                    style: StrokeStyle(lineWidth: 2, dash: inZone ? [4, 3] : [])
+                )
+            )
             .shadow(color: .black.opacity(0.16), radius: 3, y: 1.5)
             .frame(width: diameter, height: diameter)
             .position(position)
