@@ -64,6 +64,29 @@ struct AgentArtifactsTests {
         #expect(foreign.makeInterview(template: template).answers.isEmpty)
     }
 
+    @Test("4. coreLevel из payload помечает уровень; без него и при кривом индексе core — верхний")
+    func coreLevelMapping() throws {
+        let withCore = AgentArtifactsPayload.Graph(
+            name: "g",
+            levels: [[.init(verb: "большая работа")], [.init(verb: "кóровая работа")]],
+            coreLevel: 1
+        )
+        #expect(withCore.makeWorkGraph().levels.map(\.isCore) == [false, true])
+
+        let without = AgentArtifactsPayload.Graph(
+            name: "g",
+            levels: [[.init(verb: "работа")], [.init(verb: "ещё работа")]]
+        )
+        #expect(without.makeWorkGraph().levels.map(\.isCore) == [true, false])
+
+        let outOfRange = AgentArtifactsPayload.Graph(
+            name: "g",
+            levels: [[.init(verb: "работа")]],
+            coreLevel: 7
+        )
+        #expect(outOfRange.makeWorkGraph().levels.map(\.isCore) == [true])
+    }
+
     @Test("3. Текст без JSON и пустой граф — понятные ошибки")
     func parseErrors() {
         #expect(throws: AgentArtifactsPayload.ParseError.noJSONFound) {

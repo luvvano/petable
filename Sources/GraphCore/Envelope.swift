@@ -12,9 +12,12 @@ import Foundation
 /// секция `research` — шаблоны и интервью раздела «Исследования».
 /// v5: `origin` у стадий и интервью — артефакты, созданные ИИ-агентом,
 /// помечены. v6: опциональная секция `segmentation` — сегменты AJTBD.
-/// v1–v5 читаются и мигрируют на лету; запись всегда в v6.
+/// v7: `isCore` у уровня графа — core-уровень (работы, которые продукт
+/// выполняет целиком) есть в каждом графе; старые файлы получают его
+/// при чтении (уровень с именем «core …» или верхний).
+/// v1–v6 читаются и мигрируют на лету; запись всегда в v7.
 public struct Envelope: Codable, Equatable, Sendable {
-    public static let currentVersion = 6
+    public static let currentVersion = 7
     public static let jobGraphStageType = "jobGraph"
     public static let defaultGraphName = "Граф работ"
 
@@ -50,7 +53,9 @@ public struct Envelope: Codable, Equatable, Sendable {
             self.name = name
             self.modifiedAt = modifiedAt
             self.origin = origin
-            self.graph = graph
+            var normalized = graph
+            normalized.ensureCoreLevel()
+            self.graph = normalized
         }
 
         /// Происхождение с учётом старых файлов без поля.
@@ -68,7 +73,9 @@ public struct Envelope: Codable, Equatable, Sendable {
                 ?? Envelope.defaultGraphName
             self.modifiedAt = try container.decodeIfPresent(Date.self, forKey: .modifiedAt)
             self.origin = try container.decodeIfPresent(ArtifactOrigin.self, forKey: .origin)
-            self.graph = try container.decode(WorkGraph.self, forKey: .graph)
+            var graph = try container.decode(WorkGraph.self, forKey: .graph)
+            graph.ensureCoreLevel() // файлы до v7 без core-уровня
+            self.graph = graph
         }
     }
 

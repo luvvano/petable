@@ -50,11 +50,15 @@ public struct AgentArtifactsPayload: Codable, Equatable, Sendable {
         /// Уровни сверху вниз (0 — большие работы), работы слева направо.
         public var levels: [[GraphNode]]
         public var edges: [GraphEdge]
+        /// Индекс уровня кóровых работ (продукт выполняет их целиком).
+        /// nil или индекс за пределами — core назначит ensureCoreLevel.
+        public var coreLevel: Int?
 
-        public init(name: String, levels: [[GraphNode]], edges: [GraphEdge] = []) {
+        public init(name: String, levels: [[GraphNode]], edges: [GraphEdge] = [], coreLevel: Int? = nil) {
             self.name = name
             self.levels = levels
             self.edges = edges
+            self.coreLevel = coreLevel
         }
     }
 
@@ -171,13 +175,16 @@ public extension AgentArtifactsPayload.Graph {
     /// Граф работ из транспортной формы (уровни/рёбра по индексам).
     /// Пустые узлы и рёбра с индексами за пределами уровней отбрасываются.
     func makeWorkGraph() -> WorkGraph {
-        let levels: [GraphLevel] = self.levels.map { nodes in
+        var levels: [GraphLevel] = self.levels.map { nodes in
             GraphLevel(jobs: nodes.compactMap { node in
                 let verb = node.verb.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !verb.isEmpty else { return nil }
                 let role = node.role?.trimmingCharacters(in: .whitespacesAndNewlines)
                 return JobNode(verb: verb, role: (role?.isEmpty ?? true) ? nil : role)
             })
+        }
+        if let coreLevel, levels.indices.contains(coreLevel) {
+            levels[coreLevel].isCore = true
         }
         var jobEdges: [JobEdge] = []
         for edge in edges {
@@ -194,6 +201,8 @@ public extension AgentArtifactsPayload.Graph {
                 jobEdges.append(jobEdge)
             }
         }
-        return WorkGraph(levels: levels.filter { !$0.jobs.isEmpty }, edges: jobEdges)
+        var graph = WorkGraph(levels: levels.filter { !$0.jobs.isEmpty }, edges: jobEdges)
+        graph.ensureCoreLevel()
+        return graph
     }
 }

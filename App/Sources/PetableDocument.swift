@@ -48,10 +48,10 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
 
     static var readableContentTypes: [UTType] { [.petableDocument] }
 
-    /// Новый проект = один граф с одной пустой работой,
+    /// Новый проект = один граф с одной пустой работой на core-уровне,
     /// сразу в режиме редактирования.
     init() {
-        let stage = Envelope.Stage(graph: WorkGraph(levels: [GraphLevel(jobs: [JobNode(verb: "")])]))
+        let stage = Envelope.Stage(graph: WorkGraph(levels: [GraphLevel(jobs: [JobNode(verb: "")], isCore: true)]))
         stages = [stage]
         selectedGraphID = stage.id
         research = Research(templates: InterviewTemplate.defaultTemplates())
@@ -168,14 +168,14 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
 
     // MARK: - Операции над списком графов
 
-    /// Новый граф с одной пустой работой; становится выбранным.
+    /// Новый граф с одной пустой работой на core-уровне; становится выбранным.
     @MainActor
     @discardableResult
     func addGraph() -> UUID {
         let stage = Envelope.Stage(
             name: nextGraphName(),
             modifiedAt: Date(),
-            graph: WorkGraph(levels: [GraphLevel(jobs: [JobNode(verb: "")])])
+            graph: WorkGraph(levels: [GraphLevel(jobs: [JobNode(verb: "")], isCore: true)])
         )
         applyListChange {
             stages.append(stage)

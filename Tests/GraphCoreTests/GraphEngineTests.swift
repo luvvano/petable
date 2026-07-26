@@ -35,6 +35,51 @@ struct GraphEngineTests {
         #expect(GraphEngine.apply(.deleteLevel(single.levels[0].id), to: single) == nil)
     }
 
+    @Test("Уровни: core-уровень не удаляется, даже пустой")
+    func deleteCoreLevelNoOp() throws {
+        let graph = WorkGraph(levels: [
+            GraphLevel(isCore: true),
+            GraphLevel(jobs: [JobNode(verb: "оплатить счета")]),
+        ])
+        #expect(GraphEngine.apply(.deleteLevel(graph.levels[0].id), to: graph) == nil)
+    }
+
+    @Test("setCoreLevel: отметка переезжает и остаётся единственной; уже core и чужой id — no-op")
+    func setCoreLevel() throws {
+        var graph = Fixtures.closeMonth()
+        graph.ensureCoreLevel()
+        #expect(graph.coreLevelIndex == 0)
+
+        let moved = try #require(GraphEngine.apply(.setCoreLevel(graph.levels[2].id), to: graph))
+        #expect(moved.graph.levels.map(\.isCore) == [false, false, true])
+
+        #expect(GraphEngine.apply(.setCoreLevel(moved.graph.levels[2].id), to: moved.graph) == nil)
+        #expect(GraphEngine.apply(.setCoreLevel(UUID()), to: graph) == nil)
+    }
+
+    @Test("ensureCoreLevel: пустой граф, дефолт — верхний, приоритет имени «core», лишние отметки снимаются")
+    func ensureCoreLevel() throws {
+        var empty = WorkGraph()
+        empty.ensureCoreLevel()
+        #expect(empty.levels.count == 1)
+        #expect(empty.levels[0].isCore)
+
+        var plain = Fixtures.closeMonth()
+        plain.ensureCoreLevel()
+        #expect(plain.coreLevelIndex == 0)
+
+        var named = Fixtures.closeMonth()
+        named.levels[1].name = "Core jobs"
+        named.ensureCoreLevel()
+        #expect(named.coreLevelIndex == 1)
+
+        var doubled = Fixtures.closeMonth()
+        doubled.levels[0].isCore = true
+        doubled.levels[2].isCore = true
+        doubled.ensureCoreLevel()
+        #expect(doubled.levels.map(\.isCore) == [true, false, false])
+    }
+
     @Test("addJob: автономная работа в конец уровня, без связей")
     func addJob() throws {
         let graph = Fixtures.closeMonth()

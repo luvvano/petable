@@ -51,7 +51,34 @@ struct EnvelopeTests {
         #expect(decoded.version == Envelope.currentVersion)
         #expect(decoded.stages.count == 1)
         #expect(decoded.stages[0].name == Envelope.defaultGraphName)
-        #expect(decoded.jobGraph == graph)
+        var expected = graph
+        expected.ensureCoreLevel() // чтение назначает core-уровень
+        #expect(decoded.jobGraph == expected)
+    }
+
+    @Test("5. Файл до v7 без isCore: core получает уровень с именем «core …», без имени — верхний")
+    func preV7GetsCoreLevel() throws {
+        var named = Fixtures.closeMonth()
+        named.levels[1].name = "Core jobs"
+        let namedJSON = String(data: try JSONEncoder().encode(named), encoding: .utf8)!
+        let decodedNamed = try Envelope.decode(
+            #"{"version": 6, "stages": [{"type": "jobGraph", "graph": \#(namedJSON)}]}"#.data(using: .utf8)!
+        )
+        #expect(decodedNamed.jobGraph?.levels.map(\.isCore) == [false, true, false])
+
+        let plainJSON = String(data: try JSONEncoder().encode(Fixtures.closeMonth()), encoding: .utf8)!
+        let decodedPlain = try Envelope.decode(
+            #"{"version": 6, "stages": [{"type": "jobGraph", "graph": \#(plainJSON)}]}"#.data(using: .utf8)!
+        )
+        #expect(decodedPlain.jobGraph?.levels.map(\.isCore) == [true, false, false])
+    }
+
+    @Test("6. Core-уровень (не верхний) переживает round-trip")
+    func coreLevelRoundTrip() throws {
+        var graph = Fixtures.closeMonth()
+        graph.levels[1].isCore = true
+        let decoded = try Envelope.decode(try Envelope(graph: graph).encoded())
+        #expect(decoded.jobGraph?.levels.map(\.isCore) == [false, true, false])
     }
 
     @Test("4. Несколько графов: id, имена и порядок стадий переживают round-trip")

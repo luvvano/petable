@@ -144,15 +144,42 @@ public struct JobNode: Codable, Equatable, Identifiable, Sendable {
 /// Уровень графа — горизонтальная полоса. Порядок `jobs` = слева направо.
 /// `name` — пользовательское имя; nil — отображается дефолт «УРОВЕНЬ N»
 /// (nil, а не пустая строка, чтобы имя пересчитывалось при перестановке уровней).
+/// `isCore` — уровень кóровых работ: продукт выполняет их целиком.
+/// Такой уровень в графе ровно один — инвариант держит
+/// `WorkGraph.ensureCoreLevel()`, вызываемый на границах документа.
 public struct GraphLevel: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var jobs: [JobNode]
     public var name: String?
+    public var isCore: Bool
 
-    public init(id: UUID = UUID(), jobs: [JobNode] = [], name: String? = nil) {
+    public init(id: UUID = UUID(), jobs: [JobNode] = [], name: String? = nil, isCore: Bool = false) {
         self.id = id
         self.jobs = jobs
         self.name = name
+        self.isCore = isCore
+    }
+
+    enum CodingKeys: String, CodingKey { case id, jobs, name, isCore }
+
+    /// Файлы до v7 не имеют ключа `isCore`.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        jobs = try container.decode([JobNode].self, forKey: .jobs)
+        name = try container.decodeIfPresent(String.self, forKey: .name)
+        isCore = try container.decodeIfPresent(Bool.self, forKey: .isCore) ?? false
+    }
+
+    /// false в JSON не пишется — как пустая карточка узла.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(jobs, forKey: .jobs)
+        try container.encodeIfPresent(name, forKey: .name)
+        if isCore {
+            try container.encode(isCore, forKey: .isCore)
+        }
     }
 }
 
@@ -186,6 +213,36 @@ public struct WorkGraph: Codable, Equatable, Sendable {
 
 public extension WorkGraph {
     var allJobs: [JobNode] { levels.flatMap(\.jobs) }
+
+    /// Индекс core-уровня. nil только у графа, не прошедшего
+    /// `ensureCoreLevel()` (транзитные значения вроде subgraph).
+    var coreLevelIndex: Int? {
+        levels.firstIndex(where: \.isCore)
+    }
+
+    /// Инвариант «core-уровень есть всегда и он один». Вызывается на
+    /// границах документа: чтение файла, создание стадии, граф от агента.
+    /// Пустой граф получает один пустой core-уровень. Без отметки core
+    /// назначается уровень с именем, содержащим «core» (переименованные
+    /// руками старые графы), иначе верхний. Лишние отметки (битый файл)
+    /// снимаются — остаётся верхняя.
+    mutating func ensureCoreLevel() {
+        guard !levels.isEmpty else {
+            levels = [GraphLevel(isCore: true)]
+            return
+        }
+        let flagged = levels.indices.filter { levels[$0].isCore }
+        if flagged.isEmpty {
+            let named = levels.firstIndex {
+                $0.name?.range(of: "core", options: .caseInsensitive) != nil
+            }
+            levels[named ?? 0].isCore = true
+        } else {
+            for index in flagged.dropFirst() {
+                levels[index].isCore = false
+            }
+        }
+    }
 
     var jobCount: Int { levels.reduce(0) { $0 + $1.jobs.count } }
 
@@ -241,7 +298,14 @@ public extension WorkGraph {
     /// оставшимися работами, опустевшие уровни отбрасываются.
     func subgraph(keeping ids: Set<UUID>) -> WorkGraph {
         let levels = self.levels
-            .map { GraphLevel(id: $0.id, jobs: $0.jobs.filter { ids.contains($0.id) }, name: $0.name) }
+            .map {
+                GraphLevel(
+                    id: $0.id,
+                    jobs: $0.jobs.filter { ids.contains($0.id) },
+                    name: $0.name,
+                    isCore: $0.isCore
+                )
+            }
             .filter { !$0.jobs.isEmpty }
         let edges = self.edges.filter { ids.contains($0.from) && ids.contains($0.to) }
         return WorkGraph(levels: levels, edges: edges)

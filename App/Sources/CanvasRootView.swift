@@ -311,10 +311,16 @@ struct CanvasRootView: View {
     /// ни с узлами, ни с подписями при любой плотности графа.
     /// Двойной клик — инлайн-переименование; рендерится в слое контролов
     /// (bandBackground events не принимает).
+    /// Дефолтное имя уровня без пользовательского: core-уровень — всегда
+    /// «CORE JOBS», остальные — по номеру.
+    private func defaultLevelName(_ level: GraphLevel, index: Int) -> String {
+        level.isCore ? "CORE JOBS" : "УРОВЕНЬ \(index + 1)"
+    }
+
     @ViewBuilder
     private func levelLabel(index: Int, level: GraphLevel, top: CGFloat) -> some View {
         if editingLevelId == level.id {
-            TextField("УРОВЕНЬ \(index + 1)", text: $levelDraft)
+            TextField(defaultLevelName(level, index: index), text: $levelDraft)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12))
                 .multilineTextAlignment(.center)
@@ -338,19 +344,29 @@ struct CanvasRootView: View {
         } else {
             // Метрики × zoom + обратный scaleEffect — резкий текст при
             // приближении (см. nodeLabel).
-            Text(level.name?.uppercased() ?? "УРОВЕНЬ \(index + 1)")
+            Text(level.name?.uppercased() ?? defaultLevelName(level, index: index))
                 .font(.system(size: 9 * scale, weight: .bold, design: .rounded))
                 .tracking(1.4 * scale)
-                .foregroundStyle(LevelColors.stroke(for: index).opacity(0.65))
+                .foregroundStyle(LevelColors.stroke(for: index).opacity(level.isCore ? 0.95 : 0.65))
                 .lineLimit(1)
                 .fixedSize()
                 .frame(maxWidth: bandHeight * scale)
                 .contentShape(Rectangle())
                 .onTapGesture(count: 2) { beginLevelEditing(level) }
+                .contextMenu {
+                    Button("Переименовать") { beginLevelEditing(level) }
+                    if !level.isCore {
+                        Button("Сделать уровнем Core Jobs") {
+                            document.perform(.setCoreLevel(level.id))
+                        }
+                    }
+                }
                 .scaleEffect(1 / scale)
                 .rotationEffect(.degrees(-90))
                 .position(x: bandInset - 12, y: top + bandHeight / 2)
-                .help("Двойной клик — переименовать уровень")
+                .help(level.isCore
+                    ? "Core Jobs — работы, которые продукт выполняет целиком. Двойной клик — переименовать"
+                    : "Двойной клик — переименовать уровень")
         }
     }
 
@@ -385,8 +401,8 @@ struct CanvasRootView: View {
             .proximityReveal(reveal(near: bottomPoint))
             .position(bottomPoint)
 
-        // Пустой уровень можно убрать.
-        if level.jobs.isEmpty, document.graph.levels.count > 1 {
+        // Пустой уровень можно убрать; core-уровень — нельзя.
+        if level.jobs.isEmpty, !level.isCore, document.graph.levels.count > 1 {
             let trashPoint = CGPoint(x: (lastX ?? contentPadding - 40) + 148, y: nodeY)
             Button {
                 document.perform(.deleteLevel(level.id))

@@ -238,11 +238,15 @@ public extension WorkGraph {
     func withRegeneratedIDs() -> WorkGraph {
         var idMap: [UUID: UUID] = [:]
         let newLevels = levels.map { level in
-            GraphLevel(jobs: level.jobs.map { job in
-                let newID = UUID()
-                idMap[job.id] = newID
-                return JobNode(id: newID, verb: job.verb, role: job.role, details: job.details)
-            })
+            GraphLevel(
+                jobs: level.jobs.map { job in
+                    let newID = UUID()
+                    idMap[job.id] = newID
+                    return JobNode(id: newID, verb: job.verb, role: job.role, details: job.details)
+                },
+                name: level.name,
+                isCore: level.isCore
+            )
         }
         let newEdges = edges.compactMap { edge -> JobEdge? in
             guard let from = idMap[edge.from], let to = idMap[edge.to] else { return nil }

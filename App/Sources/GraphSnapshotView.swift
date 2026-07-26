@@ -70,7 +70,7 @@ struct GraphSnapshotView: View {
             .frame(width: width - bandInset * 2, height: bandHeight)
             .offset(x: bandInset, y: top)
 
-        Text(level.name?.uppercased() ?? "УРОВЕНЬ \(index + 1)")
+        Text(level.name?.uppercased() ?? (level.isCore ? "CORE JOBS" : "УРОВЕНЬ \(index + 1)"))
             .font(.system(size: 9, weight: .bold, design: .rounded))
             .tracking(1.4)
             .foregroundStyle(LevelColors.stroke(for: index).opacity(0.65))

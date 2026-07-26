@@ -157,7 +157,10 @@ public enum AgentChatContext {
                 let nodes = level.jobs.enumerated().map { index, job in
                     "[\(index)] «\(job.displayText)»"
                 }
-                lines.append("  уровень \(levelIndex): \(nodes.joined(separator: " "))")
+                var label = "уровень \(levelIndex)"
+                if let name = level.name { label += " «\(name)»" }
+                if level.isCore { label += " (core)" }
+                lines.append("  \(label): \(nodes.joined(separator: " "))")
             }
             let edges = indexEdges(of: stage.graph)
             if !edges.isEmpty {

@@ -10,7 +10,8 @@ public enum GraphIntent: Equatable, Sendable {
     /// Вставить пустой уровень по индексу (0 = самый верхний,
     /// levels.count = под нижним).
     case insertLevel(at: Int)
-    /// Удалить уровень. Только пустой и не единственный — иначе no-op.
+    /// Удалить уровень. Только пустой, не единственный и не core —
+    /// иначе no-op.
     case deleteLevel(UUID)
     /// Автономная работа: добавляется в конец уровня, ни с чем не связана.
     case addJob(level: UUID)
@@ -38,6 +39,9 @@ public enum GraphIntent: Equatable, Sendable {
     case setDetails(UUID, details: JobDetails)
     /// Имя уровня. Пустая строка (после trim) — сброс к дефолту «УРОВЕНЬ N».
     case renameLevel(UUID, name: String)
+    /// Назначить уровень core-уровнем: отметка снимается с прежнего —
+    /// core в графе всегда один. Уже core — no-op.
+    case setCoreLevel(UUID)
 }
 
 public enum ReorderDirection: Equatable, Sendable {
@@ -65,7 +69,8 @@ public enum GraphEngine {
         case let .deleteLevel(id):
             guard graph.levels.count > 1,
                   let index = graph.levelIndex(id: id),
-                  graph.levels[index].jobs.isEmpty
+                  graph.levels[index].jobs.isEmpty,
+                  !graph.levels[index].isCore
             else { return nil }
             var copy = graph
             copy.levels.remove(at: index)
@@ -184,6 +189,16 @@ public enum GraphEngine {
             guard graph.levels[index].name != newName else { return nil }
             var copy = graph
             copy.levels[index].name = newName
+            return GraphResult(graph: copy, focus: nil)
+
+        case let .setCoreLevel(id):
+            guard let index = graph.levelIndex(id: id),
+                  !graph.levels[index].isCore
+            else { return nil }
+            var copy = graph
+            for levelIndex in copy.levels.indices {
+                copy.levels[levelIndex].isCore = copy.levels[levelIndex].id == id
+            }
             return GraphResult(graph: copy, focus: nil)
         }
     }
