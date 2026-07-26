@@ -87,6 +87,58 @@ struct AgentArtifactsTests {
         #expect(object?["a"] as? String == "тут { скобка и \" кавычка")
     }
 
+    @Test("6. JobCard.merged: nil не трогает, значение перезаписывает, пусто — чистит")
+    func jobCardMerge() {
+        let details = JobDetails(
+            context: ["на ходу"],
+            trigger: ["старый триггер"],
+            positiveEmotions: ["спокойствие"],
+            frequency: "5 раз/год"
+        )
+        let card = AgentArtifactsPayload.JobCard(
+            trigger: ["гость сказал «да»", "  "],
+            positiveEmotions: [],
+            frequency: "20 раз/мес"
+        )
+        let merged = card.merged(into: details)
+        #expect(merged.context == ["на ходу"]) // nil — поле не тронуто
+        #expect(merged.trigger == ["гость сказал «да»"]) // перезапись + trim пустых
+        #expect(merged.positiveEmotions == []) // пустой список — очистка
+        #expect(merged.frequency == "20 раз/мес")
+        #expect(AgentArtifactsPayload.JobCard().isEmpty)
+        #expect(!card.isEmpty)
+    }
+
+    @Test("7. update_graph сохраняет карточки, id и имена уровней по совпадению узлов")
+    func preservingWorkGraphKeepsCards() {
+        let filled = JobNode(
+            verb: "выпить кофе",
+            role: "гость",
+            details: JobDetails(trigger: ["утро"], frequency: "1 раз/день")
+        )
+        let doomed = JobNode(verb: "мыть турку")
+        let old = WorkGraph(
+            levels: [GraphLevel(jobs: [filled, doomed], name: "Кóровые")],
+            edges: [JobEdge(from: filled.id, to: doomed.id)]
+        )
+        // Агент переставил узел на новый уровень и убрал «мыть турку».
+        let transport = AgentArtifactsPayload.Graph(
+            name: "",
+            levels: [
+                [.init(verb: "взбодриться")],
+                [.init(verb: "выпить кофе", role: "гость")],
+            ],
+            edges: [.init(fromLevel: 0, fromIndex: 0, toLevel: 1, toIndex: 0)]
+        )
+        let rebuilt = transport.makeWorkGraph(preservingFrom: old)
+        let survivor = rebuilt.levels[1].jobs[0]
+        #expect(survivor.id == filled.id)
+        #expect(survivor.details == filled.details)
+        #expect(rebuilt.levels[0].jobs[0].details.isEmpty) // новый узел — пустая карточка
+        #expect(rebuilt.levels[0].name == "Кóровые") // имя уровня по индексу
+        #expect(rebuilt.edges == [JobEdge(from: rebuilt.levels[0].jobs[0].id, to: filled.id)])
+    }
+
     @Test("5. origin стадии и интервью переживает round-trip конверта")
     func originRoundTrip() throws {
         var interview = Interview(
