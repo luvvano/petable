@@ -75,6 +75,40 @@ final class AgentChatTests: XCTestCase {
         XCTAssertEqual(name, "Гипотеза: Kayak")
     }
 
+    func testParseUpdateJobAction() {
+        let graphID = UUID()
+        let raw = """
+        ```petable-action
+        {"action": "update_job", "graphID": "\(graphID.uuidString)", "level": 1, "index": 2, "card": {"trigger": ["гость сказал «да»"], "successCriteria": ["внести за 1 минуту"], "frequency": "20 раз/мес"}}
+        ```
+        """
+        let reply = AgentChatReply.parse(from: raw)
+        XCTAssertEqual(reply.invalidActionCount, 0)
+        guard case .updateJob(let id, let level, let index, let card) = reply.actions.first else {
+            return XCTFail("Ожидалась update_job, получено: \(reply.actions)")
+        }
+        XCTAssertEqual(id, graphID)
+        XCTAssertEqual(level, 1)
+        XCTAssertEqual(index, 2)
+        XCTAssertEqual(card.trigger, ["гость сказал «да»"])
+        XCTAssertEqual(card.successCriteria, ["внести за 1 минуту"])
+        XCTAssertEqual(card.frequency, "20 раз/мес")
+        // Не перечисленные поля не трогаются (nil, не пустой список).
+        XCTAssertNil(card.context)
+        XCTAssertNil(card.inOrderTo)
+    }
+
+    func testParseUpdateJobWithEmptyCardInvalid() {
+        let raw = """
+        ```petable-action
+        {"action": "update_job", "graphID": "\(UUID().uuidString)", "level": 0, "index": 0, "card": {}}
+        ```
+        """
+        let reply = AgentChatReply.parse(from: raw)
+        XCTAssertTrue(reply.actions.isEmpty)
+        XCTAssertEqual(reply.invalidActionCount, 1)
+    }
+
     func testInvalidBlocksCountedNotFatal() {
         let raw = """
         До.
@@ -134,5 +168,29 @@ final class AgentChatTests: XCTestCase {
         XCTAssertTrue(context.contains("templateID \(template.id.uuidString)"))
         XCTAssertTrue(context.contains("fieldID \(field.id.uuidString): «Триггер»"))
         XCTAssertTrue(context.contains("(«Триггер»): сломалась кофемашина"))
+    }
+
+    func testContextIncludesJobCards() {
+        let plain = JobNode(verb: "взбодриться")
+        let filled = JobNode(
+            verb: "внести бронь",
+            details: JobDetails(
+                trigger: ["гость сказал «да»"],
+                successCriteria: ["за 1 минуту", "ничего не потерялось"],
+                frequency: "20 раз/мес"
+            )
+        )
+        let stage = Envelope.Stage(
+            name: "Брони",
+            graph: WorkGraph(levels: [GraphLevel(jobs: [plain, filled])])
+        )
+        let context = AgentChatContext.describe(
+            graphs: [stage],
+            research: Research(),
+            segments: []
+        )
+        XCTAssertTrue(context.contains("карточка 0.1: триггер: гость сказал «да» | критерии успеха: за 1 минуту; ничего не потерялось | частота: 20 раз/мес"))
+        // Пустая карточка не засоряет контекст.
+        XCTAssertFalse(context.contains("карточка 0.0"))
     }
 }

@@ -25,6 +25,14 @@ public enum AgentChatAction: Equatable, Sendable {
         placeholders: [String: String],
         answers: [AgentArtifactsPayload.Answer]
     )
+    /// Правка карточки работы: узел по graphID + уровень/индекс из контекста;
+    /// перечисленные поля карточки перезаписываются, остальные не трогаются.
+    case updateJob(
+        graphID: UUID,
+        level: Int,
+        index: Int,
+        card: AgentArtifactsPayload.JobCard
+    )
 
     public enum ParseError: Error, Equatable {
         case unknownAction(String)
@@ -41,6 +49,9 @@ public enum AgentChatAction: Equatable, Sendable {
         var interviewName: String?
         var placeholders: [String: String]?
         var answers: [AgentArtifactsPayload.Answer]?
+        var level: Int?
+        var index: Int?
+        var card: AgentArtifactsPayload.JobCard?
     }
 
     /// Декодирует одну команду из JSON-текста блока.
@@ -70,6 +81,11 @@ public enum AgentChatAction: Equatable, Sendable {
                 placeholders: raw.placeholders ?? [:],
                 answers: raw.answers ?? []
             )
+        case "update_job":
+            guard let id = raw.graphID, let level = raw.level, let index = raw.index,
+                  let card = raw.card, !card.isEmpty
+            else { throw ParseError.invalidJSON }
+            return .updateJob(graphID: id, level: level, index: index, card: card)
         default:
             throw ParseError.unknownAction(raw.action)
         }
@@ -158,6 +174,9 @@ public enum AgentChatContext {
                     "[\(index)] «\(job.displayText)»"
                 }
                 lines.append("  уровень \(levelIndex): \(nodes.joined(separator: " "))")
+                for (index, job) in level.jobs.enumerated() where !job.details.isEmpty {
+                    lines.append("  карточка \(levelIndex).\(index): \(cardSummary(job.details))")
+                }
             }
             let edges = indexEdges(of: stage.graph)
             if !edges.isEmpty {
@@ -195,6 +214,23 @@ public enum AgentChatContext {
         }
 
         return lines.joined(separator: "\n")
+    }
+
+    /// Заполненные поля карточки работы одной строкой.
+    private static func cardSummary(_ details: JobDetails) -> String {
+        var parts: [String] = []
+        func add(_ label: String, _ items: [String]) {
+            guard !items.isEmpty else { return }
+            parts.append("\(label): \(items.joined(separator: "; "))")
+        }
+        add("контекст", details.context)
+        add("негативные эмоции", details.negativeEmotions)
+        add("триггер", details.trigger)
+        add("критерии успеха", details.successCriteria)
+        add("чтобы", details.inOrderTo)
+        add("позитивные эмоции", details.positiveEmotions)
+        if !details.frequency.isEmpty { parts.append("частота: \(details.frequency)") }
+        return parts.joined(separator: " | ")
     }
 
     /// Рёбра графа как пары «уровень.индекс→уровень.индекс».

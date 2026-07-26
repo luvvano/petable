@@ -31,6 +31,56 @@ public struct AgentArtifactsPayload: Codable, Equatable, Sendable {
         }
     }
 
+    /// Частичная правка карточки работы (команда update_job): nil-поле
+    /// не трогается, пустой список/строка — очистка, значение — перезапись.
+    public struct JobCard: Codable, Equatable, Sendable {
+        public var context: [String]?
+        public var negativeEmotions: [String]?
+        public var trigger: [String]?
+        public var successCriteria: [String]?
+        public var inOrderTo: [String]?
+        public var positiveEmotions: [String]?
+        public var frequency: String?
+
+        public init(
+            context: [String]? = nil,
+            negativeEmotions: [String]? = nil,
+            trigger: [String]? = nil,
+            successCriteria: [String]? = nil,
+            inOrderTo: [String]? = nil,
+            positiveEmotions: [String]? = nil,
+            frequency: String? = nil
+        ) {
+            self.context = context
+            self.negativeEmotions = negativeEmotions
+            self.trigger = trigger
+            self.successCriteria = successCriteria
+            self.inOrderTo = inOrderTo
+            self.positiveEmotions = positiveEmotions
+            self.frequency = frequency
+        }
+
+        public var isEmpty: Bool {
+            context == nil && negativeEmotions == nil && trigger == nil
+                && successCriteria == nil && inOrderTo == nil
+                && positiveEmotions == nil && frequency == nil
+        }
+
+        /// Карточка после наложения правки на текущую: перечисленные поля
+        /// перезаписываются, nil — остаются. Результат нормализован.
+        public func merged(into details: JobDetails) -> JobDetails {
+            JobDetails(
+                context: context ?? details.context,
+                negativeEmotions: negativeEmotions ?? details.negativeEmotions,
+                trigger: trigger ?? details.trigger,
+                successCriteria: successCriteria ?? details.successCriteria,
+                inOrderTo: inOrderTo ?? details.inOrderTo,
+                positiveEmotions: positiveEmotions ?? details.positiveEmotions,
+                frequency: frequency ?? details.frequency
+            ).normalized()
+        }
+    }
+
     public struct GraphEdge: Codable, Equatable, Sendable {
         public var fromLevel: Int
         public var fromIndex: Int
@@ -195,5 +245,42 @@ public extension AgentArtifactsPayload.Graph {
             }
         }
         return WorkGraph(levels: levels.filter { !$0.jobs.isEmpty }, edges: jobEdges)
+    }
+
+    /// Граф из транспортной формы с переносом данных из прежнего графа
+    /// (правка update_graph — структура заменяется, наработки остаются):
+    /// узлы сопоставляются по (role, verb), дубликаты — по порядку, —
+    /// совпавшие сохраняют id и карточку; уровни наследуют id и имя
+    /// уровня прежнего графа с тем же индексом.
+    func makeWorkGraph(preservingFrom old: WorkGraph) -> WorkGraph {
+        var graph = makeWorkGraph()
+        var pool: [String: [JobNode]] = [:]
+        for job in old.allJobs {
+            pool[Self.matchKey(job), default: []].append(job)
+        }
+        var idMap: [UUID: UUID] = [:]
+        for levelIndex in graph.levels.indices {
+            if old.levels.indices.contains(levelIndex) {
+                graph.levels[levelIndex].id = old.levels[levelIndex].id
+                graph.levels[levelIndex].name = old.levels[levelIndex].name
+            }
+            for jobIndex in graph.levels[levelIndex].jobs.indices {
+                let key = Self.matchKey(graph.levels[levelIndex].jobs[jobIndex])
+                guard var candidates = pool[key], !candidates.isEmpty else { continue }
+                let previous = candidates.removeFirst()
+                pool[key] = candidates
+                idMap[graph.levels[levelIndex].jobs[jobIndex].id] = previous.id
+                graph.levels[levelIndex].jobs[jobIndex].id = previous.id
+                graph.levels[levelIndex].jobs[jobIndex].details = previous.details
+            }
+        }
+        graph.edges = graph.edges.map {
+            JobEdge(from: idMap[$0.from] ?? $0.from, to: idMap[$0.to] ?? $0.to)
+        }
+        return graph
+    }
+
+    private static func matchKey(_ node: JobNode) -> String {
+        "\(node.role ?? "")\u{1}\(node.verb)"
     }
 }
