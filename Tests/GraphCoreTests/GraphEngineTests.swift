@@ -313,6 +313,57 @@ struct JobsBelowTests {
         #expect(!graph.jobsBelow(categorize.id).contains(root.id))
     }
 
+    @Test("jobsBelow: связь, протянутая снизу вверх, всё равно считается декомпозицией")
+    func jobsBelowReversedEdge() throws {
+        var graph = Fixtures.closeMonth()
+        let root = graph.levels[0].jobs[0]
+        let orphan = JobNode(verb: "не получать судебные иски")
+        graph.levels[1].jobs.append(orphan)
+        let deep = JobNode(verb: "не иметь конфликтов с гостями")
+        graph.levels[2].jobs.append(deep)
+        // Пользователь связал работы снизу вверх: from — нижняя работа.
+        graph.edges.append(JobEdge(from: orphan.id, to: root.id))
+        graph.edges.append(JobEdge(from: deep.id, to: orphan.id))
+
+        let below = graph.jobsBelow(orphan.id)
+        #expect(below.contains(orphan.id))
+        #expect(below.contains(deep.id))
+        // Вверх выделение всё так же не поднимается.
+        #expect(!below.contains(root.id))
+        // И сверху перевёрнутая связь видна: корень тянет всё поддерево.
+        #expect(graph.jobsBelow(root.id).isSuperset(of: [orphan.id, deep.id]))
+    }
+
+    @Test("normalizeEdges: межуровневые связи разворачиваются сверху вниз, связи уровня не трогаются")
+    func normalizeEdgesDirection() throws {
+        var graph = Fixtures.closeMonth()
+        let root = graph.levels[0].jobs[0]
+        let middle = graph.levels[1].jobs[1]
+        let sibling = graph.levels[1].jobs[2]
+        graph.edges = [
+            JobEdge(from: middle.id, to: root.id), // снизу вверх
+            JobEdge(from: sibling.id, to: middle.id), // внутри уровня — порядок цепочки
+        ]
+        graph.normalizeEdges()
+        #expect(graph.edges[0] == JobEdge(from: root.id, to: middle.id))
+        #expect(graph.edges[1] == JobEdge(from: sibling.id, to: middle.id))
+    }
+
+    @Test("toggleEdge: связь снизу вверх сохраняется как связь сверху вниз")
+    func toggleEdgeNormalizesDirection() throws {
+        let graph = Fixtures.closeMonth()
+        let root = graph.levels[0].jobs[0]
+        let child = graph.levels[2].jobs[0]
+        let linked = try #require(GraphEngine.apply(.toggleEdge(from: child.id, to: root.id), to: graph))
+        #expect(linked.graph.edges.contains(JobEdge(from: root.id, to: child.id)))
+        #expect(!linked.graph.edges.contains(JobEdge(from: child.id, to: root.id)))
+        // Повторный жест в ту же сторону — связь снимается.
+        let removed = try #require(
+            GraphEngine.apply(.toggleEdge(from: child.id, to: root.id), to: linked.graph)
+        )
+        #expect(removed.graph.edges == graph.edges)
+    }
+
     @Test("subgraph: остаются только выбранные работы и рёбра между ними, пустые уровни отброшены")
     func subgraphKeeping() throws {
         let graph = Fixtures.closeMonth()

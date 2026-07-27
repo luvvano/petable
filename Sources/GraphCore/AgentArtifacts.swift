@@ -280,6 +280,7 @@ public extension AgentArtifactsPayload.Graph {
         graph.ensureCoreLevel()
         // Рёбра уже разобраны по id — перестановка работ по областям безопасна.
         graph.normalizeZones()
+        graph.normalizeEdges() // агент мог связать работу с родителем снизу вверх
         return graph
     }
 
@@ -339,6 +340,7 @@ public extension AgentArtifactsPayload.Graph {
             JobEdge(from: idMap[$0.from] ?? $0.from, to: idMap[$0.to] ?? $0.to)
         }
         graph.normalizeZones()
+        graph.normalizeEdges()
         return graph
     }
 

@@ -49,7 +49,7 @@ struct CanvasRootView: View {
     @State private var detailsEditing = false
     @StateObject private var focusBridge = CanvasFocusBridge()
 
-    /// Перетаскивание работы (зажать узел + drag): работа следует за
+    /// Перетаскивание работы (нажать на узел и вести): работа следует за
     /// курсором, отпускание — перенос на уровень/позицию под курсором.
     @State private var dragNode: NodeDrag?
 
@@ -172,6 +172,16 @@ struct CanvasRootView: View {
                 guard let selection else { return }
                 commitEditingIfNeeded()
                 self.selection = document.perform(.delete(selection))
+            },
+            canCollapse: chainState.hasChain && !chainState.isCollapsed,
+            canExpand: chainState.hasChain && chainState.isCollapsed,
+            collapseChain: {
+                guard let selection, let job = document.graph.job(selection) else { return }
+                if !job.isCollapsed { toggleChain(job) }
+            },
+            expandChain: {
+                guard let selection, let job = document.graph.job(selection) else { return }
+                if job.isCollapsed { toggleChain(job) }
             }
         ))
         .onAppear {
@@ -229,7 +239,7 @@ struct CanvasRootView: View {
                     index: index,
                     width: size.width,
                     // Целится в область — подсвечена её рамка, не вся полоса.
-                    isDropTarget: index == drop?.level && drop?.zone == nil
+                    isDropTarget: index == drop?.levelIndex && drop?.zoneID == nil
                 )
                 .allowsHitTesting(false)
             }
@@ -242,7 +252,7 @@ struct CanvasRootView: View {
                         zoneBackground(
                             zone,
                             span: span,
-                            isDropTarget: drop?.zone == zone.id
+                            isDropTarget: drop?.zoneID == zone.id
                         )
                         .allowsHitTesting(false)
                     }
@@ -254,10 +264,13 @@ struct CanvasRootView: View {
                 edgeView(edge, positions: positions)
             }
 
-            // Узлы.
+            // Узлы. Работа свёрнутой цепочки позиции не имеет — раскладка
+            // её не разместила, значит на канвасе её нет.
             ForEach(Array(document.graph.levels.enumerated()), id: \.element.id) { levelIndex, level in
                 ForEach(level.jobs) { job in
-                    nodeView(job, level: levelIndex, at: point(positions[job.id]))
+                    if let position = positions[job.id] {
+                        nodeView(job, level: levelIndex, at: point(position))
+                    }
                 }
             }
 
@@ -268,8 +281,9 @@ struct CanvasRootView: View {
 
             // Карточка работы — поверх узлов, справа от открытой работы.
             if let detailsId, let detailsJob = document.graph.job(detailsId),
-               let detailsLevel = document.graph.levelIndex(of: detailsId) {
-                detailsCard(detailsJob, level: detailsLevel, at: point(positions[detailsId]))
+               let detailsLevel = document.graph.levelIndex(of: detailsId),
+               let detailsPoint = positions[detailsId] {
+                detailsCard(detailsJob, level: detailsLevel, at: point(detailsPoint))
             }
 
             // Резиновая линия: тянется от плюса к курсору при связывании.
@@ -321,13 +335,16 @@ struct CanvasRootView: View {
     @ViewBuilder
     private func bandBackground(index: Int, width: CGFloat, isDropTarget: Bool = false) -> some View {
         let top = bandTop(index)
+        // Цвет полосы — из стиля уровня: у core-уровня он свой и не едет
+        // по шкале, когда сверху вставляют новую полосу.
+        let style = document.graph.style(atLevel: index)
 
         RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .fill(LevelColors.fill(for: index).opacity(isDropTarget ? 0.16 : 0.07))
+            .fill(LevelColors.fill(style).opacity(isDropTarget ? 0.16 : 0.07))
             .overlay(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .strokeBorder(
-                        LevelColors.stroke(for: index).opacity(isDropTarget ? 0.55 : 0.18),
+                        LevelColors.stroke(style).opacity(isDropTarget ? 0.55 : 0.18),
                         lineWidth: isDropTarget ? 1.5 : 1
                     )
             )
@@ -486,7 +503,7 @@ struct CanvasRootView: View {
             Text(level.name?.uppercased() ?? defaultLevelName(level, index: index))
                 .font(.system(size: 9 * scale, weight: .bold, design: .rounded))
                 .tracking(1.4 * scale)
-                .foregroundStyle(LevelColors.stroke(for: index).opacity(level.isCore ? 0.95 : 0.65))
+                .foregroundStyle(LevelColors.stroke(document.graph.style(atLevel: index)).opacity(level.isCore ? 0.95 : 0.65))
                 .lineLimit(1)
                 .fixedSize()
                 .frame(maxWidth: bandHeight * scale)
@@ -499,11 +516,14 @@ struct CanvasRootView: View {
                             document.perform(.setCoreLevel(level.id))
                         }
                     }
-                    Divider()
-                    Button("Добавить область (тот же уровень, продукт не выполняет)") {
-                        commitEditingIfNeeded()
-                        if let newId = document.perform(.addZone(level: level.id)) {
-                            startEditingNew(newId)
+                    // Область — разметка «рядом с кóровыми»: только на core.
+                    if level.isCore {
+                        Divider()
+                        Button("Добавить область (тот же уровень, продукт не выполняет)") {
+                            commitEditingIfNeeded()
+                            if let newId = document.perform(.addZone(level: level.id)) {
+                                startEditingNew(newId)
+                            }
                         }
                     }
                 }
@@ -535,17 +555,34 @@ struct CanvasRootView: View {
 
         levelLabel(index: index, level: level, top: top)
 
-        // Автономная работа — в конец основной области уровня.
-        let addJobPoint = CGPoint(x: (lastJobX ?? contentPadding - 40) + 96, y: nodeY)
+        // Автономная работа — в конец основной области уровня. Кнопка
+        // не заезжает на рамку области: иначе клик по ней читается как
+        // «добавить работу в эту область», а работа уходит в основную.
+        // Места слева от первой рамки нет (у уровня нет своих работ) —
+        // кнопка уходит правее всего содержимого полосы.
+        let firstZoneMinX = level.zones
+            .compactMap { geometry.zones[$0.id]?.minX }
+            .min()
+            .map { $0 + contentPadding }
+        let mainSpot = (lastJobX ?? contentPadding - 40) + 96
+        let collidesWithZone = firstZoneMinX.map { mainSpot + 45 > $0 } ?? false
+        let addJobPoint = CGPoint(
+            x: collidesWithZone ? (lastX ?? contentPadding - 40) + 96 : mainSpot,
+            y: nodeY
+        )
         addJobButton(level: level)
             .proximityReveal(reveal(near: addJobPoint))
             .position(addJobPoint)
 
         // Новая область уровня — правее всего содержимого полосы.
-        let addZonePoint = CGPoint(x: (lastX ?? contentPadding - 40) + 220, y: nodeY)
-        addZoneButton(level: level)
-            .proximityReveal(reveal(near: addZonePoint))
-            .position(addZonePoint)
+        // Только у core: малые работы — соседи кóровых, на других
+        // уровнях области не заводятся.
+        if level.isCore {
+            let addZonePoint = CGPoint(x: (lastX ?? contentPadding - 40) + 220, y: nodeY)
+            addZoneButton(level: level)
+                .proximityReveal(reveal(near: addZonePoint))
+                .position(addZonePoint)
+        }
 
         // Контролы каждой области: имя, «+ работа» внутри рамки, удаление.
         ForEach(level.zones) { zone in
@@ -621,15 +658,16 @@ struct CanvasRootView: View {
     }
 
     /// Новая область уровня: та же полоса, отдельная рамка — малые работы
-    /// рядом с кóровыми.
+    /// рядом с кóровыми. Показывается только у core-уровня.
     private func addZoneButton(level: GraphLevel) -> some View {
         plusCapsule(
             title: "область",
             tint: LevelColors.zoneStroke,
             labelColor: LevelColors.zoneStroke,
-            help:"Добавить область на этом же уровне — работы того же "
+            help:"Добавить область на уровне Core Jobs — работы того же "
                 + "уровня, которые продукт не выполняет целиком "
-                + "(например, малые работы рядом с кóровыми)"
+                + "(малые работы рядом с кóровыми). Новая область встаёт "
+                + "справа от всего содержимого полосы, не внутри существующей"
         ) {
             commitEditingIfNeeded()
             if let newId = document.perform(.addZone(level: level.id)) {
@@ -742,12 +780,15 @@ struct CanvasRootView: View {
 
     @ViewBuilder
     private func edgeView(_ edge: JobEdge, positions: [UUID: CGPoint]) -> some View {
+        // Конец в свёрнутой цепочке — позиции нет, линию рисовать некуда.
         if let fromLevel = document.graph.levelIndex(of: edge.from),
-           let toLevel = document.graph.levelIndex(of: edge.to) {
-            let from = point(positions[edge.from])
-            let to = point(positions[edge.to])
-            let fromR = LevelStyle.style(for: fromLevel).diameter / 2
-            let toR = LevelStyle.style(for: toLevel).diameter / 2
+           let toLevel = document.graph.levelIndex(of: edge.to),
+           let fromPosition = positions[edge.from],
+           let toPosition = positions[edge.to] {
+            let from = point(fromPosition)
+            let to = point(toPosition)
+            let fromR = document.graph.style(atLevel: fromLevel).diameter / 2
+            let toR = document.graph.style(atLevel: toLevel).diameter / 2
             let vertical = fromLevel != toLevel
             let sign: CGFloat = to.x >= from.x ? 1 : -1
             let start = vertical
@@ -825,7 +866,8 @@ struct CanvasRootView: View {
 
     @ViewBuilder
     private func nodeView(_ job: JobNode, level: Int, at basePosition: CGPoint) -> some View {
-        let diameter = LevelStyle.style(for: level).diameter
+        let style = document.graph.style(atLevel: level)
+        let diameter = style.diameter
         let isSelected = selection == job.id
         // Перетаскиваемая работа следует за курсором; остальные — на местах.
         let isDragging = dragNode?.id == job.id
@@ -835,11 +877,18 @@ struct CanvasRootView: View {
         let isHovered = cursorWithin(position, diameter / 2 + 8)
         let plusRight = CGPoint(x: position.x + diameter / 2 + 18, y: position.y)
         let plusBelow = CGPoint(x: position.x - diameter / 2 - 14, y: position.y + diameter / 2 + 14)
+        // Кнопка сворачивания — над плюсом справа: обе про то, что
+        // происходит справа от работы, но по разным делам.
+        let collapseControl = CGPoint(x: position.x + diameter / 2 + 16, y: position.y - diameter / 2 - 12)
+        // Цепочка работ уровня справа от этой: пока её нет, сворачивать нечего.
+        let chain = document.graph.chain(after: job.id)
+        let isCollapsed = job.isCollapsed && !chain.isEmpty
         // Зоны плюсов держат кнопки видимыми по пути от круга до клика;
         // источник активного связывания не должен исчезнуть посреди drag.
         // Во время переноса работы плюсы спрятаны.
         let showsPlus = dragNode == nil && (isSelected || isHovered || dragLink?.from == job.id
-            || cursorWithin(plusRight, 20) || cursorWithin(plusBelow, 20))
+            || cursorWithin(plusRight, 20) || cursorWithin(plusBelow, 20)
+            || cursorWithin(collapseControl, 20))
         // Узел под резиновой линией — подсветка цели связывания.
         let isLinkTarget = dragLink.map {
             $0.from != job.id
@@ -855,10 +904,10 @@ struct CanvasRootView: View {
         // Круг рендерится в размере × zoom и сжимается обратно — резкие
         // контуры при приближении (тот же приём, что у подписей).
         Circle()
-            .fill(LevelColors.fill(for: level))
+            .fill(LevelColors.fill(style))
             .overlay(
                 Circle().strokeBorder(
-                    inZone ? LevelColors.zoneStroke : LevelColors.stroke(for: level),
+                    inZone ? LevelColors.zoneStroke : LevelColors.stroke(style),
                     style: StrokeStyle(
                         lineWidth: 2 * scale,
                         dash: inZone ? [4 * scale, 3 * scale] : []
@@ -918,6 +967,13 @@ struct CanvasRootView: View {
                 Button("Сдвинуть вправо (⌘→)") {
                     document.perform(.reorder(job.id, direction: .right))
                 }
+                if !chain.isEmpty {
+                    Button(isCollapsed
+                           ? "Развернуть цепочку — \(chain.count) (⌥→)"
+                           : "Свернуть цепочку — \(chain.count) (⌥←)") {
+                        toggleChain(job)
+                    }
+                }
                 zoneMenuItems(for: job, level: level)
                 Divider()
                 Button("Выделить работы ниже") {
@@ -944,20 +1000,41 @@ struct CanvasRootView: View {
             }
             .gesture(nodeDragGesture(job))
 
+        // Свёрнутая цепочка: вместо плюса справа — счётчик скрытых работ.
+        // Плюс здесь спрятан намеренно: новая работа встала бы внутрь
+        // свёрнутой цепочки и исчезла с глаз.
+        if isCollapsed {
+            collapsedChainChip(count: chain.count) { toggleChain(job) }
+                .position(plusRight)
+                .transition(.scale(scale: 0.5).combined(with: .opacity))
+        }
+
+        if showsPlus, !chain.isEmpty, !isCollapsed {
+            // Свернуть цепочку — работы справа уходят под счётчик.
+            chainControl(
+                systemImage: "chevron.left.2",
+                help: "Свернуть цепочку работ уровня (⌥←)"
+            ) { toggleChain(job) }
+                .position(collapseControl)
+                .transition(.scale(scale: 0.5).combined(with: .opacity))
+        }
+
         if showsPlus {
-            // Связанная работа справа — тот же уровень.
-            nodePlusControl(
-                source: job,
-                nodeCenter: position,
-                help: "Клик — связанная работа справа; потяните до узла — связь"
-            ) {
-                commitEditingIfNeeded()
-                if let newId = document.perform(.addConnectedRight(of: job.id)) {
-                    startEditingNew(newId)
+            if !isCollapsed {
+                // Связанная работа справа — тот же уровень.
+                nodePlusControl(
+                    source: job,
+                    nodeCenter: position,
+                    help: "Клик — связанная работа справа; потяните до узла — связь"
+                ) {
+                    commitEditingIfNeeded()
+                    if let newId = document.perform(.addConnectedRight(of: job.id)) {
+                        startEditingNew(newId)
+                    }
                 }
+                .position(plusRight)
+                .transition(.scale(scale: 0.5).combined(with: .opacity))
             }
-            .position(plusRight)
-            .transition(.scale(scale: 0.5).combined(with: .opacity))
 
             // Связанная работа снизу — уровень ниже.
             nodePlusControl(
@@ -1004,7 +1081,7 @@ struct CanvasRootView: View {
         } else {
             // Двойной клик по подписи — правка текста работы
             // (по кругу — карточка).
-            nodeLabel(job, level: level)
+            nodeLabel(job, style: style)
                 .opacity(isDimmed ? 0.25 : 1)
                 .position(x: position.x, y: position.y + diameter / 2 + 32)
                 .onTapGesture(count: 2) { beginEditing(job) }
@@ -1035,6 +1112,58 @@ struct CanvasRootView: View {
                 }
             }
         }
+    }
+
+    /// Счётчик свёрнутой цепочки: сколько работ уровня скрыто справа.
+    /// Виден всегда (а не по ховеру) — иначе цепочка выглядела бы
+    /// оборванной, и потерянные работы было бы нечем вернуть.
+    private func collapsedChainChip(count: Int, action: @escaping () -> Void) -> some View {
+        HStack(spacing: 2) {
+            Text("\(count)")
+                .font(.system(size: 10 * scale, weight: .semibold))
+            Image(systemName: "chevron.right.2")
+                .font(.system(size: 8 * scale, weight: .bold))
+        }
+        .foregroundStyle(Color.accentColor)
+        .padding(.horizontal, 7 * scale)
+        .padding(.vertical, 4 * scale)
+        .background(Capsule().fill(.ultraThinMaterial))
+        .overlay(Capsule().strokeBorder(Color.accentColor.opacity(0.5), lineWidth: 1 * scale))
+        .scaleEffect(1 / scale)
+        .contentShape(Capsule())
+        .modifier(HoverPulse(idleOpacity: 0.95))
+        .help("Развернуть цепочку: \(count) скрытых работ уровня (⌥→)")
+        .onTapGesture(perform: action)
+    }
+
+    /// Кнопка сворачивания цепочки — того же размера и веса, что плюсы узла.
+    private func chainControl(
+        systemImage: String,
+        help: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Image(systemName: systemImage)
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(Color.accentColor)
+            .frame(width: 22, height: 22)
+            .background(Circle().fill(.ultraThinMaterial))
+            .overlay(Circle().strokeBorder(Color.accentColor.opacity(0.5), lineWidth: 1))
+            .contentShape(Circle())
+            .modifier(HoverPulse(idleOpacity: 0.85))
+            .help(help)
+            .onTapGesture(perform: action)
+    }
+
+    /// Свернуть/развернуть цепочку работы. Выделение и открытая карточка,
+    /// оказавшиеся внутри свёрнутой цепочки, переезжают на её голову —
+    /// иначе они остались бы на невидимом узле.
+    private func toggleChain(_ job: JobNode) {
+        commitEditingIfNeeded()
+        guard document.perform(.setCollapsed(job.id, !job.isCollapsed)) != nil else { return }
+        let hidden = document.graph.hiddenJobs()
+        if let current = detailsId, hidden.contains(current) { closeDetails() }
+        if let current = selection, hidden.contains(current) { selection = job.id }
+        focusBridge.focusCanvas()
     }
 
     /// Плюс у узла: клик — новая связанная работа, drag до другого узла —
@@ -1073,34 +1202,32 @@ struct CanvasRootView: View {
             )
     }
 
-    /// Перенос работы: зажать узел (long press) — работа «поднимается»,
-    /// drag ведёт её за курсором, отпускание — перенос на уровень и
-    /// позицию под курсором (тот же уровень — смена порядка).
+    /// Перенос работы: нажал левой кнопкой на узел и повёл — работа
+    /// «поднимается» и следует за курсором без паузы; отпускание —
+    /// перенос на уровень, в область и на позицию под курсором.
+    /// Тот же уровень — смена порядка внутри полосы (управление
+    /// пространством). Порог 6pt отделяет перенос от клика и двойного
+    /// клика по узлу — порог считается в экранных точках, поэтому
+    /// одинаков при любом масштабе.
     private func nodeDragGesture(_ job: JobNode) -> some Gesture {
-        LongPressGesture(minimumDuration: 0.25)
-            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.contentSpace)))
+        DragGesture(minimumDistance: 6 / max(scale, 0.01), coordinateSpace: .named(Self.contentSpace))
             .onChanged { value in
-                switch value {
-                case .second(true, nil):
-                    // Long press распознан: работа поднята, ждём движения.
+                if dragNode?.id != job.id {
+                    // Первое движение: работа поднята.
                     commitEditingIfNeeded()
                     selection = job.id
-                    dragNode = NodeDrag(id: job.id, current: nodeCenter(of: job.id))
-                case .second(true, .some(let drag)):
-                    dragNode = NodeDrag(id: job.id, current: drag.location)
-                default:
-                    break
+                    selectedEdge = nil
                 }
+                dragNode = NodeDrag(id: job.id, current: value.location)
             }
             .onEnded { value in
                 defer { dragNode = nil }
-                guard case .second(true, .some(let drag)) = value else { return }
                 let geometry = GraphLayout.geometry(document.graph)
-                if let target = dropTarget(for: drag.location, excluding: job.id, geometry: geometry) {
+                if let target = dropTarget(for: value.location, excluding: job.id, geometry: geometry) {
                     document.perform(.move(
                         job.id,
-                        toLevel: target.level,
-                        zone: target.zone,
+                        toLevel: target.levelIndex,
+                        zone: target.zoneID,
                         at: target.index
                     ))
                 }
@@ -1108,42 +1235,29 @@ struct CanvasRootView: View {
             }
     }
 
-    /// Текущий центр узла в координатах контента.
-    private func nodeCenter(of id: UUID) -> CGPoint {
-        point(GraphLayout.layout(document.graph)[id])
-    }
-
-    /// Целевая позиция перетаскиваемой работы: уровень — по y курсора,
-    /// область — по рамке под курсором (её нет — основная область),
-    /// индекс вставки — число работ этой области (без самой
-    /// перетаскиваемой) левее курсора. Совпадает с семантикой интента move.
+    /// Целевая позиция точки канваса — уровень, область и место в ней.
+    /// Геометрия в GraphCore (та же семантика у интентов move и addJob);
+    /// вью только переводит координаты контента в координаты раскладки.
+    /// `excluding` = nil — точка под новую работу (двойной клик).
     private func dropTarget(
         for location: CGPoint,
-        excluding dragged: UUID,
+        excluding dragged: UUID?,
         geometry: GraphLayout.Geometry
-    ) -> (level: Int, zone: UUID?, index: Int)? {
-        let levels = document.graph.levels
-        guard !levels.isEmpty else { return nil }
-        let raw = Int(((location.y - bandTop(0)) / LayoutMetrics.rowHeight).rounded(.down))
-        let level = min(max(raw, 0), levels.count - 1)
-        let zone = levels[level].zones.first { zone in
-            guard let span = geometry.zones[zone.id] else { return false }
-            let rect = zoneRect(span)
-            return location.x >= rect.minX && location.x <= rect.maxX
-        }?.id
-        let index = levels[level].jobs(in: zone)
-            .filter { $0.id != dragged }
-            .compactMap { geometry.positions[$0.id] }
-            .filter { point($0).x < location.x }
-            .count
-        return (level, zone, index)
+    ) -> GraphLayout.DropTarget? {
+        GraphLayout.dropTarget(
+            graph: document.graph,
+            geometry: geometry,
+            at: CGPoint(x: location.x - contentPadding, y: location.y - contentPadding),
+            bandOffset: nodeOffsetInBand,
+            excluding: dragged
+        )
     }
 
     /// Узел, чей круг (с небольшим допуском) накрывает точку контента.
     private func nodeID(at pointInContent: CGPoint) -> UUID? {
         let positions = GraphLayout.layout(document.graph)
         for (levelIndex, level) in document.graph.levels.enumerated() {
-            let radius = LevelStyle.style(for: levelIndex).diameter / 2 + 12
+            let radius = document.graph.style(atLevel: levelIndex).diameter / 2 + 12
             for job in level.jobs {
                 guard let raw = positions[job.id] else { continue }
                 let center = point(raw)
@@ -1156,7 +1270,7 @@ struct CanvasRootView: View {
     }
 
     @ViewBuilder
-    private func nodeLabel(_ job: JobNode, level: Int) -> some View {
+    private func nodeLabel(_ job: JobNode, style: LevelStyle) -> some View {
         // Шрифты и ширина умножены на zoom + обратный scaleEffect: текст
         // растрируется в натуральном размере и остаётся резким при любом
         // приближении (иначе внешний scaleEffect канваса растит растр 1x).
@@ -1167,7 +1281,13 @@ struct CanvasRootView: View {
                     .foregroundStyle(.secondary)
             }
             Text(job.verb)
-                .font(.system(size: (level == 0 ? 12 : 11) * scale, weight: level == 0 ? .semibold : .regular))
+                // Подпись следует за размером кружка, а не за номером
+                // полосы: кóровая работа на любом месте графа подписана
+                // одинаково.
+                .font(.system(
+                    size: (style.isTopScale ? 12 : 11) * scale,
+                    weight: style.isTopScale ? .semibold : .regular
+                ))
                 // Резерв 3 строки — совпадает с labelReserve раскладки;
                 // длиннее — truncation, полный текст в редакторе.
                 .lineLimit(job.role == nil ? 3 : 2)
@@ -1272,15 +1392,20 @@ struct CanvasRootView: View {
             return "Правый клик по выделенной работе — экспорт PNG · Esc — снять выделение"
         }
         if dragNode != nil {
-            return "Отпустите работу на нужном уровне и позиции — перенос"
+            return "Отпустите работу: другой уровень — перенос, та же полоса — новое место, рамка области — в область"
         }
         if detailsId != nil {
             return "Карточка работы: Esc или ✕ — закрыть и сохранить"
         }
-        if selection != nil {
-            return "Двойной клик — карточка · по подписи — текст · зажать — перенос · Tab — декомпозиция · Delete — удалить"
+        if let selection, !document.graph.chain(after: selection).isEmpty {
+            return document.graph.job(selection)?.isCollapsed == true
+                ? "⌥→ — развернуть цепочку · Tab — декомпозиция · Delete — удалить"
+                : "⌥← — свернуть цепочку · Tab — декомпозиция · Delete — удалить"
         }
-        return "Двойной клик — новая работа · Tab — работа сверху · зажать работу — перенос · драг — панорама"
+        if selection != nil {
+            return "Двойной клик — карточка · по подписи — текст · тянуть — перенос · Tab — декомпозиция · Delete — удалить"
+        }
+        return "Двойной клик — новая работа (внутри рамки — в её области) · тянуть работу — перенос · драг по пустому — панорама"
     }
 
     /// Zoom от центра видимой области (кнопки и меню, без курсора).
@@ -1314,16 +1439,24 @@ struct CanvasRootView: View {
         }
     }
 
-    /// Двойной клик по пустому месту — работа на уровне под курсором
+    /// Двойной клик по пустому месту — работа там, куда кликнули
     /// (конвенция Freeform/MindNode: пустое место + двойной клик = узел).
+    /// Точка задаёт всё: уровень по y, область по рамке под курсором
+    /// (клик внутри рамки создаёт работу в этой области), позицию
+    /// внутри области — по x.
     private func createJobAtEmptyPoint(_ location: CGPoint) {
         commitEditingIfNeeded()
-        let contentY = (location.y - offset.height) / scale
-        let levels = document.graph.levels
-        guard !levels.isEmpty else { return }
-        let index = Int(((contentY - bandTop(0)) / LayoutMetrics.rowHeight).rounded(.down))
-        let level = levels[min(max(index, 0), levels.count - 1)]
-        if let newId = document.perform(.addJob(level: level.id)) {
+        let content = CGPoint(
+            x: (location.x - offset.width) / scale,
+            y: (location.y - offset.height) / scale
+        )
+        let geometry = GraphLayout.geometry(document.graph)
+        guard let target = dropTarget(for: content, excluding: nil, geometry: geometry) else { return }
+        if let newId = document.perform(.addJob(
+            level: document.graph.levels[target.levelIndex].id,
+            zone: target.zoneID,
+            at: target.index
+        )) {
             startEditingNew(newId)
         }
     }
@@ -1407,6 +1540,16 @@ struct CanvasRootView: View {
             selection = nil
             selectedEdge = nil
             return true
+        case .optionLeft, .optionRight:
+            guard let selection else { return false }
+            commitEditingIfNeeded()
+            document.perform(.setCollapsed(selection, key == .optionLeft))
+            // Голова цепочки видна всегда — выделение никуда не уезжает,
+            // но карточка работы, ушедшей под счётчик, закрывается.
+            if let current = detailsId, document.graph.hiddenJobs().contains(current) {
+                closeDetails()
+            }
+            return true
         case .left, .right:
             return moveSelectionInLevel(key == .right ? 1 : -1)
         case .up:
@@ -1416,11 +1559,23 @@ struct CanvasRootView: View {
         }
     }
 
+    /// Состояние цепочки выделенной работы — для пунктов меню «Граф».
+    private var chainState: (hasChain: Bool, isCollapsed: Bool) {
+        guard let selection, let job = document.graph.job(selection) else { return (false, false) }
+        return (!document.graph.chain(after: selection).isEmpty, job.isCollapsed)
+    }
+
+    /// Работы уровня, которые видно на канвасе: работы свёрнутых цепочек
+    /// стрелками не выбираются — их на экране нет.
+    private func visibleJobs(level: Int, hidden: Set<UUID>) -> [JobNode] {
+        document.graph.levels[level].jobs.filter { !hidden.contains($0.id) }
+    }
+
     private func moveSelectionInLevel(_ delta: Int) -> Bool {
         guard let selection,
               let levelIndex = document.graph.levelIndex(of: selection)
         else { return false }
-        let jobs = document.graph.levels[levelIndex].jobs
+        let jobs = visibleJobs(level: levelIndex, hidden: document.graph.hiddenJobs())
         guard let index = jobs.firstIndex(where: { $0.id == selection }) else { return false }
         let target = index + delta
         guard target >= 0, target < jobs.count else { return false }
@@ -1433,11 +1588,12 @@ struct CanvasRootView: View {
         guard let selection,
               let levelIndex = document.graph.levelIndex(of: selection)
         else { return false }
-        let jobs = document.graph.levels[levelIndex].jobs
+        let hidden = document.graph.hiddenJobs()
+        let jobs = visibleJobs(level: levelIndex, hidden: hidden)
         let index = jobs.firstIndex(where: { $0.id == selection }) ?? 0
         var target = levelIndex + delta
         while target >= 0, target < document.graph.levels.count {
-            let targetJobs = document.graph.levels[target].jobs
+            let targetJobs = visibleJobs(level: target, hidden: hidden)
             if !targetJobs.isEmpty {
                 select(targetJobs[min(index, targetJobs.count - 1)].id)
                 return true
@@ -1501,7 +1657,7 @@ struct CanvasRootView: View {
     /// редактора коммитят черновик одним интентом.
     @ViewBuilder
     private func detailsCard(_ job: JobNode, level: Int, at position: CGPoint) -> some View {
-        let diameter = LevelStyle.style(for: level).diameter
+        let diameter = document.graph.style(atLevel: level).diameter
         let x = position.x + diameter / 2 + detailsCardSize.width / 2 + 26
         // Верх карточки — у верха узла; у верхней кромки контента прижимается.
         let y = max(
@@ -1944,6 +2100,12 @@ struct CanvasGraphCommands {
     let moveLeft: () -> Void
     let moveRight: () -> Void
     let deleteSelection: () -> Void
+    /// У выделенной работы есть развёрнутая цепочка справа.
+    let canCollapse: Bool
+    /// Выделенная работа — голова свёрнутой цепочки.
+    let canExpand: Bool
+    let collapseChain: () -> Void
+    let expandChain: () -> Void
 }
 
 struct CanvasGraphKey: FocusedValueKey {

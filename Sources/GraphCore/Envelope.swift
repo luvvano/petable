@@ -18,9 +18,13 @@ import Foundation
 /// v8: `zones` у уровня и `zoneID` у работы — отдельные области внутри
 /// полосы уровня (малые работы рядом с кóровыми: уровень тот же, продукт
 /// их не выполняет). Старые файлы читаются без областей.
-/// v1–v7 читаются и мигрируют на лету; запись всегда в v8.
+/// v9: `isCollapsed` у работы — свёрнутая цепочка работ уровня (работы
+/// справа скрыты с канваса). Старые файлы читаются развёрнутыми.
+/// v10: `parentID` у стадии — графы группируются в дерево (граф лежит
+/// «под» другим графом). Старые файлы читаются плоским списком.
+/// v1–v9 читаются и мигрируют на лету; запись всегда в v10.
 public struct Envelope: Codable, Equatable, Sendable {
-    public static let currentVersion = 8
+    public static let currentVersion = 10
     public static let jobGraphStageType = "jobGraph"
     public static let defaultGraphName = "Граф работ"
 
@@ -41,6 +45,10 @@ public struct Envelope: Codable, Equatable, Sendable {
         public var modifiedAt: Date?
         /// Кто создал стадию (v5); nil = человек.
         public var origin: ArtifactOrigin?
+        /// Граф, под которым лежит этот (v10); nil = верхний уровень.
+        /// Группировка графов — только структура списка, содержимое
+        /// графов друг от друга не зависит.
+        public var parentID: UUID?
         public var graph: WorkGraph
 
         public init(
@@ -49,6 +57,7 @@ public struct Envelope: Codable, Equatable, Sendable {
             name: String = Envelope.defaultGraphName,
             modifiedAt: Date? = nil,
             origin: ArtifactOrigin? = nil,
+            parentID: UUID? = nil,
             graph: WorkGraph
         ) {
             self.id = id
@@ -56,16 +65,18 @@ public struct Envelope: Codable, Equatable, Sendable {
             self.name = name
             self.modifiedAt = modifiedAt
             self.origin = origin
+            self.parentID = parentID
             var normalized = graph
             normalized.ensureCoreLevel()
             normalized.normalizeZones()
+            normalized.normalizeEdges()
             self.graph = normalized
         }
 
         /// Происхождение с учётом старых файлов без поля.
         public var resolvedOrigin: ArtifactOrigin { origin ?? .human }
 
-        enum CodingKeys: String, CodingKey { case id, type, name, modifiedAt, origin, graph }
+        enum CodingKeys: String, CodingKey { case id, type, name, modifiedAt, origin, parentID, graph }
 
         /// v2-стадии не имели `id` и `name` — при чтении подставляются
         /// значения по умолчанию, сохранение перезапишет файл в v3.
@@ -77,9 +88,11 @@ public struct Envelope: Codable, Equatable, Sendable {
                 ?? Envelope.defaultGraphName
             self.modifiedAt = try container.decodeIfPresent(Date.self, forKey: .modifiedAt)
             self.origin = try container.decodeIfPresent(ArtifactOrigin.self, forKey: .origin)
+            self.parentID = try container.decodeIfPresent(UUID.self, forKey: .parentID)
             var graph = try container.decode(WorkGraph.self, forKey: .graph)
             graph.ensureCoreLevel() // файлы до v7 без core-уровня
             graph.normalizeZones() // порядок работ по областям (v8)
+            graph.normalizeEdges() // связи снизу вверх из старых файлов
             self.graph = graph
         }
     }
@@ -90,6 +103,8 @@ public struct Envelope: Codable, Equatable, Sendable {
 
     public init(stages: [Stage], research: Research? = nil, segmentation: Segmentation? = nil) {
         self.version = Self.currentVersion
+        var stages = stages
+        stages.normalizeGraphParents()
         self.stages = stages
         self.research = research
         self.segmentation = segmentation
@@ -139,6 +154,9 @@ public struct Envelope: Codable, Equatable, Sendable {
             // decodeIfPresent в Stage.init(from:).
             self.stages = try container.decode([Stage].self, forKey: .stages)
         }
+        // Битые ссылки на родителя (правленый руками файл) не должны
+        // прятать графы из сайдбара — уезжают на верхний уровень.
+        self.stages.normalizeGraphParents()
         self.research = try container.decodeIfPresent(Research.self, forKey: .research)
         self.segmentation = try container.decodeIfPresent(Segmentation.self, forKey: .segmentation)
         self.version = Self.currentVersion

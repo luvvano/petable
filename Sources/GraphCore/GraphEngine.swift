@@ -13,9 +13,11 @@ public enum GraphIntent: Equatable, Sendable {
     /// Удалить уровень. Только пустой, не единственный и не core —
     /// иначе no-op.
     case deleteLevel(UUID)
-    /// Автономная работа: добавляется в конец уровня (или в конец его
-    /// области `zone`), ни с чем не связана.
-    case addJob(level: UUID, zone: UUID? = nil)
+    /// Автономная работа: добавляется на уровень (или в его область
+    /// `zone`), ни с чем не связана. `at` — позиция внутри области:
+    /// по умолчанию конец, за пределами — clamp. Двойной клик по канвасу
+    /// передаёт позицию под курсором — работа появляется там, где кликнули.
+    case addJob(level: UUID, zone: UUID? = nil, at: Int = .max)
     /// Связанная работа справа на том же уровне + ребро от исходной.
     case addConnectedRight(of: UUID)
     /// Связанная работа на уровне ниже + ребро от исходной.
@@ -50,6 +52,9 @@ public enum GraphIntent: Equatable, Sendable {
     /// Новая область на уровне — рамка «тот же уровень, другое покрытие
     /// продуктом» (малые работы рядом с кóровыми). Создаётся сразу
     /// с одной пустой работой: фокус на неё, можно печатать.
+    /// Только на core-уровне: рамка «продукт этого не выполняет»
+    /// осмысленна лишь рядом с кóровыми работами — на остальных
+    /// уровнях no-op.
     case addZone(level: UUID)
     /// Имя области. Пустая строка (после trim) — сброс к «SMALL JOBS».
     case renameZone(UUID, name: String)
@@ -59,6 +64,12 @@ public enum GraphIntent: Equatable, Sendable {
     /// Перенести работу в область своего уровня (nil — обратно
     /// в основную). Зона чужого уровня или та же область — no-op.
     case setJobZone(UUID, zone: UUID?)
+    /// Свернуть (true) или развернуть (false) цепочку работ одного
+    /// уровня: работы, связанные с этой внутри уровня, скрываются
+    /// с канваса вместе со своей декомпозицией. Работа без цепочки
+    /// справа не сворачивается (флаг был бы невидимой пылью в файле),
+    /// то же состояние — no-op.
+    case setCollapsed(UUID, Bool)
 }
 
 public enum ReorderDirection: Equatable, Sendable {
@@ -93,13 +104,13 @@ public enum GraphEngine {
             copy.levels.remove(at: index)
             return GraphResult(graph: copy, focus: nil)
 
-        case let .addJob(level: levelID, zone: zoneID):
+        case let .addJob(level: levelID, zone: zoneID, at: position):
             guard let index = graph.levelIndex(id: levelID) else { return nil }
             // Область чужого уровня игнорируется — работа уходит в основную.
             let zone = zoneID.flatMap { graph.levels[index].zone($0)?.id }
             let job = JobNode(verb: "", zoneID: zone)
             var copy = graph
-            let insertAt = copy.levels[index].insertionIndex(zone: zone, at: .max)
+            let insertAt = copy.levels[index].insertionIndex(zone: zone, at: position)
             copy.levels[index].jobs.insert(job, at: insertAt)
             return GraphResult(graph: copy, focus: job.id)
 
@@ -112,7 +123,13 @@ public enum GraphEngine {
             let job = JobNode(verb: "", zoneID: source.zoneID)
             var copy = graph
             let jobs = copy.levels[levelIndex].jobs
-            let insertAt = (jobs.firstIndex { $0.id == sourceID }.map { $0 + 1 }) ?? jobs.count
+            let sourceIndex = jobs.firstIndex { $0.id == sourceID }
+            let insertAt = (sourceIndex.map { $0 + 1 }) ?? jobs.count
+            // Свёрнутая цепочка разворачивается: иначе новая работа
+            // сразу оказалась бы скрытой — жест выглядел бы как no-op.
+            if let sourceIndex {
+                copy.levels[levelIndex].jobs[sourceIndex].isCollapsed = false
+            }
             copy.levels[levelIndex].jobs.insert(job, at: insertAt)
             copy.edges.append(JobEdge(from: sourceID, to: job.id))
             return GraphResult(graph: copy, focus: job.id)
@@ -159,6 +176,9 @@ public enum GraphEngine {
             job.zoneID = zoneID.flatMap { copy.levels[toLevel].zone($0)?.id }
             let clamped = copy.levels[toLevel].insertionIndex(zone: job.zoneID, at: insertAt)
             copy.levels[toLevel].jobs.insert(job, at: clamped)
+            // Перенос на другой уровень переворачивает связи работы
+            // относительно уровней — направление приводится обратно.
+            copy.normalizeEdges()
             guard copy != graph else { return nil }
             return GraphResult(graph: copy, focus: id)
 
@@ -181,6 +201,10 @@ public enum GraphEngine {
             }
             if existing.isEmpty {
                 copy.edges.append(JobEdge(from: fromID, to: toID))
+                // Связь тянут в любую сторону — межуровневая приводится
+                // к «сверху вниз», иначе обходы по исходящим связям
+                // (подсветка декомпозиции, свёртка) её не увидят.
+                copy.normalizeEdges()
             } else {
                 copy.edges.removeAll { edge in existing.contains(edge) }
             }
@@ -234,10 +258,17 @@ public enum GraphEngine {
             for levelIndex in copy.levels.indices {
                 copy.levels[levelIndex].isCore = copy.levels[levelIndex].id == id
             }
+            // Прежний core перестал быть кóровым — его области снимаются
+            // (работы остаются на уровне, как при deleteZone).
+            copy.normalizeZones()
             return GraphResult(graph: copy, focus: nil)
 
         case let .addZone(level: levelID):
-            guard let index = graph.levelIndex(id: levelID) else { return nil }
+            // Область — разметка «работы того же уровня, которые продукт
+            // не выполняет»; она имеет смысл только рядом с кóровыми.
+            guard let index = graph.levelIndex(id: levelID),
+                  graph.levels[index].isCore
+            else { return nil }
             let zone = LevelZone()
             // Пустая рамка бесполезна — область появляется сразу
             // с работой в режиме редактирования.
@@ -279,6 +310,17 @@ public enum GraphEngine {
             var copy = graph
             copy.levels[levelIndex].jobs[jobIndex].zoneID = target
             copy.levels[levelIndex].normalizeZones()
+            return GraphResult(graph: copy, focus: id)
+
+        case let .setCollapsed(id, collapsed):
+            guard let levelIndex = graph.levelIndex(of: id),
+                  let jobIndex = graph.levels[levelIndex].jobs.firstIndex(where: { $0.id == id }),
+                  graph.levels[levelIndex].jobs[jobIndex].isCollapsed != collapsed
+            else { return nil }
+            // Сворачивать нечего — цепочки справа нет.
+            guard !collapsed || !graph.chain(after: id).isEmpty else { return nil }
+            var copy = graph
+            copy.levels[levelIndex].jobs[jobIndex].isCollapsed = collapsed
             return GraphResult(graph: copy, focus: id)
         }
     }

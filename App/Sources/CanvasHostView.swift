@@ -6,6 +6,9 @@ enum CanvasKey {
     case tab, enter, cmdReturn, escape, delete
     case left, right, up, down
     case cmdLeft, cmdRight
+    /// ⌥← / ⌥→ — свернуть и развернуть цепочку работ уровня
+    /// (та же пара клавиш, что сворачивает ветку в списках macOS).
+    case optionLeft, optionRight
     /// ⌘= — синоним ⌘+ (zoom in без Shift, как во всех приложениях Apple).
     case cmdPlus
 }
@@ -134,14 +137,15 @@ final class EventCatcherView: NSView {
 
     private func canvasKey(for event: NSEvent) -> CanvasKey? {
         let cmd = event.modifierFlags.contains(.command)
+        let option = event.modifierFlags.contains(.option)
         switch event.keyCode {
         case 48: return .tab
         case 24, 69: return cmd ? .cmdPlus : nil // "=" и keypad "+"
         case 36: return cmd ? .cmdReturn : .enter
         case 53: return .escape
         case 51, 117: return .delete // backspace и forward-delete
-        case 123: return cmd ? .cmdLeft : .left
-        case 124: return cmd ? .cmdRight : .right
+        case 123: return cmd ? .cmdLeft : (option ? .optionLeft : .left)
+        case 124: return cmd ? .cmdRight : (option ? .optionRight : .right)
         case 125: return .down
         case 126: return .up
         default: return nil

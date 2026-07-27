@@ -82,6 +82,11 @@ struct CanvasGraphMenuCommands: Commands {
             Button("Сдвинуть вправо (⌘→)") { graph?.moveRight() }
                 .disabled(graph?.hasSelection != true)
             Divider()
+            Button("Свернуть цепочку (⌥←)") { graph?.collapseChain() }
+                .disabled(graph?.canCollapse != true)
+            Button("Развернуть цепочку (⌥→)") { graph?.expandChain() }
+                .disabled(graph?.canExpand != true)
+            Divider()
             Button("Удалить работу (Delete)") { graph?.deleteSelection() }
                 .disabled(graph?.hasSelection != true)
         }
@@ -142,15 +147,20 @@ struct AppShellView: View {
     @StateObject private var chatController = AgentChatController()
     @State private var graphFilter: OriginFilter = .all
     @State private var interviewFilter: OriginFilter = .all
+    /// Свёрнутые группы графов; пустое множество = все раскрыты
+    /// (группу создают, чтобы её видеть).
+    @State private var collapsedGraphs: Set<UUID> = []
+    /// Граф, над которым сейчас висит перетаскиваемый — подсветка цели.
+    @State private var graphDropTarget: UUID?
     @FocusState private var renameFocused: Bool
 
     var body: some View {
         NavigationSplitView {
             List(selection: selectionBinding) {
                 DisclosureGroup(isExpanded: $graphsExpanded) {
-                    ForEach(document.graphStages.filter { graphFilter.matches($0.resolvedOrigin) }) { stage in
-                        graphRow(stage)
-                            .tag(SidebarItem.graph(stage.id))
+                    ForEach(graphOutlineRows) { row in
+                        graphRow(row)
+                            .tag(SidebarItem.graph(row.stage.id))
                     }
                     newItemRow("Создать новый", help: "Добавить граф работ в проект") {
                         document.addGraph()
@@ -513,18 +523,31 @@ struct AppShellView: View {
         )
     }
 
+    /// Дерево графов проекта в плоском виде: свёрнутые группы скрыты,
+    /// фильтр по происхождению не рвёт группу (родитель виден, если
+    /// подходит кто-то в его поддереве).
+    private var graphOutlineRows: [Envelope.GraphOutlineRow] {
+        document.stages.graphOutline(collapsed: collapsedGraphs) { stage in
+            graphFilter.matches(stage.resolvedOrigin)
+        }
+    }
+
     @ViewBuilder
-    private func graphRow(_ stage: Envelope.Stage) -> some View {
+    private func graphRow(_ row: Envelope.GraphOutlineRow) -> some View {
+        let stage = row.stage
         if renamingID == stage.id {
             renameField("Название графа") { document.renameGraph(stage.id, to: $0) }
+                .padding(.leading, graphIndent(row))
         } else {
             sidebarRow(
                 id: stage.id,
                 name: stage.name,
                 icon: "circle.hexagonpath",
                 isAgent: stage.resolvedOrigin == .agent,
-                deletable: document.graphStages.count > 1,
-                deleteHelp: "Удалить граф",
+                deletable: document.canDeleteGraph(stage.id),
+                deleteHelp: row.hasChildren
+                    ? "Удалить граф вместе с вложенными"
+                    : "Удалить граф",
                 onSelect: { document.selectGraph(stage.id) },
                 onDelete: { document.deleteGraph(stage.id) },
                 onRename: { beginRename(id: stage.id, name: stage.name) },
@@ -532,9 +555,98 @@ struct AppShellView: View {
                     ("Экспортировать в JSON…", { ExportImport.exportGraphJSON(stage) }),
                     ("Экспортировать в PNG…", { ExportImport.exportGraphPNG(stage) }),
                     ("Скопировать JSON", { ExportImport.copyGraphJSON(stage) }),
-                ]
+                ],
+                leadingContextItems: AnyView(graphContextItems(stage)),
+                indent: graphIndent(row),
+                disclosure: row.hasChildren
+                    ? RowDisclosure(
+                        isExpanded: !collapsedGraphs.contains(stage.id),
+                        toggle: { toggleGraphGroup(stage.id) }
+                    )
+                    : nil
             )
+            // Перетащить граф на граф — положить его в эту группу:
+            // прямой жест группировки, меню «Переместить» дублирует
+            // его для клавиатуры и длинных списков.
+            .draggable(stage.id.uuidString) {
+                Label(stage.name, systemImage: "circle.hexagonpath")
+            }
+            .dropDestination(for: String.self) { items, _ in
+                dropGraph(items, onto: stage.id)
+            } isTargeted: { targeted in
+                graphDropTarget = targeted
+                    ? stage.id
+                    : (graphDropTarget == stage.id ? nil : graphDropTarget)
+            }
+            .listRowBackground(
+                graphDropTarget == stage.id
+                    ? Color.accentColor.opacity(0.18)
+                    : nil
+            )
+            // Опора UI-тестов: строк графа в сайдбаре может быть много,
+            // а имена совпадают с именем секции.
+            .accessibilityIdentifier("graphRow")
         }
+    }
+
+    /// Пункты меню графа, специфичные для группировки: создать вложенный
+    /// и перенести в другую группу.
+    @ViewBuilder
+    private func graphContextItems(_ stage: Envelope.Stage) -> some View {
+        Button("Создать новый внутри") {
+            collapsedGraphs.remove(stage.id) // новый граф должен быть виден
+            document.addGraph(parent: stage.id)
+        }
+        Menu("Переместить") {
+            if stage.parentID != nil {
+                Button("На верхний уровень") {
+                    document.nestGraph(stage.id, under: nil)
+                }
+                Divider()
+            }
+            ForEach(nestTargets(for: stage), id: \.id) { target in
+                Button(target.name) {
+                    collapsedGraphs.remove(target.id)
+                    document.nestGraph(stage.id, under: target.id)
+                }
+            }
+        }
+        .disabled(stage.parentID == nil && nestTargets(for: stage).isEmpty)
+    }
+
+    /// Куда можно вложить граф: любой другой граф, кроме текущего
+    /// родителя и собственного поддерева (цикл спрятал бы группу).
+    private func nestTargets(for stage: Envelope.Stage) -> [Envelope.Stage] {
+        document.graphStages.filter { candidate in
+            candidate.id != stage.parentID
+                && document.stages.canNestGraph(stage.id, under: candidate.id)
+        }
+    }
+
+    /// Отступ строки по глубине вложенности.
+    private func graphIndent(_ row: Envelope.GraphOutlineRow) -> CGFloat {
+        CGFloat(row.depth) * 14
+    }
+
+    private func toggleGraphGroup(_ id: UUID) {
+        if collapsedGraphs.contains(id) {
+            collapsedGraphs.remove(id)
+        } else {
+            collapsedGraphs.insert(id)
+        }
+    }
+
+    /// Дроп графа в группу. Возвращает, принят ли он: чужие строки
+    /// (интервью, текст) и циклы отбрасываются.
+    private func dropGraph(_ items: [String], onto parent: UUID) -> Bool {
+        graphDropTarget = nil
+        guard let raw = items.first,
+              let dragged = UUID(uuidString: raw),
+              document.stages.canNestGraph(dragged, under: parent)
+        else { return false }
+        collapsedGraphs.remove(parent)
+        document.nestGraph(dragged, under: parent)
+        return true
     }
 
     @ViewBuilder
@@ -623,8 +735,15 @@ struct AppShellView: View {
         }
     }
 
+    /// Треугольник раскрытия группы у строки сайдбара.
+    private struct RowDisclosure {
+        var isExpanded: Bool
+        var toggle: () -> Void
+    }
+
     /// Строка сайдбара: имя + бейдж «агент» + корзина при наведении
     /// + контекстное меню (переименовать, экспорт, удалить).
+    /// `indent` и `disclosure` рисуют вложенность групп графов.
     private func sidebarRow(
         id: UUID,
         name: String,
@@ -636,9 +755,32 @@ struct AppShellView: View {
         onDelete: @escaping () -> Void,
         onRename: (() -> Void)?,
         exportItems: [(title: String, action: () -> Void)] = [],
-        extraContextItems: AnyView? = nil
+        extraContextItems: AnyView? = nil,
+        leadingContextItems: AnyView? = nil,
+        indent: CGFloat = 0,
+        disclosure: RowDisclosure? = nil
     ) -> some View {
-        HStack {
+        HStack(spacing: 2) {
+            // Место под треугольник занято всегда — иначе имена строк
+            // с потомками и без разъезжаются по горизонтали.
+            Group {
+                if let disclosure {
+                    Button(action: disclosure.toggle) {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .rotationEffect(.degrees(disclosure.isExpanded ? 90 : 0))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(disclosure.isExpanded ? "Свернуть группу" : "Развернуть группу")
+                    // Опора UI-тестов: «у этого графа есть группа».
+                    .accessibilityIdentifier("graphGroupToggle")
+                } else {
+                    Color.clear
+                }
+            }
+            .frame(width: 12, height: 12)
             Label(name, systemImage: icon)
             if isAgent {
                 Image(systemName: "sparkles")
@@ -657,6 +799,7 @@ struct AppShellView: View {
                 .help(deleteHelp)
             }
         }
+        .padding(.leading, indent)
         .onHover { inside in
             if inside {
                 hoveredRow = id
@@ -670,6 +813,10 @@ struct AppShellView: View {
         .gesture(TapGesture(count: 2).onEnded { onRename?() })
         .simultaneousGesture(TapGesture().onEnded { onSelect() })
         .contextMenu {
+            if let leadingContextItems {
+                leadingContextItems
+                Divider()
+            }
             if let onRename {
                 Button("Переименовать", action: onRename)
             }

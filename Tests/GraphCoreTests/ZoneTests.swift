@@ -5,7 +5,8 @@ import Testing
 
 /// Области уровня: работы того же уровня, которые продукт не выполняет
 /// (малые работы рядом с кóровыми). Уровень один — областей на нём
-/// несколько, каждая со своей рамкой и именем.
+/// несколько, каждая со своей рамкой и именем. Области бывают только
+/// у core-уровня.
 @Suite("Области уровня")
 struct ZoneTests {
     /// Core-уровень: две кóровые работы + область с двумя малыми.
@@ -44,11 +45,45 @@ struct ZoneTests {
                     JobNode(verb: "main2"),
                     JobNode(verb: "b2", zoneID: zoneB.id),
                 ],
+                isCore: true,
                 zones: [zoneA, zoneB]
             )
         ])
         graph.normalizeZones()
         #expect(graph.levels[0].jobs.map(\.verb) == ["main1", "main2", "a1", "b1", "b2"])
+    }
+
+    @Test("Область не на core-уровне снимается, её работы уходят в основную")
+    func normalizeDropsZonesOutsideCore() throws {
+        let zone = LevelZone(name: "SMALL JOBS")
+        var graph = WorkGraph(levels: [
+            GraphLevel(jobs: [JobNode(verb: "кóровая")], isCore: true),
+            GraphLevel(
+                jobs: [JobNode(verb: "микро"), JobNode(verb: "чужая малая", zoneID: zone.id)],
+                zones: [zone]
+            ),
+        ])
+        graph.normalizeZones()
+        #expect(graph.levels[1].zones.isEmpty)
+        // Работы остались на уровне — потерялась только рамка.
+        #expect(graph.levels[1].jobs.map(\.verb) == ["микро", "чужая малая"])
+        #expect(graph.levels[1].jobs.allSatisfy { $0.zoneID == nil })
+        // Core не тронут.
+        #expect(graph.levels[0].jobs.count == 1)
+    }
+
+    @Test("Конверт: область не на core-уровне не переживает чтение файла")
+    func envelopeDropsZonesOutsideCore() throws {
+        let zone = LevelZone(name: "SMALL JOBS")
+        let graph = WorkGraph(levels: [
+            GraphLevel(jobs: [JobNode(verb: "кóровая")], isCore: true),
+            GraphLevel(jobs: [JobNode(verb: "малая", zoneID: zone.id)], zones: [zone]),
+        ])
+        let decoded = try Envelope.decode(try Envelope(graph: graph).encoded())
+        let levels = try #require(decoded.jobGraph?.levels)
+        #expect(levels[1].zones.isEmpty)
+        #expect(levels[1].jobs.map(\.verb) == ["малая"])
+        #expect(levels[1].jobs[0].zoneID == nil)
     }
 
     @Test("Ссылка на несуществующую область сбрасывается в основную")
@@ -110,6 +145,31 @@ struct ZoneTests {
         #expect(GraphEngine.apply(.addZone(level: UUID()), to: graph) == nil)
     }
 
+    @Test("addZone: не на core-уровне — no-op")
+    func addZoneOnlyOnCore() throws {
+        let graph = WorkGraph(levels: [
+            GraphLevel(jobs: [JobNode(verb: "кóровая")], isCore: true),
+            GraphLevel(jobs: [JobNode(verb: "микро")]),
+        ])
+        #expect(GraphEngine.apply(.addZone(level: graph.levels[1].id), to: graph) == nil)
+        #expect(GraphEngine.apply(.addZone(level: graph.levels[0].id), to: graph) != nil)
+    }
+
+    @Test("setCoreLevel: прежний core теряет области, работы остаются")
+    func setCoreLevelDropsZones() throws {
+        var graph = coreWithZone()
+        graph.levels.append(GraphLevel(jobs: [JobNode(verb: "микро")]))
+        let result = try #require(GraphEngine.apply(.setCoreLevel(graph.levels[1].id), to: graph))
+        #expect(result.graph.levels[0].zones.isEmpty)
+        #expect(result.graph.levels[0].jobs.count == 4)
+        #expect(result.graph.levels[0].jobs.allSatisfy { $0.zoneID == nil })
+        #expect(result.graph.levels[1].isCore)
+        // На новом core область уже можно завести.
+        #expect(GraphEngine.apply(
+            .addZone(level: result.graph.levels[1].id), to: result.graph
+        ) != nil)
+    }
+
     @Test("addJob(zone:): работа встаёт в конец области, порядок остаётся сгруппированным")
     func addJobInZone() throws {
         let graph = coreWithZone()
@@ -121,6 +181,37 @@ struct ZoneTests {
         #expect(result.graph.levels[0].jobs.last?.id == result.focus)
         // Работы основной области по-прежнему впереди.
         #expect(result.graph.levels[0].jobs.prefix(2).allSatisfy { $0.zoneID == nil })
+    }
+
+    @Test("addJob(at:): двойной клик кладёт работу на позицию под курсором внутри области")
+    func addJobAtPositionInZone() throws {
+        let graph = coreWithZone()
+        let zone = zoneID(graph)
+        // Позиция 1 внутри области — между двумя её работами.
+        let result = try #require(GraphEngine.apply(
+            .addJob(level: graph.levels[0].id, zone: zone, at: 1), to: graph
+        ))
+        let jobs = result.graph.levels[0].jobs(in: zone)
+        #expect(jobs.map(\.verb) == ["подписать акты", "", "сдать декларацию"])
+        #expect(jobs[1].id == result.focus)
+        // Работы основной области не сдвинулись.
+        #expect(result.graph.levels[0].jobs(in: nil).map(\.verb) == ["закрыть месяц", "сверить отчёты"])
+
+        // Позиция за пределами области — clamp к её краям.
+        let last = try #require(GraphEngine.apply(
+            .addJob(level: graph.levels[0].id, zone: zone, at: 99), to: graph
+        ))
+        #expect(last.graph.levels[0].jobs.last?.id == last.focus)
+        let first = try #require(GraphEngine.apply(
+            .addJob(level: graph.levels[0].id, zone: zone, at: -5), to: graph
+        ))
+        #expect(first.graph.levels[0].jobs(in: zone).first?.id == first.focus)
+        // Основная область — та же семантика позиции.
+        let inMain = try #require(GraphEngine.apply(
+            .addJob(level: graph.levels[0].id, at: 0), to: graph
+        ))
+        #expect(inMain.graph.levels[0].jobs.first?.id == inMain.focus)
+        #expect(inMain.graph.levels[0].jobs.first?.zoneID == nil)
     }
 
     @Test("addJob: область чужого уровня игнорируется — работа в основной области")
@@ -276,26 +367,64 @@ struct ZoneTests {
 
     // MARK: - Раскладка
 
-    @Test("Раскладка: область правее основной, зазор ≥ zoneGap, рамка покрывает работы")
+    @Test("Раскладка: область правее основной, зазор = zoneGap, рамка покрывает работы")
     func layoutSeparatesZone() throws {
         let graph = coreWithZone()
         let zone = zoneID(graph)
         let geometry = GraphLayout.geometry(graph)
         let jobs = graph.levels[0].jobs
         let xs = jobs.map { geometry.positions[$0.id]!.x }
+        let half = LayoutMetrics.columnWidth / 2
 
         // Уровень один — все работы на одной высоте.
         #expect(Set(jobs.map { geometry.positions[$0.id]!.y }) == [0])
-        // Между областями — обычная дистанция плюс зазор.
-        #expect(xs[2] - xs[1] == LayoutMetrics.columnWidth + LayoutMetrics.zoneGap)
         #expect(xs[3] - xs[2] == LayoutMetrics.columnWidth)
 
         let span = try #require(geometry.zones[zone])
         #expect(span.levelIndex == 0)
         #expect(span.minX < xs[2])
         #expect(span.maxX > xs[3])
-        // Рамка не наезжает на подпись работы основной области.
-        #expect(span.minX > xs[1] + LayoutMetrics.columnWidth / 2)
+        // Рамка начинается ровно через zoneGap после колонки последней
+        // работы основной области — «рядом, справа», без наезда.
+        #expect(span.minX - (xs[1] + half) == LayoutMetrics.zoneGap)
+    }
+
+    @Test("Раскладка: новая область встаёт справа от существующей, рамки не пересекаются")
+    func layoutPlacesNewZoneToTheRight() throws {
+        var graph = coreWithZone()
+        // Как в приложении: кнопка «+ область» → addZone на том же уровне.
+        let added = try #require(GraphEngine.apply(.addZone(level: graph.levels[0].id), to: graph))
+        graph = added.graph
+        // Пустая работа новой области — как после ввода текста.
+        let newJob = try #require(added.focus)
+        graph = try #require(GraphEngine.apply(.setText(newJob, raw: "малая рядом"), to: graph)).graph
+
+        let zones = graph.levels[0].zones
+        #expect(zones.count == 2)
+        let geometry = GraphLayout.geometry(graph)
+        let first = try #require(geometry.zones[zones[0].id])
+        let second = try #require(geometry.zones[zones[1].id])
+
+        // Новая рамка целиком правее старой и не вложена в неё.
+        #expect(second.minX > first.maxX)
+        #expect(second.minX - first.maxX == LayoutMetrics.zoneGap)
+        // Работа новой области — внутри её рамки, а не в чужой.
+        let x = try #require(geometry.positions[newJob]?.x)
+        #expect(x > second.minX && x < second.maxX)
+        #expect(x > first.maxX)
+    }
+
+    @Test("Раскладка: рамка левее самой левой работы не уезжает за кромку")
+    func layoutNormalizesLeftmostZoneFrame() throws {
+        let zone = LevelZone()
+        // На уровне нет основных работ — крайняя слева именно рамка.
+        let graph = WorkGraph(levels: [
+            GraphLevel(jobs: [JobNode(verb: "малая", zoneID: zone.id)], isCore: true, zones: [zone])
+        ])
+        let geometry = GraphLayout.geometry(graph)
+        let span = try #require(geometry.zones[zone.id])
+        #expect(span.minX == -LayoutMetrics.columnWidth / 2)
+        #expect(geometry.positions.values.allSatisfy { $0.x > span.minX })
     }
 
     @Test("Раскладка: пустая область резервирует место под свою рамку")
@@ -305,6 +434,7 @@ struct ZoneTests {
         let graph = WorkGraph(levels: [
             GraphLevel(
                 jobs: [JobNode(verb: "кóровая"), JobNode(verb: "малая", zoneID: other.id)],
+                isCore: true,
                 zones: [zone, other]
             )
         ])
@@ -329,15 +459,128 @@ struct ZoneTests {
         #expect(span.minX > 0)
     }
 
+    // MARK: - Попадание точки канваса (драг и двойной клик)
+
+    /// Метрика канваса: центр узла ниже верхней кромки полосы на 50pt.
+    private let bandOffset: CGFloat = 50
+
+    @Test("Точка внутри рамки области — эта область, не основная")
+    func dropTargetHitsZone() throws {
+        let graph = coreWithZone()
+        let zone = zoneID(graph)
+        let geometry = GraphLayout.geometry(graph)
+        let span = try #require(geometry.zones[zone])
+
+        // Двойной клик по пустому месту внутри рамки.
+        let inside = try #require(GraphLayout.dropTarget(
+            graph: graph, geometry: geometry,
+            at: CGPoint(x: span.midX, y: 0), bandOffset: bandOffset
+        ))
+        #expect(inside.levelIndex == 0)
+        #expect(inside.zoneID == zone)
+
+        // Слева от рамки — основная область того же уровня.
+        let outside = try #require(GraphLayout.dropTarget(
+            graph: graph, geometry: geometry,
+            at: CGPoint(x: span.minX - 1, y: 0), bandOffset: bandOffset
+        ))
+        #expect(outside.zoneID == nil)
+        // Правее рамки — тоже основная область (рамка кончилась).
+        let right = try #require(GraphLayout.dropTarget(
+            graph: graph, geometry: geometry,
+            at: CGPoint(x: span.maxX + 1, y: 0), bandOffset: bandOffset
+        ))
+        #expect(right.zoneID == nil)
+    }
+
+    @Test("Позиция внутри области — сколько её работ левее точки")
+    func dropTargetIndexWithinZone() throws {
+        let graph = coreWithZone()
+        let zone = zoneID(graph)
+        let geometry = GraphLayout.geometry(graph)
+        let xs = graph.levels[0].jobs(in: zone).map { geometry.positions[$0.id]!.x }
+
+        func index(atX x: CGFloat, excluding: UUID? = nil) throws -> Int {
+            try #require(GraphLayout.dropTarget(
+                graph: graph, geometry: geometry,
+                at: CGPoint(x: x, y: 0), bandOffset: bandOffset, excluding: excluding
+            )).index
+        }
+        #expect(try index(atX: xs[0] - 10) == 0)
+        #expect(try index(atX: (xs[0] + xs[1]) / 2) == 1)
+        #expect(try index(atX: xs[1] + 10) == 2)
+
+        // Перетаскиваемая работа не считается соседкой сама себе.
+        let dragged = graph.levels[0].jobs(in: zone)[0].id
+        #expect(try index(atX: xs[1] + 10, excluding: dragged) == 1)
+    }
+
+    @Test("Уровень по y: полоса под точкой, за краями графа — крайняя")
+    func dropTargetPicksLevel() throws {
+        var graph = coreWithZone()
+        graph.levels.append(GraphLevel(jobs: [JobNode(verb: "микро")]))
+        let geometry = GraphLayout.geometry(graph)
+
+        func level(atY y: CGFloat) throws -> Int {
+            try #require(GraphLayout.dropTarget(
+                graph: graph, geometry: geometry,
+                at: CGPoint(x: 0, y: y), bandOffset: bandOffset
+            )).levelIndex
+        }
+        #expect(try level(atY: 0) == 0)
+        #expect(try level(atY: LayoutMetrics.rowHeight) == 1)
+        // Выше верхней полосы и ниже нижней — крайние уровни, не nil.
+        #expect(try level(atY: -500) == 0)
+        #expect(try level(atY: 10 * LayoutMetrics.rowHeight) == 1)
+        // Граф без уровней — некуда класть.
+        #expect(GraphLayout.dropTarget(
+            graph: WorkGraph(), geometry: GraphLayout.Geometry(),
+            at: .zero, bandOffset: bandOffset
+        ) == nil)
+    }
+
+    @Test("Драг работы в рамку области и обратно — через dropTarget и move")
+    func dragJobIntoZoneAndBack() throws {
+        var graph = coreWithZone()
+        let zone = zoneID(graph)
+        let core = graph.levels[0].jobs[0]
+        var geometry = GraphLayout.geometry(graph)
+        let span = try #require(geometry.zones[zone])
+
+        // Отпустили кóровую работу посреди рамки области.
+        let into = try #require(GraphLayout.dropTarget(
+            graph: graph, geometry: geometry,
+            at: CGPoint(x: span.midX, y: 0), bandOffset: bandOffset, excluding: core.id
+        ))
+        graph = try #require(GraphEngine.apply(
+            .move(core.id, toLevel: into.levelIndex, zone: into.zoneID, at: into.index), to: graph
+        )).graph
+        #expect(graph.zone(of: core.id) == zone)
+
+        // И обратно: отпустили левее рамки — основная область уровня.
+        geometry = GraphLayout.geometry(graph)
+        let back = try #require(GraphLayout.dropTarget(
+            graph: graph, geometry: geometry,
+            at: CGPoint(x: -LayoutMetrics.columnWidth, y: 0),
+            bandOffset: bandOffset, excluding: core.id
+        ))
+        #expect(back.zoneID == nil)
+        graph = try #require(GraphEngine.apply(
+            .move(core.id, toLevel: back.levelIndex, zone: back.zoneID, at: back.index), to: graph
+        )).graph
+        #expect(graph.zone(of: core.id) == nil)
+        #expect(graph.levels[0].jobs(in: nil).first?.id == core.id)
+    }
+
     // MARK: - Файл
 
-    @Test("Конверт v8: области переживают round-trip")
+    @Test("Конверт: области переживают round-trip")
     func envelopeRoundTrip() throws {
         let envelope = Envelope(graph: coreWithZone())
         let encoded = try envelope.encoded()
         let decoded = try Envelope.decode(encoded)
         #expect(decoded == envelope)
-        #expect(decoded.version == 8)
+        #expect(decoded.version == Envelope.currentVersion)
         let level = try #require(decoded.jobGraph?.levels[0])
         #expect(level.zones.count == 1)
         #expect(level.jobs(in: level.zones[0].id).count == 2)
@@ -404,6 +647,22 @@ struct ZoneTests {
         #expect(level.jobs.map(\.verb) == ["кóровая", "малая", "вторая малая"])
         let core = try #require(level.jobs.first)
         #expect(graph.sources(of: graph.levels[1].jobs[0].id) == [core.id])
+    }
+
+    @Test("Payload агента: zone не на уровне coreLevel игнорируется")
+    func agentZoneOutsideCoreIgnored() throws {
+        let payload = AgentArtifactsPayload.Graph(
+            name: "Граф",
+            levels: [
+                [.init(verb: "кóровая")],
+                [.init(verb: "микро"), .init(verb: "чужая малая", zone: "SMALL JOBS")],
+            ],
+            coreLevel: 0
+        )
+        let graph = payload.makeWorkGraph()
+        #expect(graph.levels[1].zones.isEmpty)
+        #expect(graph.levels[1].jobs.map(\.verb) == ["микро", "чужая малая"])
+        #expect(graph.levels[1].jobs.allSatisfy { $0.zoneID == nil })
     }
 
     @Test("update_graph: область работы переживает правку, даже если агент её не указал")

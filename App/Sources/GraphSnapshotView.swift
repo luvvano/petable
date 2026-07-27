@@ -40,9 +40,13 @@ struct GraphSnapshotView: View {
                 edgeView(edge, positions: positions)
             }
 
+            // Работы свёрнутых цепочек позиции не имеют — картинка
+            // повторяет канвас: их не видно, у головы стоит счётчик.
             ForEach(Array(graph.levels.enumerated()), id: \.element.id) { levelIndex, level in
                 ForEach(level.jobs) { job in
-                    nodeView(job, level: levelIndex, at: point(positions[job.id]))
+                    if let position = positions[job.id] {
+                        nodeView(job, level: levelIndex, at: point(position))
+                    }
                 }
             }
         }
@@ -75,12 +79,13 @@ struct GraphSnapshotView: View {
     @ViewBuilder
     private func band(index: Int, level: GraphLevel, width: CGFloat) -> some View {
         let top = bandTop(index)
+        let style = graph.style(atLevel: index)
 
         RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .fill(LevelColors.fill(for: index).opacity(0.07))
+            .fill(LevelColors.fill(style).opacity(0.07))
             .overlay(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(LevelColors.stroke(for: index).opacity(0.18), lineWidth: 1)
+                    .strokeBorder(LevelColors.stroke(style).opacity(0.18), lineWidth: 1)
             )
             .frame(width: width - bandInset * 2, height: bandHeight)
             .offset(x: bandInset, y: top)
@@ -88,7 +93,7 @@ struct GraphSnapshotView: View {
         Text(level.name?.uppercased() ?? (level.isCore ? "CORE JOBS" : "УРОВЕНЬ \(index + 1)"))
             .font(.system(size: 9, weight: .bold, design: .rounded))
             .tracking(1.4)
-            .foregroundStyle(LevelColors.stroke(for: index).opacity(0.65))
+            .foregroundStyle(LevelColors.stroke(graph.style(atLevel: index)).opacity(0.65))
             .lineLimit(1)
             .fixedSize()
             .rotationEffect(.degrees(-90))
@@ -135,12 +140,15 @@ struct GraphSnapshotView: View {
 
     @ViewBuilder
     private func edgeView(_ edge: JobEdge, positions: [UUID: CGPoint]) -> some View {
+        // Конец в свёрнутой цепочке — позиции нет, линию рисовать некуда.
         if let fromLevel = graph.levelIndex(of: edge.from),
-           let toLevel = graph.levelIndex(of: edge.to) {
-            let from = point(positions[edge.from])
-            let to = point(positions[edge.to])
-            let fromR = LevelStyle.style(for: fromLevel).diameter / 2
-            let toR = LevelStyle.style(for: toLevel).diameter / 2
+           let toLevel = graph.levelIndex(of: edge.to),
+           let fromPosition = positions[edge.from],
+           let toPosition = positions[edge.to] {
+            let from = point(fromPosition)
+            let to = point(toPosition)
+            let fromR = graph.style(atLevel: fromLevel).diameter / 2
+            let toR = graph.style(atLevel: toLevel).diameter / 2
             let vertical = fromLevel != toLevel
             let sign: CGFloat = to.x >= from.x ? 1 : -1
             let start = vertical
@@ -170,17 +178,18 @@ struct GraphSnapshotView: View {
 
     @ViewBuilder
     private func nodeView(_ job: JobNode, level: Int, at position: CGPoint) -> some View {
-        let diameter = LevelStyle.style(for: level).diameter
+        let style = graph.style(atLevel: level)
+        let diameter = style.diameter
 
         // Работа в области уровня: тот же размер, пунктирный контур —
         // продукт её не выполняет.
         let inZone = job.zoneID != nil
 
         Circle()
-            .fill(LevelColors.fill(for: level))
+            .fill(LevelColors.fill(style))
             .overlay(
                 Circle().strokeBorder(
-                    inZone ? LevelColors.zoneStroke : LevelColors.stroke(for: level),
+                    inZone ? LevelColors.zoneStroke : LevelColors.stroke(style),
                     style: StrokeStyle(lineWidth: 2, dash: inZone ? [4, 3] : [])
                 )
             )
@@ -195,12 +204,34 @@ struct GraphSnapshotView: View {
                     .foregroundStyle(.secondary)
             }
             Text(job.verb)
-                .font(.system(size: level == 0 ? 12 : 11, weight: level == 0 ? .semibold : .regular))
+                .font(.system(
+                    size: style.isTopScale ? 12 : 11,
+                    weight: style.isTopScale ? .semibold : .regular
+                ))
                 .lineLimit(job.role == nil ? 3 : 2)
                 .truncationMode(.tail)
                 .multilineTextAlignment(.center)
         }
         .frame(width: LayoutMetrics.columnWidth - 6)
         .position(x: position.x, y: position.y + diameter / 2 + 32)
+
+        // Счётчик свёрнутой цепочки — то же место и смысл, что на канвасе:
+        // столько работ уровня спрятано справа.
+        let chain = graph.chain(after: job.id)
+        if job.isCollapsed, !chain.isEmpty {
+            HStack(spacing: 2) {
+                Text("\(chain.count)")
+                    .font(.system(size: 10, weight: .semibold))
+                Image(systemName: "chevron.right.2")
+                    .font(.system(size: 8, weight: .bold))
+            }
+            .foregroundStyle(Color.accentColor)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(Color(nsColor: .windowBackgroundColor)))
+            .overlay(Capsule().strokeBorder(Color.accentColor.opacity(0.5), lineWidth: 1))
+            .fixedSize()
+            .position(x: position.x + diameter / 2 + 18, y: position.y)
+        }
     }
 }

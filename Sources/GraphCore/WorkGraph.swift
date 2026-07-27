@@ -107,19 +107,26 @@ public struct JobNode: Codable, Equatable, Identifiable, Sendable {
     /// Область уровня, в которой лежит работа; nil — основная область
     /// (её выполняет продукт). Зона всегда принадлежит тому же уровню.
     public var zoneID: UUID?
+    /// Цепочка справа свёрнута: работы, связанные с этой внутри уровня,
+    /// скрыты с канваса вместе со своей декомпозицией. Флаг живёт
+    /// на голове цепочки — сама голова видна всегда.
+    /// Подробности — `WorkGraph.hiddenJobs()`.
+    public var isCollapsed: Bool
 
     public init(
         id: UUID = UUID(),
         verb: String,
         role: String? = nil,
         details: JobDetails = JobDetails(),
-        zoneID: UUID? = nil
+        zoneID: UUID? = nil,
+        isCollapsed: Bool = false
     ) {
         self.id = id
         self.verb = verb
         self.role = role
         self.details = details
         self.zoneID = zoneID
+        self.isCollapsed = isCollapsed
     }
 
     /// Комбинированная строка для инлайн-редактора: `role: verb` или `verb`.
@@ -128,10 +135,11 @@ public struct JobNode: Codable, Equatable, Identifiable, Sendable {
         return verb
     }
 
-    enum CodingKeys: String, CodingKey { case id, verb, role, details, zoneID }
+    enum CodingKeys: String, CodingKey { case id, verb, role, details, zoneID, isCollapsed }
 
     /// Файлы до появления карточки не имеют ключа `details`,
-    /// файлы до v8 — ключа `zoneID`.
+    /// файлы до v8 — ключа `zoneID`, файлы до сворачивания цепочек —
+    /// ключа `isCollapsed`.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
@@ -139,9 +147,11 @@ public struct JobNode: Codable, Equatable, Identifiable, Sendable {
         role = try container.decodeIfPresent(String.self, forKey: .role)
         details = try container.decodeIfPresent(JobDetails.self, forKey: .details) ?? JobDetails()
         zoneID = try container.decodeIfPresent(UUID.self, forKey: .zoneID)
+        isCollapsed = try container.decodeIfPresent(Bool.self, forKey: .isCollapsed) ?? false
     }
 
     /// Пустая карточка в JSON не пишется — файлы без описаний не растут.
+    /// Так же и развёрнутая цепочка: `false` не пишется.
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
@@ -151,6 +161,9 @@ public struct JobNode: Codable, Equatable, Identifiable, Sendable {
             try container.encode(details, forKey: .details)
         }
         try container.encodeIfPresent(zoneID, forKey: .zoneID)
+        if isCollapsed {
+            try container.encode(isCollapsed, forKey: .isCollapsed)
+        }
     }
 }
 
@@ -158,6 +171,8 @@ public struct JobNode: Codable, Equatable, Identifiable, Sendable {
 /// именем. Смысл по AJTBD: работы того же уровня, которые продукт
 /// не выполняет (малые работы рядом с кóровыми). Уровень остаётся один —
 /// меняется только покрытие продуктом, и это видно на канвасе.
+/// Поэтому область бывает только на core-уровне: на остальных уровнях
+/// продукт и так не выполняет работы целиком — рамка ничего не различала бы.
 public struct LevelZone: Codable, Equatable, Identifiable, Sendable {
     public static let defaultName = "SMALL JOBS"
 
@@ -180,7 +195,8 @@ public struct LevelZone: Codable, Equatable, Identifiable, Sendable {
 /// Такой уровень в графе ровно один — инвариант держит
 /// `WorkGraph.ensureCoreLevel()`, вызываемый на границах документа.
 /// `zones` — отдельные области внутри полосы (см. `LevelZone`): работы
-/// того же уровня, которые продукт не выполняет.
+/// того же уровня, которые продукт не выполняет. Есть только у core-уровня —
+/// инвариант держит `WorkGraph.normalizeZones()`.
 public struct GraphLevel: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     /// Работы уровня слева направо. Сгруппированы по областям: сначала
@@ -357,10 +373,39 @@ public extension WorkGraph {
     }
 
     /// Инвариант областей на всех уровнях. Вызывается там же, где
-    /// `ensureCoreLevel()` — на границах документа.
+    /// `ensureCoreLevel()` — на границах документа (и после него: правило
+    /// «области только у core» опирается на проставленную отметку).
+    /// Области живут только на core-уровне — рамка «эти работы продукт
+    /// не выполняет» осмысленна лишь рядом с кóровыми. Рамки с других
+    /// уровней (старый файл, граф от агента) снимаются, их работы
+    /// уходят в основную область — как при `deleteZone`.
     mutating func normalizeZones() {
         for index in levels.indices {
+            if !levels[index].isCore {
+                levels[index].zones.removeAll()
+            }
             levels[index].normalizeZones()
+        }
+    }
+
+    /// Инвариант направления связей: межуровневая связь идёт сверху
+    /// вниз — `from` лежит на уровне выше `to`. Пользователь тянет
+    /// связь в любую сторону (⌘-клик, drag от плюса), и связь снизу
+    /// вверх оседала в графе ребром, на канвасе неотличимым
+    /// от обычного, но невидимым для обходов по исходящим связям —
+    /// свёртка цепочек прятала не то, декомпозиция не подсвечивалась.
+    /// Связи внутри уровня направление сохраняют: это порядок цепочки.
+    mutating func normalizeEdges() {
+        var levelOf: [UUID: Int] = [:]
+        for (index, level) in levels.enumerated() {
+            for job in level.jobs { levelOf[job.id] = index }
+        }
+        for index in edges.indices {
+            guard let from = levelOf[edges[index].from],
+                  let to = levelOf[edges[index].to],
+                  to < from
+            else { continue }
+            edges[index] = JobEdge(from: edges[index].to, to: edges[index].from)
         }
     }
 
@@ -395,26 +440,140 @@ public extension WorkGraph {
         edges.filter { $0.from == jobID }.map(\.to)
     }
 
-    /// Работа и всё «ниже» неё: обход по исходящим связям без подъёма
-    /// вверх. Горизонтальные связи учитываются только ниже стартового
-    /// уровня — соседи самой работы по уровню в результат не попадают.
+    /// Работа и всё «ниже» неё: обход вниз по уровням без подъёма вверх.
+    /// Межуровневая связь считается декомпозицией независимо от того,
+    /// в какую сторону её протянули: пользователь соединяет работу
+    /// с родителем и снизу вверх (⌘-клик, drag от нижней), и такая
+    /// связь на канвасе ничем не отличается от обычной — подсветка
+    /// не имеет права её терять. Горизонтальная связь остаётся
+    /// направленной (цепочка идёт слева направо) и учитывается только
+    /// ниже стартового уровня — соседи самой работы по уровню
+    /// в результат не попадают.
     func jobsBelow(_ jobID: UUID) -> Set<UUID> {
         guard let startLevel = levelIndex(of: jobID) else { return [] }
         var result: Set<UUID> = [jobID]
         var queue: [UUID] = [jobID]
         while let current = queue.popLast() {
             guard let currentLevel = levelIndex(of: current) else { continue }
-            for target in targets(of: current) where !result.contains(target) {
-                guard let targetLevel = levelIndex(of: target) else { continue }
-                let descends = targetLevel > currentLevel
-                    || (targetLevel == currentLevel && currentLevel > startLevel)
+            for edge in edges {
+                let next: UUID
+                let isOutgoing: Bool
+                if edge.from == current {
+                    next = edge.to
+                    isOutgoing = true
+                } else if edge.to == current {
+                    next = edge.from
+                    isOutgoing = false
+                } else {
+                    continue
+                }
+                guard !result.contains(next),
+                      let nextLevel = levelIndex(of: next)
+                else { continue }
+                let descends = nextLevel > currentLevel
+                    || (isOutgoing && nextLevel == currentLevel && currentLevel > startLevel)
                 if descends {
-                    result.insert(target)
-                    queue.append(target)
+                    result.insert(next)
+                    queue.append(next)
                 }
             }
         }
         return result
+    }
+
+    /// Следующие работы цепочки: связи внутри уровня и внутри той же
+    /// области. Цепочка — последовательность работ ОДНОГО уровня;
+    /// связь на другой уровень (декомпозиция) или в соседнюю область
+    /// продолжением цепочки не считается.
+    func chainSuccessors(of jobID: UUID) -> [UUID] {
+        guard let levelIndex = levelIndex(of: jobID), let job = job(jobID) else { return [] }
+        return targets(of: jobID).filter { target in
+            self.levelIndex(of: target) == levelIndex && zone(of: target) == job.zoneID
+        }
+    }
+
+    /// Вся цепочка справа от работы (транзитивно, по связям внутри
+    /// уровня). Сама работа в результат не входит; связь назад
+    /// (цикл в графе) обход не зацикливает.
+    func chain(after jobID: UUID) -> [UUID] {
+        var result: [UUID] = []
+        var seen: Set<UUID> = [jobID]
+        var queue: [UUID] = [jobID]
+        while let current = queue.popLast() {
+            for next in chainSuccessors(of: current) where seen.insert(next).inserted {
+                result.append(next)
+                queue.append(next)
+            }
+        }
+        return result
+    }
+
+    /// Работы, скрытые свёрнутыми цепочками: сами работы цепочек справа
+    /// от свёрнутых голов плюс их декомпозиция — работа уровнем ниже
+    /// прячется, если ВСЕ её источники скрыты (иначе она осталась бы
+    /// на канвасе висеть без единой видимой связи). Работа, у которой
+    /// остался живой источник, видна — теряется только линия к скрытой.
+    ///
+    /// Это единственное место, где флаг `isCollapsed` превращается
+    /// в множество скрытых работ: раскладка и канвас спрашивают его.
+    func hiddenJobs() -> Set<UUID> {
+        let heads = levels.flatMap(\.jobs).filter(\.isCollapsed)
+        guard !heads.isEmpty else { return [] }
+
+        // Индексы вместо повторных линейных поисков: раскладка зовёт
+        // эту функцию на каждой перерисовке канваса.
+        var slot: [UUID: (level: Int, zone: UUID?)] = [:]
+        for (levelIndex, level) in levels.enumerated() {
+            for job in level.jobs {
+                slot[job.id] = (levelIndex, job.zoneID)
+            }
+        }
+        var outgoing: [UUID: [UUID]] = [:]
+        var incoming: [UUID: [UUID]] = [:]
+        for edge in edges {
+            outgoing[edge.from, default: []].append(edge.to)
+            incoming[edge.to, default: []].append(edge.from)
+        }
+
+        // Обход от каждой головы отдельно: своя голова в свою цепочку
+        // не попадает даже при связи назад (цикл), а голову, лежащую
+        // внутри ЧУЖОЙ свёрнутой цепочки, спрячет обход той цепочки.
+        var hidden: Set<UUID> = []
+        for head in heads {
+            var seen: Set<UUID> = [head.id]
+            var queue: [UUID] = [head.id]
+            while let current = queue.popLast() {
+                guard let place = slot[current] else { continue }
+                for next in outgoing[current] ?? [] where slot[next].map({
+                    $0.level == place.level && $0.zone == place.zone
+                }) == true {
+                    guard seen.insert(next).inserted else { continue }
+                    hidden.insert(next)
+                    queue.append(next)
+                }
+            }
+        }
+        guard !hidden.isEmpty else { return [] }
+
+        // Декомпозиция уходит вместе со своей работой. Идём до
+        // неподвижной точки: скрытая ветка тянет за собой всю глубину.
+        var changed = true
+        while changed {
+            changed = false
+            for level in levels {
+                for job in level.jobs where !hidden.contains(job.id) {
+                    guard let jobLevel = slot[job.id]?.level,
+                          let sources = incoming[job.id], !sources.isEmpty,
+                          sources.allSatisfy({ source in
+                              hidden.contains(source) && (slot[source]?.level ?? jobLevel) < jobLevel
+                          })
+                    else { continue }
+                    hidden.insert(job.id)
+                    changed = true
+                }
+            }
+        }
+        return hidden
     }
 
     /// Подграф из указанных работ: рёбра сохраняются только между

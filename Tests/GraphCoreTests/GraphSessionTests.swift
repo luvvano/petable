@@ -17,12 +17,20 @@ struct GraphSessionTests {
             .toggleEdge(from: source.id, to: graph.levels[1].jobs[0].id),
             .setText(source.id, raw: "аудитор: хочу пересчитать"),
             .addZone(level: graph.levels[1].id),
+            .setCollapsed(graph.levels[1].jobs[0].id, true),
         ]
     }
 
     @Test("Для каждого интента: ⌘Z возвращает исходное, ⇧⌘Z повторяет")
     func undoRedoRoundTrip() throws {
-        let original = Fixtures.closeMonth()
+        // Область заводится только на core-уровне — отмечаем его в фикстуре.
+        var original = Fixtures.closeMonth()
+        original.levels[1].isCore = true
+        // Цепочка внутри уровня — иначе сворачивать нечего.
+        original.edges.append(JobEdge(
+            from: original.levels[1].jobs[0].id,
+            to: original.levels[1].jobs[1].id
+        ))
         for intent in intents(for: original) {
             let session = GraphSession(graph: original)
             session.perform(intent)

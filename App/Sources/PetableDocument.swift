@@ -169,19 +169,53 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
     // MARK: - Операции над списком графов
 
     /// Новый граф с одной пустой работой на core-уровне; становится выбранным.
+    /// `parent` — граф, под которым он ляжет (nil = верхний уровень).
     @MainActor
     @discardableResult
-    func addGraph() -> UUID {
+    func addGraph(parent: UUID? = nil) -> UUID {
+        // Родителем может быть только существующий граф: иначе новый
+        // граф не показался бы в дереве сайдбара.
+        let parentID = parent.flatMap { id in
+            graphStages.contains(where: { $0.id == id }) ? id : nil
+        }
         let stage = Envelope.Stage(
             name: nextGraphName(),
             modifiedAt: Date(),
+            parentID: parentID,
             graph: WorkGraph(levels: [GraphLevel(jobs: [JobNode(verb: "")], isCore: true)])
         )
         applyListChange {
             stages.append(stage)
             selectedGraphID = stage.id
+            selectedResearchItem = nil
         }
         return stage.id
+    }
+
+    /// Перенос графа в другую группу: `parent` = nil — на верхний уровень.
+    /// Вложение в себя или в собственный потомок отбрасывается — цикл
+    /// спрятал бы всё поддерево из сайдбара.
+    @MainActor
+    func nestGraph(_ id: UUID, under parent: UUID?) {
+        guard stages.canNestGraph(id, under: parent),
+              let index = stages.firstIndex(where: { $0.id == id }),
+              stages[index].parentID != parent
+        else { return }
+        applyListChange {
+            stages[index].parentID = parent
+        }
+    }
+
+    /// Потомки графа на любую глубину — уходят вместе с ним при удалении.
+    func graphDescendants(of id: UUID) -> [UUID] {
+        stages.graphDescendants(of: id)
+    }
+
+    /// Удалить можно, пока в проекте останется хотя бы один граф:
+    /// группа уходит целиком, поэтому считаем и потомков.
+    func canDeleteGraph(_ id: UUID) -> Bool {
+        guard graphStages.contains(where: { $0.id == id }) else { return false }
+        return graphStages.count > graphDescendants(of: id).count + 1
     }
 
     /// Импортированный граф (из JSON-файла экспорта): id узлов
@@ -220,16 +254,17 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
         }
     }
 
-    /// Последний граф проекта удалить нельзя.
+    /// Удаление группы: граф уходит со всеми вложенными — «оставшиеся
+    /// без родителя» графы иначе молча всплыли бы наверх. Последний граф
+    /// проекта удалить нельзя (⌘Z возвращает группу целиком).
     @MainActor
     func deleteGraph(_ id: UUID) {
-        guard graphStages.count > 1,
-              let index = stages.firstIndex(where: { $0.id == id })
-        else { return }
+        guard canDeleteGraph(id) else { return }
+        let doomed = Set([id] + graphDescendants(of: id))
         applyListChange {
-            stages.remove(at: index)
-            if selectedGraphID == id {
-                selectedGraphID = graphStages.first?.id
+            stages.removeAll { doomed.contains($0.id) }
+            if let selectedGraphID, doomed.contains(selectedGraphID) {
+                self.selectedGraphID = graphStages.first?.id
             }
         }
     }
