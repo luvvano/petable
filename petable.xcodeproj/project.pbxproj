@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		030313CC5FCAF18A801F6FC0 /* GraphGroupingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A3B916C8B868F1AFF2FCF9B /* GraphGroupingUITests.swift */; };
+		2182349EFAF633AE04318EDE /* JobCardUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C118770D8716012B071DA6E7 /* JobCardUITests.swift */; };
 		257681894B444D2784735B69 /* CanvasHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D48D8C6ACF85E367BFD35260 /* CanvasHostView.swift */; };
 		3AC5D72F0299A596AE1926B9 /* ResearchViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F11456C586746FF698A909A /* ResearchViews.swift */; };
 		50E82C33EBB43877BD0C18EE /* PetableDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5784A5AD0A8680F74738F4F5 /* PetableDocument.swift */; };
@@ -24,6 +25,7 @@
 		A946A0CE79277B538609A251 /* AgentViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52B817033A06DD9CB5F87525 /* AgentViews.swift */; };
 		BC2E5ECFEA80278D956B6A8D /* LevelColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DCB7854D3BB308FACCA6CA8 /* LevelColors.swift */; };
 		BC48987AD696E5470DA2F4AB /* SegmentViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD15B5C36F969484C7736B95 /* SegmentViews.swift */; };
+		C052A9F13CF86A28F23F7E24 /* CopyPasteUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FEBA89EB1ABD5AE0D0A3553 /* CopyPasteUITests.swift */; };
 		D0D86A1C5D5226B88F0BC93B /* ProjectStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 047B9837F8FEFE53EDB0338C /* ProjectStore.swift */; };
 		F3F141C896EEF6B7E6DB28BC /* KeyboardFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9569C7DB8D26BBD48DECBDA9 /* KeyboardFlowUITests.swift */; };
 /* End PBXBuildFile section */
@@ -43,6 +45,7 @@
 		1331AC4697E53BAD68A9316F /* ExportImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportImport.swift; sourceTree = "<group>"; };
 		2868A061FB43B50F42D5122B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		2F11456C586746FF698A909A /* ResearchViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResearchViews.swift; sourceTree = "<group>"; };
+		2FEBA89EB1ABD5AE0D0A3553 /* CopyPasteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopyPasteUITests.swift; sourceTree = "<group>"; };
 		52B817033A06DD9CB5F87525 /* AgentViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentViews.swift; sourceTree = "<group>"; };
 		5569EF7D17D2C3983BED72E8 /* AgentChatViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentChatViews.swift; sourceTree = "<group>"; };
 		5784A5AD0A8680F74738F4F5 /* PetableDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetableDocument.swift; sourceTree = "<group>"; };
@@ -54,6 +57,7 @@
 		98C30A1BAAAF4FDF1990FED8 /* petable.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = petable.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AFA44484780ECA08BBAAC77D /* GraphSnapshotView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphSnapshotView.swift; sourceTree = "<group>"; };
 		BD15B5C36F969484C7736B95 /* SegmentViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SegmentViews.swift; sourceTree = "<group>"; };
+		C118770D8716012B071DA6E7 /* JobCardUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobCardUITests.swift; sourceTree = "<group>"; };
 		C70377BEAC79F596245F8956 /* CanvasRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasRootView.swift; sourceTree = "<group>"; };
 		D48D8C6ACF85E367BFD35260 /* CanvasHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasHostView.swift; sourceTree = "<group>"; };
 		D79E12F8644248968D9CD2C3 /* ProjectsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectsView.swift; sourceTree = "<group>"; };
@@ -127,7 +131,9 @@
 		C93896CB6104E9825BFE29E9 /* UITests */ = {
 			isa = PBXGroup;
 			children = (
+				2FEBA89EB1ABD5AE0D0A3553 /* CopyPasteUITests.swift */,
 				6A3B916C8B868F1AFF2FCF9B /* GraphGroupingUITests.swift */,
+				C118770D8716012B071DA6E7 /* JobCardUITests.swift */,
 				9569C7DB8D26BBD48DECBDA9 /* KeyboardFlowUITests.swift */,
 			);
 			name = UITests;
@@ -240,7 +246,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C052A9F13CF86A28F23F7E24 /* CopyPasteUITests.swift in Sources */,
 				030313CC5FCAF18A801F6FC0 /* GraphGroupingUITests.swift in Sources */,
+				2182349EFAF633AE04318EDE /* JobCardUITests.swift in Sources */,
 				F3F141C896EEF6B7E6DB28BC /* KeyboardFlowUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

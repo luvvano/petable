@@ -70,6 +70,13 @@ public enum GraphIntent: Equatable, Sendable {
     /// справа не сворачивается (флаг был бы невидимой пылью в файле),
     /// то же состояние — no-op.
     case setCollapsed(UUID, Bool)
+    /// Вставить работы из буфера обмена: id работ и областей свежие,
+    /// связи между скопированными работами сохраняются. `atLevel` —
+    /// уровень для верхней скопированной работы (уровень под курсором);
+    /// работы ниже ложатся настолько же ниже, недостающие уровни
+    /// создаются. nil — копия возвращается на свои уровни (по id
+    /// в том же графе, по номеру — в чужом). Пустой буфер — no-op.
+    case paste(JobClipboard, atLevel: Int?)
 }
 
 public enum ReorderDirection: Equatable, Sendable {
@@ -322,6 +329,80 @@ public enum GraphEngine {
             var copy = graph
             copy.levels[levelIndex].jobs[jobIndex].isCollapsed = collapsed
             return GraphResult(graph: copy, focus: id)
+
+        case let .paste(clipboard, atLevel: anchor):
+            return paste(clipboard, at: anchor, into: graph)
         }
+    }
+
+    /// Вставка копии работ. `anchor` — уровень для верхней скопированной
+    /// работы (полоса под курсором): вставка ложится туда, куда смотрит
+    /// пользователь, сохраняя расстояния между уровнями копии. Без якоря
+    /// уровень-приёмник ищется по id (вставка в тот же граф — работы
+    /// возвращаются на свои полосы), затем по номеру уровня. Уровней
+    /// не хватает — дописываются снизу, иначе копия схлопнулась бы
+    /// в один уровень.
+    ///
+    /// Область восстанавливается по id (та же полоса) или создаётся заново
+    /// на core-уровне; на прочих уровнях областей не бывает, и работа
+    /// уходит в основную.
+    private static func paste(
+        _ clipboard: JobClipboard,
+        at anchor: Int?,
+        into graph: WorkGraph
+    ) -> GraphResult? {
+        guard !clipboard.isEmpty else { return nil }
+        let levels = clipboard.levels.sorted { $0.index < $1.index }
+        // Верх копии: от него считаются смещения остальных уровней.
+        guard let topIndex = levels.first?.index else { return nil }
+        var copy = graph
+        var idMap: [UUID: UUID] = [:]
+        var focus: UUID?
+
+        for level in levels {
+            let targetIndex: Int
+            if let anchor {
+                targetIndex = max(anchor, 0) + (level.index - topIndex)
+            } else if let existing = copy.levelIndex(id: level.id) {
+                targetIndex = existing
+            } else {
+                targetIndex = level.index
+            }
+            while copy.levels.count <= targetIndex {
+                copy.levels.append(GraphLevel())
+            }
+
+            var zoneMap: [UUID: UUID] = [:]
+            for zone in level.zones {
+                if copy.levels[targetIndex].zone(zone.id) != nil {
+                    zoneMap[zone.id] = zone.id
+                } else if copy.levels[targetIndex].isCore {
+                    let newZone = LevelZone(name: zone.name)
+                    copy.levels[targetIndex].zones.append(newZone)
+                    zoneMap[zone.id] = newZone.id
+                }
+            }
+
+            for job in level.jobs {
+                var pasted = job
+                pasted.id = UUID()
+                pasted.zoneID = job.zoneID.flatMap { zoneMap[$0] }
+                idMap[job.id] = pasted.id
+                let insertAt = copy.levels[targetIndex].insertionIndex(zone: pasted.zoneID, at: .max)
+                copy.levels[targetIndex].jobs.insert(pasted, at: insertAt)
+                // Фокус — на первую работу верхнего скопированного уровня:
+                // это голова вставленной цепочки.
+                if focus == nil { focus = pasted.id }
+            }
+        }
+
+        for edge in clipboard.edges {
+            guard let from = idMap[edge.from], let to = idMap[edge.to] else { continue }
+            copy.edges.append(JobEdge(from: from, to: to))
+        }
+        // Копия могла лечь на уровни в другом порядке (вставка в чужой
+        // граф) — направление межуровневых связей приводится к «сверху вниз».
+        copy.normalizeEdges()
+        return GraphResult(graph: copy, focus: focus)
     }
 }

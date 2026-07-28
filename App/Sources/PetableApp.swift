@@ -82,6 +82,11 @@ struct CanvasGraphMenuCommands: Commands {
             Button("Сдвинуть вправо (⌘→)") { graph?.moveRight() }
                 .disabled(graph?.hasSelection != true)
             Divider()
+            Button("Копировать работы (⌘C)") { graph?.copyJobs() }
+                .disabled(graph?.canCopy != true)
+            Button("Вставить работы (⌘V)") { graph?.pasteJobs() }
+                .disabled(graph == nil)
+            Divider()
             Button("Свернуть цепочку (⌥←)") { graph?.collapseChain() }
                 .disabled(graph?.canCollapse != true)
             Button("Развернуть цепочку (⌥→)") { graph?.expandChain() }

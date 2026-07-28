@@ -243,6 +243,42 @@ enum ExportImport {
         }
     }
 
+    // MARK: - Работы в буфере обмена
+
+    /// Своя разновидность данных для копирования работ. Кладём вместе
+    /// с текстом: внутри приложения читается точно (текст в буфере мог
+    /// оказаться чужим), наружу уходит тот же JSON — его можно вставить
+    /// в редактор или переслать.
+    static let jobsPasteboardType = NSPasteboard.PasteboardType("com.egorproskurin.petable.jobs")
+
+    static func copyJobs(_ clipboard: JobClipboard) {
+        do {
+            let data = try clipboard.encoded()
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setData(data, forType: jobsPasteboardType)
+            pasteboard.setString(String(decoding: data, as: UTF8.self), forType: .string)
+        } catch {
+            showError("Не удалось скопировать работы", error)
+        }
+    }
+
+    /// Работы из буфера обмена; nil — там что-то другое.
+    static func readJobs() -> JobClipboard? {
+        let pasteboard = NSPasteboard.general
+        if let data = pasteboard.data(forType: jobsPasteboardType),
+           let clipboard = try? JobClipboard.decode(data) {
+            return clipboard
+        }
+        guard let text = pasteboard.string(forType: .string) else { return nil }
+        return try? JobClipboard.decode(Data(text.utf8))
+    }
+
+    /// Есть ли что вставлять — для disabled-состояния пунктов меню.
+    static var hasJobsInClipboard: Bool {
+        readJobs()?.isEmpty == false
+    }
+
     // MARK: - Панели, буфер обмена и алерты
 
     private static func copyToClipboard(_ text: String) {

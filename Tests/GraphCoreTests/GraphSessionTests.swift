@@ -18,6 +18,7 @@ struct GraphSessionTests {
             .setText(source.id, raw: "аудитор: хочу пересчитать"),
             .addZone(level: graph.levels[1].id),
             .setCollapsed(graph.levels[1].jobs[0].id, true),
+            .paste(graph.clipboard(keeping: graph.jobsBelow(source.id)), atLevel: 0),
         ]
     }
 

@@ -11,6 +11,10 @@ enum CanvasKey {
     case optionLeft, optionRight
     /// ⌘= — синоним ⌘+ (zoom in без Shift, как во всех приложениях Apple).
     case cmdPlus
+    /// ⌘C / ⌘V — копирование и вставка работ. Обычно эти клавиши
+    /// перехватывает меню «Правка» (пункты приходят в `copy:`/`paste:`
+    /// этого вью); сюда они доходят, когда меню их не забрало.
+    case cmdCopy, cmdPaste
 }
 
 /// Единая точка входа событий канваса: NSView — first responder своего окна,
@@ -30,6 +34,16 @@ struct CanvasHostView: NSViewRepresentable {
     /// SwiftUI-ховер здесь не работает: NSView перехватывает mouseMoved,
     /// поэтому трекинг живёт в самом NSView.
     let onMouseMove: (CGPoint?) -> Void
+    /// Копирование и вставка работ. Идут через стандартный путь macOS:
+    /// вью — first responder, поэтому пункты «Правка ▸ Скопировать/
+    /// Вставить» и их ⌘C/⌘V приходят сюда; предикаты гасят пункты,
+    /// когда копировать или вставлять нечего.
+    let canCopy: () -> Bool
+    let onCopy: () -> Void
+    let canPaste: () -> Bool
+    /// Точка вставки в координатах вью — та, по которой кликнули правой
+    /// кнопкой; nil — вставка из строки меню или по ⌘V (места клика нет).
+    let onPaste: (CGPoint?) -> Void
     let focusBridge: CanvasFocusBridge
 
     func makeNSView(context: Context) -> EventCatcherView {
@@ -49,6 +63,10 @@ struct CanvasHostView: NSViewRepresentable {
         view.onClickEmpty = onClickEmpty
         view.onDoubleClickEmpty = onDoubleClickEmpty
         view.onMouseMove = onMouseMove
+        view.canCopy = canCopy
+        view.onCopy = onCopy
+        view.canPaste = canPaste
+        view.onPaste = onPaste
         focusBridge.view = view
     }
 }
@@ -71,6 +89,10 @@ final class EventCatcherView: NSView {
     var onClickEmpty: (() -> Void)?
     var onDoubleClickEmpty: ((CGPoint) -> Void)?
     var onMouseMove: ((CGPoint?) -> Void)?
+    var canCopy: (() -> Bool)?
+    var onCopy: (() -> Void)?
+    var canPaste: (() -> Bool)?
+    var onPaste: ((CGPoint?) -> Void)?
 
     /// Суммарный сдвиг текущего drag — отличаем клик от панорамирования.
     private var dragDistance: CGFloat = 0
@@ -128,6 +150,48 @@ final class EventCatcherView: NSView {
         dragDistance = 0
     }
 
+    // MARK: Копирование и вставка
+
+    /// Пункты «Правка ▸ Скопировать/Вставить» и их ⌘C/⌘V: цель — first
+    /// responder, то есть этот вью.
+    @objc func copy(_ sender: Any?) {
+        onCopy?()
+    }
+
+    /// Пункт меню правого клика несёт точку клика (`representedObject`) —
+    /// вставка ложится на уровень под курсором. У пункта меню «Правка»
+    /// и у ⌘V точки нет: место вставки вью определит сам.
+    @objc func paste(_ sender: Any?) {
+        let location = ((sender as? NSMenuItem)?.representedObject as? NSValue)?.pointValue
+        onPaste?(location)
+    }
+
+    /// Гасит пункты меню, когда копировать нечего (нет выделения) или
+    /// вставлять нечего (в буфере не работы). Остальные пункты сюда
+    /// не приходят — валидируется только тот, чьё действие вью реализует.
+    @objc func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        switch menuItem.action {
+        case #selector(copy(_:)): return canCopy?() ?? false
+        case #selector(paste(_:)): return canPaste?() ?? false
+        default: return true
+        }
+    }
+
+    /// Правый клик по пустому месту канваса — «Вставить работы».
+    /// Меню узла живёт в SwiftUI (contextMenu), это — про пустоту.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        guard canPaste?() == true else { return nil }
+        let menu = NSMenu()
+        let item = NSMenuItem(title: "Вставить работы", action: #selector(paste(_:)), keyEquivalent: "v")
+        item.keyEquivalentModifierMask = .command
+        item.target = self
+        // Пока меню открыто, курсор уже не на канвасе — место клика
+        // едет вместе с пунктом.
+        item.representedObject = NSValue(point: cursorLocation(event))
+        menu.addItem(item)
+        return menu
+    }
+
     override func keyDown(with event: NSEvent) {
         guard let key = canvasKey(for: event), onKey?(key) == true else {
             super.keyDown(with: event)
@@ -144,6 +208,8 @@ final class EventCatcherView: NSView {
         case 36: return cmd ? .cmdReturn : .enter
         case 53: return .escape
         case 51, 117: return .delete // backspace и forward-delete
+        case 8: return cmd && !option ? .cmdCopy : nil // "c"
+        case 9: return cmd && !option ? .cmdPaste : nil // "v"
         case 123: return cmd ? .cmdLeft : (option ? .optionLeft : .left)
         case 124: return cmd ? .cmdRight : (option ? .optionRight : .right)
         case 125: return .down

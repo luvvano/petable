@@ -85,6 +85,9 @@ struct CanvasRootView: View {
                 onZoom: applyZoom,
                 onClickEmpty: {
                     commitEditingIfNeeded()
+                    // Клик мимо карточки закрывает её (черновик коммитится) —
+                    // конвенция поповера: клик наружу = «готово».
+                    closeDetails()
                     selection = nil
                     selectedEdge = nil
                 },
@@ -106,6 +109,18 @@ struct CanvasRootView: View {
                         return
                     }
                     cursorPosition = content
+                },
+                canCopy: { copyableJobs != nil },
+                onCopy: { copySelectedJobs() },
+                canPaste: { ExportImport.hasJobsInClipboard },
+                onPaste: { location in
+                    // Правый клик по пустому месту знает свою точку;
+                    // ⌘V и меню «Правка» — по курсору.
+                    guard let location else {
+                        pasteJobs()
+                        return
+                    }
+                    pasteJobs(anchorLevel: levelIndex(atViewPoint: location))
                 },
                 focusBridge: focusBridge
             )
@@ -182,7 +197,10 @@ struct CanvasRootView: View {
             expandChain: {
                 guard let selection, let job = document.graph.job(selection) else { return }
                 if job.isCollapsed { toggleChain(job) }
-            }
+            },
+            canCopy: copyableJobs != nil,
+            copyJobs: { copySelectedJobs() },
+            pasteJobs: { pasteJobs() }
         ))
         .onAppear {
             document.attach(undoManager)
@@ -979,6 +997,14 @@ struct CanvasRootView: View {
                 Button("Выделить работы ниже") {
                     highlightedJobs = document.graph.jobsBelow(job.id)
                 }
+                // Копируется подсветка, если работа в неё входит, иначе
+                // сама работа с декомпозицией — то же правило, что у ⌘C.
+                Button(copyMenuTitle(for: job)) { copyJobs(from: job) }
+                if ExportImport.hasJobsInClipboard {
+                    // Верх копии ложится на уровень этой работы: меню
+                    // открыто, курсора на канвасе уже нет.
+                    Button("Вставить (⌘V)") { pasteJobs(anchorLevel: level) }
+                }
                 if let highlighted = highlightedJobs, highlighted.contains(job.id) {
                     Button("Экспортировать PNG выделенных работ…") {
                         exportHighlightedPNG(highlighted)
@@ -1389,7 +1415,7 @@ struct CanvasRootView: View {
             return "Delete — удалить связь · Esc — снять выделение"
         }
         if highlightedJobs != nil {
-            return "Правый клик по выделенной работе — экспорт PNG · Esc — снять выделение"
+            return "⌘C — копировать выделенные · ⌘V — вставить · правый клик — экспорт PNG · Esc — снять выделение"
         }
         if dragNode != nil {
             return "Отпустите работу: другой уровень — перенос, та же полоса — новое место, рамка области — в область"
@@ -1528,6 +1554,14 @@ struct CanvasRootView: View {
         case .cmdPlus:
             zoomStep(1.25)
             return true
+        case .cmdCopy:
+            guard copyableJobs != nil else { return false }
+            copySelectedJobs()
+            return true
+        case .cmdPaste:
+            guard ExportImport.hasJobsInClipboard else { return false }
+            pasteJobs()
+            return true
         case .escape:
             if detailsId != nil {
                 closeDetails()
@@ -1605,6 +1639,10 @@ struct CanvasRootView: View {
 
     private func select(_ id: UUID) {
         commitEditingIfNeeded()
+        // Клик по другой работе — тоже клик мимо карточки: она закрывается.
+        // Карточка самой выбранной работы остаётся (её открыл двойной клик,
+        // а он приходит вместе с одиночным).
+        if let detailsId, detailsId != id { closeDetails() }
         selection = id
         selectedEdge = nil
         // Клик по узлу не проходит через NSView канваса — фокус мог остаться
@@ -1626,6 +1664,99 @@ struct CanvasRootView: View {
             return
         }
         document.perform(.toggleEdge(from: selection, to: target))
+        focusBridge.focusCanvas()
+    }
+
+    // MARK: - Копирование и вставка работ
+
+    /// Что уедет в буфер по ⌘C: подсвеченное поддерево («Выделить работы
+    /// ниже»), а без подсветки — выделенная работа со своей декомпозицией.
+    /// Копируется всегда цепочка целиком: одинокий узел без связей
+    /// пользы почти не несёт, а поддерево — готовый кусок графа.
+    /// nil — копировать нечего.
+    private var copyableJobs: Set<UUID>? {
+        if let highlightedJobs, !highlightedJobs.isEmpty { return highlightedJobs }
+        guard let selection, document.graph.job(selection) != nil else { return nil }
+        return document.graph.jobsBelow(selection)
+    }
+
+    private func copySelectedJobs() {
+        guard let ids = copyableJobs else { return }
+        copyJobs(ids)
+    }
+
+    /// Правый клик по узлу выделение не меняет, поэтому меню узла
+    /// копирует от себя: подсветку, если работа в неё входит, иначе
+    /// работу с её декомпозицией.
+    private func jobsToCopy(from job: JobNode) -> Set<UUID> {
+        if let highlightedJobs, highlightedJobs.contains(job.id) { return highlightedJobs }
+        return document.graph.jobsBelow(job.id)
+    }
+
+    private func copyMenuTitle(for job: JobNode) -> String {
+        let ids = jobsToCopy(from: job)
+        if let highlightedJobs, highlightedJobs.contains(job.id) {
+            return "Копировать выделенные работы — \(highlightedJobs.count) (⌘C)"
+        }
+        return ids.count > 1
+            ? "Копировать работу с декомпозицией — \(ids.count) (⌘C)"
+            : "Копировать работу (⌘C)"
+    }
+
+    private func copyJobs(from job: JobNode) {
+        copyJobs(jobsToCopy(from: job))
+    }
+
+    private func copyJobs(_ ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        commitEditingIfNeeded()
+        ExportImport.copyJobs(document.graph.clipboard(keeping: ids))
+    }
+
+    /// Куда ложится верхняя работа копии: уровень под курсором. Курсор
+    /// ушёл с канваса (вставка из строки меню) — уровень выделенной
+    /// работы; нет и её — уровни копии остаются исходными.
+    private var pasteAnchorLevel: Int? {
+        if let cursorPosition, let level = levelIndex(atContentPoint: cursorPosition) {
+            return level
+        }
+        if let selection { return document.graph.levelIndex(of: selection) }
+        return nil
+    }
+
+    /// Уровень под точкой в координатах вью (клик мышью).
+    private func levelIndex(atViewPoint location: CGPoint) -> Int? {
+        levelIndex(atContentPoint: CGPoint(
+            x: (location.x - offset.width) / scale,
+            y: (location.y - offset.height) / scale
+        ))
+    }
+
+    private func levelIndex(atContentPoint location: CGPoint) -> Int? {
+        dropTarget(
+            for: location,
+            excluding: nil,
+            geometry: GraphLayout.geometry(document.graph)
+        )?.levelIndex
+    }
+
+    /// Вставка копии: верхняя работа ложится на уровень под курсором,
+    /// её декомпозиция — на уровни ниже (недостающие создаются).
+    /// Выделение и подсветка переезжают на вставленное — видно, что именно
+    /// появилось, и следующий ⌘C копирует уже копию.
+    private func pasteJobs() {
+        pasteJobs(anchorLevel: pasteAnchorLevel)
+    }
+
+    private func pasteJobs(anchorLevel: Int?) {
+        guard let clipboard = ExportImport.readJobs(), !clipboard.isEmpty else { return }
+        commitEditingIfNeeded()
+        let before = Set(document.graph.allJobs.map(\.id))
+        guard let focus = document.perform(.paste(clipboard, atLevel: anchorLevel)) else { return }
+        let pasted = Set(document.graph.allJobs.map(\.id)).subtracting(before)
+        selection = focus
+        selectedEdge = nil
+        highlightedJobs = pasted.isEmpty ? nil : pasted
         focusBridge.focusCanvas()
     }
 
@@ -1704,7 +1835,15 @@ struct CanvasRootView: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
         )
+        // Esc закрывает карточку из любого места: onExitCommand ловит его,
+        // пока фокус в полях редактора, onKeyPress — когда фокус на самой
+        // карточке (кнопки шапки, скролл просмотра). Фокус на канвасе
+        // закрывает карточку через handleKey.
         .onExitCommand { closeDetails() }
+        .onKeyPress(.escape) {
+            closeDetails()
+            return .handled
+        }
         .position(x: x, y: y)
         .transition(.scale(scale: 0.95, anchor: .leading).combined(with: .opacity))
     }
@@ -1930,6 +2069,9 @@ struct CanvasRootView: View {
         // Пустую карточку форматировать нечего — сразу редактор.
         detailsEditing = job.details.isEmpty
         detailsId = job.id
+        // Просмотр не требует ввода — фокус остаётся на канвасе, чтобы
+        // Esc и стрелки работали сразу после открытия карточки.
+        if !detailsEditing { focusBridge.focusCanvas() }
     }
 
     /// Карандаш/галочка в шапке: выход из редактора коммитит черновик
@@ -2106,6 +2248,10 @@ struct CanvasGraphCommands {
     let canExpand: Bool
     let collapseChain: () -> Void
     let expandChain: () -> Void
+    /// Есть что копировать: подсветка «работы ниже» или выделенная работа.
+    let canCopy: Bool
+    let copyJobs: () -> Void
+    let pasteJobs: () -> Void
 }
 
 struct CanvasGraphKey: FocusedValueKey {
