@@ -114,6 +114,23 @@ final class CopyPasteUITests: XCTestCase {
         waitForExpectations(timeout: 5)
     }
 
+    /// ⌘C по графу в сайдбаре и ⌘V кладут копию графа рядом, на верхний
+    /// уровень: вложенной группы не появляется.
+    func testGraphCopyPasteStaysTopLevel() {
+        launchWithChain()
+        let graphRows = window.descendants(matching: .any).matching(identifier: "graphRow")
+        let groupToggles = window.descendants(matching: .any).matching(identifier: "graphGroupToggle")
+        XCTAssertEqual(graphRows.count, 1, "новый документ — один граф")
+
+        graphRows.element(boundBy: 0).click()
+        app.typeKey("c", modifierFlags: .command)
+        app.typeKey("v", modifierFlags: .command)
+
+        expectation(for: NSPredicate(format: "count == 2"), evaluatedWith: graphRows)
+        waitForExpectations(timeout: 5)
+        XCTAssertEqual(groupToggles.count, 0, "копия графа не должна становиться вложенной")
+    }
+
     /// Правый клик по пустому месту канваса — «Вставить работы».
     func testPasteFromEmptyCanvasMenu() {
         launchWithChain()
