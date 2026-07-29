@@ -53,7 +53,75 @@ struct CanvasRootView: View {
     /// курсором, отпускание — перенос на уровень/позицию под курсором.
     @State private var dragNode: NodeDrag?
 
+    /// Палитра механик ценности (⌘K).
+    @State private var mechanicsShown = false
+    /// Слаг механики под курсором списка — по ней канвас рисует призрак.
+    @State private var mechanicHighlight: String?
+    /// Взведённая механика: палитра закрыта, курсор — прицел, клик по
+    /// работе (или связи) применяет её к цели. Esc — отбой.
+    @State private var armedMechanic: String?
+
     private static let contentSpace = "canvas-content"
+
+    /// Живой призрак: union-граф + судьбы + дельта. Считается только для
+    /// применимой топологической механики; карточные и стикеры канвас
+    /// не трогают.
+    private struct GhostState {
+        var overlay: MechanicGhost.Overlay
+        var delta: WorkGraph.Delta
+    }
+
+    private var mechanicAnchor: MechanicAnchor {
+        if let edge = selectedEdge { return .chainEdge(from: edge.from, to: edge.to) }
+        if let selection { return .node(selection) }
+        return .unanchored
+    }
+
+    /// Работа под курсором — цель взведённой механики. Радиус чуть больше
+    /// круга, как у ховера узла.
+    private var hoveredJobID: UUID? {
+        guard let cursor = cursorPosition else { return nil }
+        let positions = GraphLayout.layout(document.graph)
+        for (levelIndex, level) in document.graph.levels.enumerated() {
+            let radius = document.graph.style(atLevel: levelIndex).diameter / 2 + 8
+            for job in level.jobs {
+                guard let position = positions[job.id] else { continue }
+                let point = point(position)
+                if hypot(cursor.x - point.x, cursor.y - point.y) <= radius {
+                    return job.id
+                }
+            }
+        }
+        return nil
+    }
+
+    private var activeGhost: GhostState? {
+        guard case let .success(catalog) = MechanicCatalogStore.result else { return nil }
+        // Два источника призрака: палитра (механика под курсором списка,
+        // якорь — текущее выделение) и взведённый режим (якорь — работа
+        // под курсором мыши: видно, что случится, ДО клика).
+        let slug: String
+        let anchor: MechanicAnchor
+        if mechanicsShown, let highlighted = mechanicHighlight {
+            slug = highlighted
+            anchor = mechanicAnchor
+        } else if let armed = armedMechanic, let hovered = hoveredJobID {
+            slug = armed
+            anchor = .node(hovered)
+        } else {
+            return nil
+        }
+        guard let mechanic = catalog.mechanic(slug),
+              mechanic.mechanicClass == .topology,
+              case let .success(preview) = MechanicTransform.preview(
+                  slug, in: document.graph, anchor: anchor
+              )
+        else { return nil }
+        return GhostState(
+            overlay: MechanicGhost.overlay(current: document.graph, preview: preview),
+            delta: document.graph.delta(to: preview)
+        )
+    }
 
     private struct DragLink {
         var from: UUID
@@ -73,7 +141,11 @@ struct CanvasRootView: View {
     private var bandHeight: CGFloat { LayoutMetrics.rowHeight - 10 }
 
     var body: some View {
-        let geometry = GraphLayout.geometry(document.graph)
+        // Призрак активен — раскладывается union-граф (P2a): одна
+        // геометрия на выживших и фантомов, глобальный сдвиг общий.
+        let ghost = activeGhost
+        let renderGraph = ghost?.overlay.union ?? document.graph
+        let geometry = GraphLayout.geometry(renderGraph)
 
         ZStack(alignment: .topLeading) {
             CanvasHostView(
@@ -84,6 +156,12 @@ struct CanvasRootView: View {
                 },
                 onZoom: applyZoom,
                 onClickEmpty: {
+                    // Клик по пустому месту при взведённой механике —
+                    // отбой: промахнулся или передумал.
+                    if armedMechanic != nil {
+                        disarmMechanic()
+                        return
+                    }
                     commitEditingIfNeeded()
                     // Клик мимо карточки закрывает её (черновик коммитится) —
                     // конвенция поповера: клик наружу = «готово».
@@ -125,15 +203,64 @@ struct CanvasRootView: View {
                 focusBridge: focusBridge
             )
 
-            graphContent(geometry)
+            graphContent(geometry, graph: renderGraph, ghost: ghost?.overlay)
                 .scaleEffect(scale, anchor: .topLeading)
                 .offset(offset)
-                .allowsHitTesting(true)
+                // Призрак из палитры — только просмотр. Во взведённом
+                // режиме клики нужны: по узлу стреляет механика.
+                .allowsHitTesting(ghost == nil || armedMechanic != nil)
         }
         .background(Color(nsColor: .textBackgroundColor))
         .overlay(alignment: .bottomTrailing) { zoomControls }
         .overlay(alignment: .bottom) {
             if showsHints { hintsBar }
+        }
+        .overlay(alignment: .top) {
+            VStack(spacing: 6) {
+                if let armed = armedMechanic {
+                    // Чип взведённой механики: что выбрано, куда кликать,
+                    // как отменить. Виден, пока курсор ищет цель.
+                    HStack(spacing: 6) {
+                        Image(systemName: "scope")
+                            .font(.system(size: 10, weight: .semibold))
+                        Text("«\(mechanicTitle(armed))» — \(armedTargetHint(armed))")
+                        Text("Esc — отмена")
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.system(size: 11.5, weight: .medium))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.regularMaterial, in: Capsule())
+                    .overlay(Capsule().strokeBorder(Color.accentColor.opacity(0.6), lineWidth: 1))
+                    .transition(.opacity)
+                }
+                if let ghost, !ghost.delta.isEmpty {
+                    // Строка дельты: только реально случившееся, точная, не
+                    // эффектная. Живёт над канвасом, пока призрак активен.
+                    Text(ghost.delta.summary)
+                        .font(.system(size: 11.5, weight: .medium).monospacedDigit())
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(.regularMaterial, in: Capsule())
+                        .overlay(Capsule().strokeBorder(.separator, lineWidth: 1))
+                        .transition(.opacity)
+                }
+            }
+            .padding(.top, 10)
+        }
+        // Прицел вместо стрелки, пока механика взведена: курсор сам
+        // говорит «выбери цель».
+        .onContinuousHover { phase in
+            guard armedMechanic != nil else { return }
+            switch phase {
+            case .active: NSCursor.crosshair.set()
+            case .ended: NSCursor.arrow.set()
+            }
+        }
+        .overlay {
+            if mechanicsShown {
+                mechanicPaletteOverlay
+            }
         }
         .background(
             GeometryReader { proxy in
@@ -200,7 +327,10 @@ struct CanvasRootView: View {
             },
             canCopy: copyableJobs != nil,
             copyJobs: { copySelectedJobs() },
-            pasteJobs: { pasteJobs() }
+            pasteJobs: { pasteJobs() },
+            // Через меню, а не canvasKey: тот работает только пока канвас —
+            // first responder, а ⌘K должен открываться и из карточки работы.
+            showMechanics: { openMechanicPalette() }
         ))
         .onAppear {
             document.attach(undoManager)
@@ -230,14 +360,223 @@ struct CanvasRootView: View {
             dragNode = nil
             highlightedJobs = nil
             detailsId = nil
+            mechanicsShown = false
+            mechanicHighlight = nil
+            disarmMechanic()
             autoEditFreshDocument()
         }
+    }
+
+    // MARK: - Механики ценности
+
+    /// Оверлей палитры. Центрируется по видимой части канваса — при
+    /// открытой панели агента detail-колонка уже, и палитра не должна
+    /// вылезать под неё.
+    @ViewBuilder
+    private var mechanicPaletteOverlay: some View {
+        ZStack(alignment: .top) {
+            // Клик мимо палитры закрывает её — конвенция поповера.
+            // Почти прозрачный, но кликабельный фон ловит промахи.
+            Color.black.opacity(0.001)
+                .contentShape(Rectangle())
+                .onTapGesture { closeMechanicPalette() }
+
+            switch MechanicCatalogStore.result {
+            case let .success(catalog):
+                MechanicPaletteView(
+                    catalog: catalog,
+                    anchor: mechanicAnchor,
+                    graph: document.graph,
+                    highlighted: $mechanicHighlight,
+                    onApply: { mechanic, note in applyMechanic(mechanic, note: note) },
+                    onArm: { mechanic in armMechanic(mechanic) },
+                    onFork: { mechanic in forkMechanic(mechanic) },
+                    onClose: { closeMechanicPalette() }
+                )
+                .padding(.top, 46)
+            case let .failure(error):
+                MechanicCatalogErrorView(error: error) { closeMechanicPalette() }
+                    .padding(.top, 46)
+            }
+        }
+    }
+
+    /// Тултип бейджа стикеров: заголовок механики + заметка.
+    private func stickerHelp(_ stickers: [MechanicSticker]) -> String {
+        stickers.map { sticker in
+            let title = mechanicTitle(sticker.slug)
+            return sticker.note.isEmpty ? title : "\(title): \(sticker.note)"
+        }
+        .joined(separator: "\n")
+    }
+
+    /// Русский заголовок механики; слаг как есть, если каталог не загрузился.
+    private func mechanicTitle(_ slug: String) -> String {
+        guard case let .success(catalog) = MechanicCatalogStore.result,
+              let mechanic = catalog.mechanic(slug)
+        else { return slug }
+        return mechanic.title
+    }
+
+    private func openMechanicPalette() {
+        commitEditingIfNeeded()
+        closeDetails()
+        disarmMechanic()
+        mechanicsShown = true
+    }
+
+    private func closeMechanicPalette() {
+        withAnimation(.spring(duration: 0.35)) {
+            mechanicsShown = false
+            mechanicHighlight = nil
+        }
+    }
+
+    // MARK: Взведённый режим
+
+    /// Клик по механике в палитре: палитра закрывается, курсор — прицел,
+    /// следующий клик по работе (или связи) применяет механику к ней.
+    private func armMechanic(_ mechanic: Mechanic) {
+        closeMechanicPalette()
+        armedMechanic = mechanic.slug
+        NSCursor.crosshair.set()
+    }
+
+    private func disarmMechanic() {
+        guard armedMechanic != nil else { return }
+        armedMechanic = nil
+        NSCursor.arrow.set()
+    }
+
+    /// Подсказка чипа: куда кликать взведённой механикой.
+    private func armedTargetHint(_ slug: String) -> String {
+        guard case let .success(catalog) = MechanicCatalogStore.result,
+              let mechanic = catalog.mechanic(slug)
+        else { return "кликните по работе" }
+        if mechanic.mechanicClass == .topology, isChainEdgeMechanic(slug) {
+            return "кликните по связи внутри уровня"
+        }
+        switch mechanic.mechanicClass {
+        case .topology: return "кликните по работе"
+        case .jobCard: return "кликните по работе — правка карточки"
+        case .sticker: return "кликните по работе — повесить заметку"
+        }
+    }
+
+    /// Механики, чей якорь — связь, а не работа.
+    private func isChainEdgeMechanic(_ slug: String) -> Bool {
+        ["reduce-hand-offs", "fix-chain-breaks-between-people", "fix-unperformed-jobs-in-chain"]
+            .contains(slug)
+    }
+
+    /// Выстрел взведённой механикой по работе.
+    private func fireArmedMechanic(atNode id: UUID) {
+        guard let slug = armedMechanic,
+              case let .success(catalog) = MechanicCatalogStore.result,
+              let mechanic = catalog.mechanic(slug)
+        else { disarmMechanic(); return }
+        // Механика связи по клику в узел не стреляет — чип уже объясняет,
+        // куда целиться; взвод не сбрасывается.
+        guard !isChainEdgeMechanic(slug) else { return }
+        applyMechanic(mechanic, note: "", anchor: .node(id))
+        disarmMechanic()
+    }
+
+    /// Выстрел взведённой механикой по связи.
+    private func fireArmedMechanic(atEdge edge: JobEdge) {
+        guard let slug = armedMechanic,
+              case let .success(catalog) = MechanicCatalogStore.result,
+              let mechanic = catalog.mechanic(slug)
+        else { disarmMechanic(); return }
+        guard isChainEdgeMechanic(slug) else { return }
+        applyMechanic(mechanic, note: "", anchor: .chainEdge(from: edge.from, to: edge.to))
+        disarmMechanic()
+    }
+
+    /// Enter в палитре или выстрел взведённой механикой: топология —
+    /// заменить граф превью (⌘Z откатывает), карточка — правка через
+    /// .setDetails или редактор карточки, стикер — заметка на якоре.
+    private func applyMechanic(_ mechanic: Mechanic, note: String, anchor: MechanicAnchor? = nil) {
+        let anchor = anchor ?? mechanicAnchor
+        switch mechanic.mechanicClass {
+        case .topology:
+            guard case let .success(preview) = MechanicTransform.preview(
+                mechanic.slug, in: document.graph, anchor: anchor
+            ) else { return }
+            document.applyMechanicPreview(preview)
+            closeMechanicPalette()
+        case .jobCard:
+            guard case let .node(id) = anchor,
+                  case let .success(details) = MechanicTransform.cardPreview(
+                      mechanic.slug, in: document.graph, anchor: anchor
+                  ),
+                  let job = document.graph.job(id)
+            else { return }
+            if details != job.details {
+                // Детерминированная правка (перенос эмоций) — интентом.
+                document.perform(.setDetails(id, details: details))
+                closeMechanicPalette()
+            } else {
+                // Критериальные механики: новые пороги пишет человек —
+                // палитра закрывается, открывается редактор карточки.
+                closeMechanicPalette()
+                openDetails(job)
+            }
+        case .sticker:
+            document.addMechanicSticker(
+                MechanicSticker(slug: mechanic.slug, anchor: anchor, note: note)
+            )
+            closeMechanicPalette()
+        }
+    }
+
+    /// ⌥Enter: граф-потомок с применённой механикой. Для стикеров форк —
+    /// копия графа со стикером: гипотеза уезжает в отдельную ветку.
+    private func forkMechanic(_ mechanic: Mechanic) {
+        // Происхождение снимается ДО применения: kill-a-job удаляет якорь.
+        let origin = MechanicOrigin.capture(
+            slug: mechanic.slug, anchor: mechanicAnchor, in: document.graph
+        )
+        switch mechanic.mechanicClass {
+        case .topology:
+            guard case let .success(preview) = MechanicTransform.preview(
+                mechanic.slug, in: document.graph, anchor: mechanicAnchor
+            ) else { return }
+            document.forkWithMechanic(
+                preview: preview, origin: origin, mechanicTitle: mechanic.title
+            )
+        case .jobCard:
+            guard case let .node(id) = mechanicAnchor,
+                  case let .success(details) = MechanicTransform.cardPreview(
+                      mechanic.slug, in: document.graph, anchor: mechanicAnchor
+                  )
+            else { return }
+            var preview = document.graph
+            for levelIndex in preview.levels.indices {
+                for jobIndex in preview.levels[levelIndex].jobs.indices
+                where preview.levels[levelIndex].jobs[jobIndex].id == id {
+                    preview.levels[levelIndex].jobs[jobIndex].details = details
+                }
+            }
+            document.forkWithMechanic(
+                preview: preview, origin: origin, mechanicTitle: mechanic.title
+            )
+        case .sticker:
+            document.forkWithMechanic(
+                preview: document.graph, origin: origin, mechanicTitle: mechanic.title
+            )
+        }
+        closeMechanicPalette()
     }
 
     // MARK: - Рендер
 
     @ViewBuilder
-    private func graphContent(_ geometry: GraphLayout.Geometry) -> some View {
+    private func graphContent(
+        _ geometry: GraphLayout.Geometry,
+        graph: WorkGraph,
+        ghost: MechanicGhost.Overlay?
+    ) -> some View {
         let positions = geometry.positions
         let size = contentSize(geometry)
 
@@ -252,7 +591,7 @@ struct CanvasRootView: View {
             let drop = dragNode.flatMap { drag in
                 dropTarget(for: drag.current, excluding: drag.id, geometry: geometry)
             }
-            ForEach(Array(document.graph.levels.enumerated()), id: \.element.id) { index, _ in
+            ForEach(Array(graph.levels.enumerated()), id: \.element.id) { index, _ in
                 bandBackground(
                     index: index,
                     width: size.width,
@@ -264,7 +603,7 @@ struct CanvasRootView: View {
 
             // Рамки областей: та же полоса, но отдельная область — работы
             // того же уровня, которые продукт не выполняет.
-            ForEach(document.graph.levels) { level in
+            ForEach(graph.levels) { level in
                 ForEach(level.zones) { zone in
                     if let span = geometry.zones[zone.id] {
                         zoneBackground(
@@ -278,30 +617,44 @@ struct CanvasRootView: View {
             }
 
             // Рёбра: animatable Shape, интерполируются тем же spring, что и круги.
-            ForEach(document.graph.edges, id: \.self) { edge in
-                edgeView(edge, positions: positions)
+            // При призраке ушедшие рёбра приглушены, новые — пунктиром.
+            ForEach(graph.edges, id: \.self) { edge in
+                edgeView(
+                    edge,
+                    positions: positions,
+                    graph: graph,
+                    ghostStyle: ghost.flatMap { overlay in
+                        if overlay.removedEdges.contains(edge) { return .removed }
+                        if overlay.addedEdges.contains(edge) { return .added }
+                        return nil
+                    }
+                )
             }
 
             // Узлы. Работа свёрнутой цепочки позиции не имеет — раскладка
             // её не разместила, значит на канвасе её нет.
-            ForEach(Array(document.graph.levels.enumerated()), id: \.element.id) { levelIndex, level in
+            ForEach(Array(graph.levels.enumerated()), id: \.element.id) { levelIndex, level in
                 ForEach(level.jobs) { job in
                     if let position = positions[job.id] {
-                        nodeView(job, level: levelIndex, at: point(position))
+                        nodeView(job, level: levelIndex, at: point(position), fate: ghost?.fates[job.id])
                     }
                 }
             }
 
-            // Контролы уровней: добавить работу/область, вставить/удалить уровень.
-            ForEach(Array(document.graph.levels.enumerated()), id: \.element.id) { index, level in
-                bandControls(index: index, level: level, geometry: geometry)
-            }
+            // Контролы и карточка при призраке спрятаны: они читают
+            // document.graph, а на экране union — их клики врали бы.
+            if ghost == nil {
+                // Контролы уровней: добавить работу/область, вставить/удалить уровень.
+                ForEach(Array(graph.levels.enumerated()), id: \.element.id) { index, level in
+                    bandControls(index: index, level: level, geometry: geometry)
+                }
 
-            // Карточка работы — поверх узлов, справа от открытой работы.
-            if let detailsId, let detailsJob = document.graph.job(detailsId),
-               let detailsLevel = document.graph.levelIndex(of: detailsId),
-               let detailsPoint = positions[detailsId] {
-                detailsCard(detailsJob, level: detailsLevel, at: point(detailsPoint))
+                // Карточка работы — поверх узлов, справа от открытой работы.
+                if let detailsId, let detailsJob = graph.job(detailsId),
+                   let detailsLevel = graph.levelIndex(of: detailsId),
+                   let detailsPoint = positions[detailsId] {
+                    detailsCard(detailsJob, level: detailsLevel, at: point(detailsPoint))
+                }
             }
 
             // Резиновая линия: тянется от плюса к курсору при связывании.
@@ -796,17 +1149,32 @@ struct CanvasRootView: View {
 
     // MARK: Рёбра
 
+    /// Стиль ребра при живом призраке.
+    private enum GhostEdgeStyle {
+        /// Ушло в превью — приглушено.
+        case removed
+        /// Появилось в превью — пунктир акцентным цветом.
+        case added
+    }
+
     @ViewBuilder
-    private func edgeView(_ edge: JobEdge, positions: [UUID: CGPoint]) -> some View {
+    private func edgeView(
+        _ edge: JobEdge,
+        positions: [UUID: CGPoint],
+        graph: WorkGraph,
+        ghostStyle: GhostEdgeStyle? = nil
+    ) -> some View {
         // Конец в свёрнутой цепочке — позиции нет, линию рисовать некуда.
-        if let fromLevel = document.graph.levelIndex(of: edge.from),
-           let toLevel = document.graph.levelIndex(of: edge.to),
+        // При призраке graph = union: рёбра к добавленным работам ищут
+        // уровни в нём, а не в document.graph, где этих работ ещё нет.
+        if let fromLevel = graph.levelIndex(of: edge.from),
+           let toLevel = graph.levelIndex(of: edge.to),
            let fromPosition = positions[edge.from],
            let toPosition = positions[edge.to] {
             let from = point(fromPosition)
             let to = point(toPosition)
-            let fromR = document.graph.style(atLevel: fromLevel).diameter / 2
-            let toR = document.graph.style(atLevel: toLevel).diameter / 2
+            let fromR = graph.style(atLevel: fromLevel).diameter / 2
+            let toR = graph.style(atLevel: toLevel).diameter / 2
             let vertical = fromLevel != toLevel
             let sign: CGFloat = to.x >= from.x ? 1 : -1
             let start = vertical
@@ -817,7 +1185,7 @@ struct CanvasRootView: View {
                 : CGPoint(x: to.x - sign * (toR + 3), y: to.y)
             let waypoints = vertical
                 ? detourWaypoints(start: start, end: end, fromLevel: fromLevel,
-                                  toLevel: toLevel, positions: positions)
+                                  toLevel: toLevel, positions: positions, graph: graph)
                 : []
             let shape = EdgeShape(from: start, to: end, vertical: vertical, waypoints: waypoints)
             let isSelected = selectedEdge == edge
@@ -828,14 +1196,26 @@ struct CanvasRootView: View {
 
             shape
                 .stroke(
-                    isSelected ? Color.accentColor : Color.gray.opacity(0.5),
-                    style: StrokeStyle(lineWidth: isSelected ? 2.5 : 1.5, lineCap: .round)
+                    ghostStyle == .added
+                        ? Color.accentColor
+                        : (isSelected ? Color.accentColor : Color.gray.opacity(0.5)),
+                    style: StrokeStyle(
+                        lineWidth: isSelected ? 2.5 : 1.5,
+                        lineCap: .round,
+                        dash: ghostStyle == .added ? [5, 4] : []
+                    )
                 )
-                .opacity(isDimmed ? 0.2 : 1)
+                .opacity(ghostStyle == .removed ? 0.2 : (isDimmed ? 0.2 : 1))
                 // Хит-зона — сама линия, раздутая до 16pt; клики мимо линии
                 // проходят дальше (пустота, узлы).
                 .contentShape(EdgeHitShape(base: shape))
-                .onTapGesture { selectEdge(edge) }
+                .onTapGesture {
+                    if armedMechanic != nil {
+                        fireArmedMechanic(atEdge: edge)
+                    } else {
+                        selectEdge(edge)
+                    }
+                }
                 .contextMenu {
                     Button("Удалить связь", role: .destructive) {
                         document.perform(.toggleEdge(from: edge.from, to: edge.to))
@@ -870,10 +1250,11 @@ struct CanvasRootView: View {
     private func detourWaypoints(
         start: CGPoint, end: CGPoint,
         fromLevel: Int, toLevel: Int,
-        positions: [UUID: CGPoint]
+        positions: [UUID: CGPoint],
+        graph: WorkGraph? = nil
     ) -> [CGPoint] {
         GraphLayout.detourWaypoints(
-            graph: document.graph, positions: positions,
+            graph: graph ?? document.graph, positions: positions,
             start: start, end: end,
             fromLevel: fromLevel, toLevel: toLevel,
             padding: contentPadding
@@ -883,7 +1264,12 @@ struct CanvasRootView: View {
     // MARK: Узлы
 
     @ViewBuilder
-    private func nodeView(_ job: JobNode, level: Int, at basePosition: CGPoint) -> some View {
+    private func nodeView(
+        _ job: JobNode,
+        level: Int,
+        at basePosition: CGPoint,
+        fate: MechanicGhost.JobFate? = nil
+    ) -> some View {
         let style = document.graph.style(atLevel: level)
         let diameter = style.diameter
         let isSelected = selection == job.id
@@ -919,16 +1305,22 @@ struct CanvasRootView: View {
         // контур пунктирный — продукт её не выполняет.
         let inZone = job.zoneID != nil
 
+        // Стикеры механик, повешенные на эту работу (Enter в палитре на
+        // механике без структурной формы).
+        let nodeStickers = document.stickers.filter { $0.anchor == .node(job.id) }
+
         // Круг рендерится в размере × zoom и сжимается обратно — резкие
         // контуры при приближении (тот же приём, что у подписей).
         Circle()
             .fill(LevelColors.fill(style))
             .overlay(
                 Circle().strokeBorder(
-                    inZone ? LevelColors.zoneStroke : LevelColors.stroke(style),
+                    fate == .added
+                        ? Color.accentColor
+                        : (inZone ? LevelColors.zoneStroke : LevelColors.stroke(style)),
                     style: StrokeStyle(
                         lineWidth: 2 * scale,
-                        dash: inZone ? [4 * scale, 3 * scale] : []
+                        dash: (inZone || fate == .added) ? [4 * scale, 3 * scale] : []
                     )
                 )
             )
@@ -938,6 +1330,28 @@ struct CanvasRootView: View {
                         .strokeBorder(Color.accentColor.opacity(0.8), lineWidth: 2.5 * scale)
                         .padding(-5 * scale)
                         .shadow(color: Color.accentColor.opacity(0.45), radius: 6 * scale)
+                }
+            }
+            .overlay {
+                switch fate {
+                case .removed:
+                    // Фантом: перечёркнут — «эту работу механика убивает».
+                    Path { path in
+                        let inset = diameter * scale * 0.18
+                        path.move(to: CGPoint(x: inset, y: inset))
+                        path.addLine(to: CGPoint(
+                            x: diameter * scale - inset, y: diameter * scale - inset
+                        ))
+                    }
+                    .stroke(Color.secondary.opacity(0.8), lineWidth: 2 * scale)
+                case .changed:
+                    // Работа изменилась (переехала из области, слилась):
+                    // мягкое кольцо-подсветка.
+                    Circle()
+                        .strokeBorder(Color.accentColor.opacity(0.55), lineWidth: 2 * scale)
+                        .padding(-4 * scale)
+                default:
+                    EmptyView()
                 }
             }
             .shadow(
@@ -950,14 +1364,35 @@ struct CanvasRootView: View {
             .scaleEffect(isDragging ? 1.12 : (isHovered ? 1.06 : 1))
             .animation(.spring(duration: 0.25), value: isHovered)
             .animation(.spring(duration: 0.2), value: isDragging)
-            .opacity(isDimmed ? 0.25 : 1)
+            // Фантом гаснет до 25% — как узлы вне подсветки поддерева.
+            .opacity((isDimmed || fate == .removed) ? 0.25 : 1)
             .zIndex(isDragging ? 10 : 0)
+            .overlay(alignment: .topTrailing) {
+                if !nodeStickers.isEmpty {
+                    // Бейдж механик-заметок: видно, что на работе висит
+                    // гипотеза ценности; тултип называет какие.
+                    Image(systemName: "note.text")
+                        .font(.system(size: 8 * scale, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(3 * scale)
+                        .background(Circle().fill(Color.orange.gradient))
+                        .scaleEffect(1 / scale)
+                        .offset(x: 4, y: -4)
+                        .help(stickerHelp(nodeStickers))
+                }
+            }
             .position(position)
-            .onTapGesture(count: 2) { openDetails(job) }
+            .onTapGesture(count: 2) {
+                guard armedMechanic == nil else { return }
+                openDetails(job)
+            }
             // ⌘ проверяется внутри обычного тапа: отдельный
             // TapGesture().modifiers(.command) блокирует ВСЕ клики узла.
             .onTapGesture {
-                if NSEvent.modifierFlags.contains(.command) {
+                if armedMechanic != nil {
+                    // Взведённая механика стреляет по кликнутой работе.
+                    fireArmedMechanic(atNode: job.id)
+                } else if NSEvent.modifierFlags.contains(.command) {
                     toggleEdgeWithSelection(job.id)
                 } else {
                     select(job.id)
@@ -966,6 +1401,14 @@ struct CanvasRootView: View {
             .contextMenu {
                 Button("Редактировать") { beginEditing(job) }
                 Button("Карточка работы (двойной клик)") { openDetails(job) }
+                if !nodeStickers.isEmpty {
+                    Divider()
+                    ForEach(nodeStickers) { sticker in
+                        Button("Убрать заметку «\(mechanicTitle(sticker.slug))»") {
+                            document.removeMechanicSticker(sticker.id)
+                        }
+                    }
+                }
                 Divider()
                 Button("Работа справа (⌘Return)") {
                     commitEditingIfNeeded()
@@ -1108,7 +1551,7 @@ struct CanvasRootView: View {
             // Двойной клик по подписи — правка текста работы
             // (по кругу — карточка).
             nodeLabel(job, style: style)
-                .opacity(isDimmed ? 0.25 : 1)
+                .opacity((isDimmed || fate == .removed) ? 0.25 : 1)
                 .position(x: position.x, y: position.y + diameter / 2 + 32)
                 .onTapGesture(count: 2) { beginEditing(job) }
                 .onTapGesture { select(job.id) }
@@ -1563,6 +2006,11 @@ struct CanvasRootView: View {
             pasteJobs()
             return true
         case .escape:
+            if armedMechanic != nil {
+                // Отбой взведённой механики — раньше всего остального.
+                disarmMechanic()
+                return true
+            }
             if detailsId != nil {
                 closeDetails()
                 return true
@@ -2252,6 +2700,8 @@ struct CanvasGraphCommands {
     let canCopy: Bool
     let copyJobs: () -> Void
     let pasteJobs: () -> Void
+    /// Палитра механик ценности (⌘K).
+    let showMechanics: () -> Void
 }
 
 struct CanvasGraphKey: FocusedValueKey {

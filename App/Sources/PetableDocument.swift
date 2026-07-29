@@ -472,6 +472,78 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
         }
     }
 
+    // MARK: - Механики ценности
+
+    /// Enter в палитре (топология): превью механики становится текущим
+    /// графом. Та же пружина и тот же undo-стек, что у обычных интентов —
+    /// ⌘Z откатывает одним шагом. Следа не остаётся by design: это
+    /// правка, а не запись о ней; кто хочет след — жмёт ⌥Enter.
+    @MainActor
+    func applyMechanicPreview(_ preview: WorkGraph) {
+        guard let selectedGraphID, let session = session(for: selectedGraphID) else { return }
+        withAnimation(.spring(duration: 0.35)) {
+            session.replace(with: preview)
+        }
+    }
+
+    /// ⌥Enter в палитре: граф-потомок с применённой механикой. Происхождение
+    /// снимается из графа ДО применения (kill-a-job удаляет свой якорь) и
+    /// живёт в mechanicOrigin — переименование графа связь не рвёт.
+    @MainActor
+    @discardableResult
+    func forkWithMechanic(
+        preview: WorkGraph,
+        origin: MechanicOrigin,
+        mechanicTitle: String
+    ) -> UUID? {
+        guard let selectedGraphID,
+              let parent = stages.first(where: { $0.id == selectedGraphID })
+        else { return nil }
+        let stage = Envelope.Stage(
+            name: "\(parent.name) · \(mechanicTitle)",
+            modifiedAt: Date(),
+            parentID: parent.id,
+            mechanicOrigin: origin,
+            graph: preview
+        )
+        applyListChange {
+            stages.append(stage)
+            self.selectedGraphID = stage.id
+            selectedResearchItem = nil
+        }
+        return stage.id
+    }
+
+    /// Enter на механике-стикере: аннотация вешается на текущий граф.
+    /// Через applyListChange — тот же undo-стек, ⌘Z снимает стикер.
+    @MainActor
+    func addMechanicSticker(_ sticker: MechanicSticker) {
+        guard let selectedGraphID,
+              let index = stages.firstIndex(where: { $0.id == selectedGraphID })
+        else { return }
+        applyListChange {
+            stages[index].stickers.append(sticker)
+            stages[index].modifiedAt = Date()
+        }
+    }
+
+    /// Стикеры выбранного графа — бейджи на канвасе.
+    var stickers: [MechanicSticker] {
+        stages.first(where: { $0.id == selectedGraphID })?.stickers ?? []
+    }
+
+    @MainActor
+    func removeMechanicSticker(_ id: UUID) {
+        guard let selectedGraphID,
+              let index = stages.firstIndex(where: { $0.id == selectedGraphID }),
+              stages[index].stickers.contains(where: { $0.id == id })
+        else { return }
+        applyListChange {
+            stages[index].stickers.removeAll { $0.id == id }
+            stages[index].modifiedAt = Date()
+        }
+    }
+
     // MARK: - Сегменты
 
     /// Новый пустой сегмент с одной кóровой работой; открывается в редакторе.

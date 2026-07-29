@@ -22,9 +22,12 @@ import Foundation
 /// справа скрыты с канваса). Старые файлы читаются развёрнутыми.
 /// v10: `parentID` у стадии — графы группируются в дерево (граф лежит
 /// «под» другим графом). Старые файлы читаются плоским списком.
-/// v1–v9 читаются и мигрируют на лету; запись всегда в v10.
+/// v11: механики ценности — `stickers` у стадии (аннотации механик без
+/// структурной формы) и `mechanicOrigin` (какая механика породила этот
+/// граф-потомок при форке). Старые файлы читаются без того и другого.
+/// v1–v10 читаются и мигрируют на лету; запись всегда в v11.
 public struct Envelope: Codable, Equatable, Sendable {
-    public static let currentVersion = 10
+    public static let currentVersion = 11
     public static let jobGraphStageType = "jobGraph"
     public static let defaultGraphName = "Граф работ"
 
@@ -49,6 +52,12 @@ public struct Envelope: Codable, Equatable, Sendable {
         /// Группировка графов — только структура списка, содержимое
         /// графов друг от друга не зависит.
         public var parentID: UUID?
+        /// Стикеры механик (v11): аннотации механик без структурной формы,
+        /// повешенные на якорь графа. Старые файлы читаются с пустым списком.
+        public var stickers: [MechanicSticker]
+        /// Какая механика породила этот граф-потомок при форке (v11);
+        /// nil — граф создан обычным способом.
+        public var mechanicOrigin: MechanicOrigin?
         public var graph: WorkGraph
 
         public init(
@@ -58,6 +67,8 @@ public struct Envelope: Codable, Equatable, Sendable {
             modifiedAt: Date? = nil,
             origin: ArtifactOrigin? = nil,
             parentID: UUID? = nil,
+            stickers: [MechanicSticker] = [],
+            mechanicOrigin: MechanicOrigin? = nil,
             graph: WorkGraph
         ) {
             self.id = id
@@ -66,6 +77,8 @@ public struct Envelope: Codable, Equatable, Sendable {
             self.modifiedAt = modifiedAt
             self.origin = origin
             self.parentID = parentID
+            self.stickers = stickers
+            self.mechanicOrigin = mechanicOrigin
             var normalized = graph
             normalized.ensureCoreLevel()
             normalized.normalizeZones()
@@ -76,7 +89,9 @@ public struct Envelope: Codable, Equatable, Sendable {
         /// Происхождение с учётом старых файлов без поля.
         public var resolvedOrigin: ArtifactOrigin { origin ?? .human }
 
-        enum CodingKeys: String, CodingKey { case id, type, name, modifiedAt, origin, parentID, graph }
+        enum CodingKeys: String, CodingKey {
+            case id, type, name, modifiedAt, origin, parentID, stickers, mechanicOrigin, graph
+        }
 
         /// v2-стадии не имели `id` и `name` — при чтении подставляются
         /// значения по умолчанию, сохранение перезапишет файл в v3.
@@ -89,11 +104,27 @@ public struct Envelope: Codable, Equatable, Sendable {
             self.modifiedAt = try container.decodeIfPresent(Date.self, forKey: .modifiedAt)
             self.origin = try container.decodeIfPresent(ArtifactOrigin.self, forKey: .origin)
             self.parentID = try container.decodeIfPresent(UUID.self, forKey: .parentID)
+            self.stickers = try container.decodeIfPresent([MechanicSticker].self, forKey: .stickers) ?? []
+            self.mechanicOrigin = try container.decodeIfPresent(MechanicOrigin.self, forKey: .mechanicOrigin)
             var graph = try container.decode(WorkGraph.self, forKey: .graph)
             graph.ensureCoreLevel() // файлы до v7 без core-уровня
             graph.normalizeZones() // порядок работ по областям (v8)
             graph.normalizeEdges() // связи снизу вверх из старых файлов
             self.graph = graph
+        }
+
+        /// Пустой список стикеров в JSON не пишется — как пустая карточка узла.
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(id, forKey: .id)
+            try container.encode(type, forKey: .type)
+            try container.encode(name, forKey: .name)
+            try container.encodeIfPresent(modifiedAt, forKey: .modifiedAt)
+            try container.encodeIfPresent(origin, forKey: .origin)
+            try container.encodeIfPresent(parentID, forKey: .parentID)
+            if !stickers.isEmpty { try container.encode(stickers, forKey: .stickers) }
+            try container.encodeIfPresent(mechanicOrigin, forKey: .mechanicOrigin)
+            try container.encode(graph, forKey: .graph)
         }
     }
 
