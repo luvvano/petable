@@ -70,6 +70,10 @@ public enum GraphIntent: Equatable, Sendable {
     /// справа не сворачивается (флаг был бы невидимой пылью в файле),
     /// то же состояние — no-op.
     case setCollapsed(UUID, Bool)
+    /// Убить (true) или вернуть (false) работу: kill-a-job перечёркивает
+    /// узел на графе, не удаляя его (v13); «Вернуть работу» из
+    /// контекстного меню снимает крестик. То же состояние — no-op.
+    case setKilled(UUID, Bool)
     /// Вставить работы из буфера обмена: id работ и областей свежие,
     /// связи между скопированными работами сохраняются. `atLevel` —
     /// уровень для верхней скопированной работы (уровень под курсором);
@@ -232,6 +236,17 @@ public enum GraphEngine {
                 where copy.levels[levelIndex].jobs[jobIndex].id == id {
                     copy.levels[levelIndex].jobs[jobIndex].verb = verb
                     copy.levels[levelIndex].jobs[jobIndex].role = role
+                }
+            }
+            return GraphResult(graph: copy, focus: id)
+
+        case let .setKilled(id, killed):
+            guard let job = graph.job(id), job.killed != killed else { return nil }
+            var copy = graph
+            for levelIndex in copy.levels.indices {
+                for jobIndex in copy.levels[levelIndex].jobs.indices
+                where copy.levels[levelIndex].jobs[jobIndex].id == id {
+                    copy.levels[levelIndex].jobs[jobIndex].killed = killed
                 }
             }
             return GraphResult(graph: copy, focus: id)

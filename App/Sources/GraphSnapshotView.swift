@@ -166,11 +166,15 @@ struct GraphSnapshotView: View {
                 )
                 : []
 
+            // Рёбра убитой работы гаснут — как на канвасе.
+            let touchesKilled = graph.job(edge.from)?.killed == true
+                || graph.job(edge.to)?.killed == true
             EdgeShape(from: start, to: end, vertical: vertical, waypoints: waypoints)
                 .stroke(
                     Color.gray.opacity(0.5),
                     style: StrokeStyle(lineWidth: 1.5, lineCap: .round)
                 )
+                .opacity(touchesKilled ? 0.3 : 1)
         }
     }
 
@@ -193,8 +197,22 @@ struct GraphSnapshotView: View {
                     style: StrokeStyle(lineWidth: 2, dash: inZone ? [4, 3] : [])
                 )
             )
+            .overlay {
+                if job.killed {
+                    // Убитая работа: крестик, как на канвасе.
+                    Path { path in
+                        let inset = diameter * 0.18
+                        path.move(to: CGPoint(x: inset, y: inset))
+                        path.addLine(to: CGPoint(x: diameter - inset, y: diameter - inset))
+                        path.move(to: CGPoint(x: diameter - inset, y: inset))
+                        path.addLine(to: CGPoint(x: inset, y: diameter - inset))
+                    }
+                    .stroke(Color.secondary.opacity(0.8), lineWidth: 2)
+                }
+            }
             .shadow(color: .black.opacity(0.16), radius: 3, y: 1.5)
             .frame(width: diameter, height: diameter)
+            .opacity(job.killed ? 0.45 : 1)
             .position(position)
 
         VStack(spacing: 0) {
@@ -208,10 +226,12 @@ struct GraphSnapshotView: View {
                     size: style.isTopScale ? 12 : 11,
                     weight: style.isTopScale ? .semibold : .regular
                 ))
+                .strikethrough(job.killed)
                 .lineLimit(job.role == nil ? 3 : 2)
                 .truncationMode(.tail)
                 .multilineTextAlignment(.center)
         }
+        .opacity(job.killed ? 0.45 : 1)
         .frame(width: LayoutMetrics.columnWidth - 6)
         .position(x: position.x, y: position.y + diameter / 2 + 32)
 

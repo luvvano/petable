@@ -8,7 +8,10 @@ let package = Package(
         .library(name: "GraphCore", targets: ["GraphCore"])
     ],
     targets: [
-        .target(name: "GraphCore"),
+        // Справочник механик ценности — копия канона as-is (CC BY-NC-SA 4.0,
+        // Иван Замесин). Не переписывается в Swift: текст обновляется
+        // копированием файла, а рассинхрон ловит тест на резолв слагов.
+        .target(name: "GraphCore", resources: [.process("Resources")]),
         .testTarget(name: "GraphCoreTests", dependencies: ["GraphCore"]),
     ]
 )

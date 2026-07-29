@@ -94,6 +94,10 @@ struct CanvasGraphMenuCommands: Commands {
             Button("Развернуть цепочку (⌥→)") { graph?.expandChain() }
                 .disabled(graph?.canExpand != true)
             Divider()
+            Button("Механики ценности…") { graph?.showMechanics() }
+                .keyboardShortcut("k", modifiers: .command)
+                .disabled(graph == nil)
+            Divider()
             Button("Удалить работу (Delete)") { graph?.deleteSelection() }
                 .disabled(graph?.hasSelection != true)
         }
@@ -543,6 +547,15 @@ struct AppShellView: View {
         }
     }
 
+    /// Русский заголовок механики по слагу; слаг как есть, если каталог
+    /// не загрузился — бейдж всё равно осмысленный.
+    private func mechanicTitle(_ slug: String) -> String {
+        guard case let .success(catalog) = MechanicCatalogStore.result,
+              let mechanic = catalog.mechanic(slug)
+        else { return slug }
+        return mechanic.title
+    }
+
     @ViewBuilder
     private func graphRow(_ row: Envelope.GraphOutlineRow) -> some View {
         let stage = row.stage
@@ -574,7 +587,13 @@ struct AppShellView: View {
                         isExpanded: !collapsedGraphs.contains(stage.id),
                         toggle: { toggleGraphGroup(stage.id) }
                     )
-                    : nil
+                    : nil,
+                mechanicBadge: stage.mechanicOrigin.map { origin in
+                    let title = mechanicTitle(origin.slug)
+                    return origin.anchorLabels.isEmpty
+                        ? title
+                        : "\(title) — \(origin.anchorLabels.joined(separator: ", "))"
+                }
             )
             // Перетащить граф на граф — положить его в эту группу:
             // прямой жест группировки, меню «Переместить» дублирует
@@ -794,7 +813,8 @@ struct AppShellView: View {
         extraContextItems: AnyView? = nil,
         leadingContextItems: AnyView? = nil,
         indent: CGFloat = 0,
-        disclosure: RowDisclosure? = nil
+        disclosure: RowDisclosure? = nil,
+        mechanicBadge: String? = nil
     ) -> some View {
         HStack(spacing: 2) {
             // Место под треугольник занято всегда — иначе имена строк
@@ -823,6 +843,14 @@ struct AppShellView: View {
                     .font(.system(size: 9))
                     .foregroundStyle(Color.purple)
                     .help("Создано ИИ-агентом")
+            }
+            if let mechanicBadge {
+                // Граф-потомок, рождённый механикой (⌥Enter): происхождение
+                // видно без чтения имени — имя переименуют, бейдж останется.
+                Image(systemName: "wand.and.stars")
+                    .font(.system(size: 9))
+                    .foregroundStyle(Color.accentColor)
+                    .help(mechanicBadge)
             }
             Spacer()
             if hoveredRow == id, deletable {

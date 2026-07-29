@@ -112,6 +112,10 @@ public struct JobNode: Codable, Equatable, Identifiable, Sendable {
     /// на голове цепочки — сама голова видна всегда.
     /// Подробности — `WorkGraph.hiddenJobs()`.
     public var isCollapsed: Bool
+    /// Работа убита механикой kill-a-job (v13). Узел НЕ удаляется с
+    /// графа — остаётся на месте перечёркнутым: видно, ЧТО именно убила
+    /// гипотеза. Соседи по цепочке сшиты рёбрами в обход.
+    public var killed: Bool
 
     public init(
         id: UUID = UUID(),
@@ -119,7 +123,8 @@ public struct JobNode: Codable, Equatable, Identifiable, Sendable {
         role: String? = nil,
         details: JobDetails = JobDetails(),
         zoneID: UUID? = nil,
-        isCollapsed: Bool = false
+        isCollapsed: Bool = false,
+        killed: Bool = false
     ) {
         self.id = id
         self.verb = verb
@@ -127,6 +132,7 @@ public struct JobNode: Codable, Equatable, Identifiable, Sendable {
         self.details = details
         self.zoneID = zoneID
         self.isCollapsed = isCollapsed
+        self.killed = killed
     }
 
     /// Комбинированная строка для инлайн-редактора: `role: verb` или `verb`.
@@ -135,11 +141,11 @@ public struct JobNode: Codable, Equatable, Identifiable, Sendable {
         return verb
     }
 
-    enum CodingKeys: String, CodingKey { case id, verb, role, details, zoneID, isCollapsed }
+    enum CodingKeys: String, CodingKey { case id, verb, role, details, zoneID, isCollapsed, killed }
 
     /// Файлы до появления карточки не имеют ключа `details`,
     /// файлы до v8 — ключа `zoneID`, файлы до сворачивания цепочек —
-    /// ключа `isCollapsed`.
+    /// ключа `isCollapsed`, файлы до v13 — ключа `killed`.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
@@ -148,10 +154,11 @@ public struct JobNode: Codable, Equatable, Identifiable, Sendable {
         details = try container.decodeIfPresent(JobDetails.self, forKey: .details) ?? JobDetails()
         zoneID = try container.decodeIfPresent(UUID.self, forKey: .zoneID)
         isCollapsed = try container.decodeIfPresent(Bool.self, forKey: .isCollapsed) ?? false
+        killed = try container.decodeIfPresent(Bool.self, forKey: .killed) ?? false
     }
 
     /// Пустая карточка в JSON не пишется — файлы без описаний не растут.
-    /// Так же и развёрнутая цепочка: `false` не пишется.
+    /// Так же развёрнутая цепочка и живая работа: `false` не пишется.
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
@@ -163,6 +170,9 @@ public struct JobNode: Codable, Equatable, Identifiable, Sendable {
         try container.encodeIfPresent(zoneID, forKey: .zoneID)
         if isCollapsed {
             try container.encode(isCollapsed, forKey: .isCollapsed)
+        }
+        if killed {
+            try container.encode(killed, forKey: .killed)
         }
     }
 }
