@@ -40,7 +40,9 @@ struct CanvasHostView: NSViewRepresentable {
     /// когда копировать или вставлять нечего.
     let canCopy: () -> Bool
     let onCopy: () -> Void
-    let canPaste: () -> Bool
+    /// Подпись пункта вставки — она же признак «есть что вставлять»:
+    /// nil выключает и пункт меню «Правка», и меню правого клика.
+    let pasteTitle: () -> String?
     /// Точка вставки в координатах вью — та, по которой кликнули правой
     /// кнопкой; nil — вставка из строки меню или по ⌘V (места клика нет).
     let onPaste: (CGPoint?) -> Void
@@ -65,7 +67,7 @@ struct CanvasHostView: NSViewRepresentable {
         view.onMouseMove = onMouseMove
         view.canCopy = canCopy
         view.onCopy = onCopy
-        view.canPaste = canPaste
+        view.pasteTitle = pasteTitle
         view.onPaste = onPaste
         focusBridge.view = view
     }
@@ -91,7 +93,7 @@ final class EventCatcherView: NSView {
     var onMouseMove: ((CGPoint?) -> Void)?
     var canCopy: (() -> Bool)?
     var onCopy: (() -> Void)?
-    var canPaste: (() -> Bool)?
+    var pasteTitle: (() -> String?)?
     var onPaste: ((CGPoint?) -> Void)?
 
     /// Суммарный сдвиг текущего drag — отличаем клик от панорамирования.
@@ -172,7 +174,7 @@ final class EventCatcherView: NSView {
     @objc func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         switch menuItem.action {
         case #selector(copy(_:)): return canCopy?() ?? false
-        case #selector(paste(_:)): return canPaste?() ?? false
+        case #selector(paste(_:)): return pasteTitle?() != nil
         default: return true
         }
     }
@@ -180,9 +182,9 @@ final class EventCatcherView: NSView {
     /// Правый клик по пустому месту канваса — «Вставить работы».
     /// Меню узла живёт в SwiftUI (contextMenu), это — про пустоту.
     override func menu(for event: NSEvent) -> NSMenu? {
-        guard canPaste?() == true else { return nil }
+        guard let title = pasteTitle?() else { return nil }
         let menu = NSMenu()
-        let item = NSMenuItem(title: "Вставить работы", action: #selector(paste(_:)), keyEquivalent: "v")
+        let item = NSMenuItem(title: title, action: #selector(paste(_:)), keyEquivalent: "v")
         item.keyEquivalentModifierMask = .command
         item.target = self
         // Пока меню открыто, курсор уже не на канвасе — место клика

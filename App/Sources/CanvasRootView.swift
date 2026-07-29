@@ -110,9 +110,9 @@ struct CanvasRootView: View {
                     }
                     cursorPosition = content
                 },
-                canCopy: { copyableJobs != nil },
-                onCopy: { copySelectedJobs() },
-                canPaste: { ExportImport.hasJobsInClipboard },
+                canCopy: { copyableJobs != nil || currentStage != nil },
+                onCopy: { copyFromCanvas() },
+                pasteTitle: { pasteMenuTitle },
                 onPaste: { location in
                     // Правый клик по пустому месту знает свою точку;
                     // ⌘V и меню «Правка» — по курсору.
@@ -198,8 +198,9 @@ struct CanvasRootView: View {
                 guard let selection, let job = document.graph.job(selection) else { return }
                 if job.isCollapsed { toggleChain(job) }
             },
-            canCopy: copyableJobs != nil,
-            copyJobs: { copySelectedJobs() },
+            canCopy: copyableJobs != nil || currentStage != nil,
+            canPaste: pasteMenuTitle != nil,
+            copyJobs: { copyFromCanvas() },
             pasteJobs: { pasteJobs() }
         ))
         .onAppear {
@@ -1555,11 +1556,11 @@ struct CanvasRootView: View {
             zoomStep(1.25)
             return true
         case .cmdCopy:
-            guard copyableJobs != nil else { return false }
-            copySelectedJobs()
+            guard copyableJobs != nil || currentStage != nil else { return false }
+            copyFromCanvas()
             return true
         case .cmdPaste:
-            guard ExportImport.hasJobsInClipboard else { return false }
+            guard pasteMenuTitle != nil else { return false }
             pasteJobs()
             return true
         case .escape:
@@ -1680,9 +1681,22 @@ struct CanvasRootView: View {
         return document.graph.jobsBelow(selection)
     }
 
-    private func copySelectedJobs() {
-        guard let ids = copyableJobs else { return }
-        copyJobs(ids)
+    /// ⌘C канваса: выделенные работы, а без выделения — весь открытый
+    /// граф целиком. Так «скопировать граф» работает и с канваса, и из
+    /// сайдбара; ⌘V положит его отдельным графом верхнего уровня.
+    private func copyFromCanvas() {
+        if let ids = copyableJobs {
+            copyJobs(ids)
+            return
+        }
+        guard let stage = currentStage else { return }
+        commitEditingIfNeeded()
+        ExportImport.copyGraphJSON(stage)
+    }
+
+    /// Граф, открытый на канвасе.
+    private var currentStage: Envelope.Stage? {
+        document.graphStages.first { $0.id == document.selectedGraphID }
     }
 
     /// Правый клик по узлу выделение не меняет, поэтому меню узла
@@ -1711,6 +1725,14 @@ struct CanvasRootView: View {
         guard !ids.isEmpty else { return }
         commitEditingIfNeeded()
         ExportImport.copyJobs(document.graph.clipboard(keeping: ids))
+    }
+
+    /// Что лежит в буфере, тем и подписан пункт вставки; nil — вставлять
+    /// нечего (пункты меню выключены).
+    private var pasteMenuTitle: String? {
+        if ExportImport.hasJobsInClipboard { return "Вставить работы" }
+        if ExportImport.hasGraphInClipboard { return "Вставить граф работ" }
+        return nil
     }
 
     /// Куда ложится верхняя работа копии: уровень под курсором. Курсор
@@ -1749,7 +1771,13 @@ struct CanvasRootView: View {
     }
 
     private func pasteJobs(anchorLevel: Int?) {
-        guard let clipboard = ExportImport.readJobs(), !clipboard.isEmpty else { return }
+        guard let clipboard = ExportImport.readJobs(), !clipboard.isEmpty else {
+            // В буфере не работы, а целый граф — он приходит отдельным
+            // графом верхнего уровня, а не работами внутрь открытого.
+            commitEditingIfNeeded()
+            ExportImport.pasteGraph(into: document)
+            return
+        }
         commitEditingIfNeeded()
         let before = Set(document.graph.allJobs.map(\.id))
         guard let focus = document.perform(.paste(clipboard, atLevel: anchorLevel)) else { return }
@@ -2248,8 +2276,10 @@ struct CanvasGraphCommands {
     let canExpand: Bool
     let collapseChain: () -> Void
     let expandChain: () -> Void
-    /// Есть что копировать: подсветка «работы ниже» или выделенная работа.
+    /// Есть что копировать: работы (выделение/подсветка) или открытый граф.
     let canCopy: Bool
+    /// В буфере есть работы или граф работ.
+    let canPaste: Bool
     let copyJobs: () -> Void
     let pasteJobs: () -> Void
 }

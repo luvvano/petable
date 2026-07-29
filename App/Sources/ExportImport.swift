@@ -279,6 +279,29 @@ enum ExportImport {
         readJobs()?.isEmpty == false
     }
 
+    // MARK: - Граф работ в буфере обмена
+
+    /// Граф работ из буфера; nil — там что-то другое (работы, чужой JSON).
+    static func readGraph() -> WorkGraphExportFile? {
+        guard let text = NSPasteboard.general.string(forType: .string),
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return nil }
+        return try? WorkGraphExportFile.decode(Data(text.utf8))
+    }
+
+    static var hasGraphInClipboard: Bool { readGraph() != nil }
+
+    /// Вставка графа из буфера: всегда отдельный граф верхнего уровня —
+    /// копия не заезжает внутрь исходного графа (id перегенерированы,
+    /// имя разрешается от коллизий). false — в буфере не граф, и вызвавший
+    /// сам решает, что делать дальше (молча, без алерта).
+    @discardableResult
+    static func pasteGraph(into document: PetableDocument) -> Bool {
+        guard let file = readGraph() else { return false }
+        document.importGraph(name: file.name, graph: file.graph)
+        return true
+    }
+
     // MARK: - Панели, буфер обмена и алерты
 
     private static func copyToClipboard(_ text: String) {

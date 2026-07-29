@@ -82,10 +82,12 @@ struct CanvasGraphMenuCommands: Commands {
             Button("Сдвинуть вправо (⌘→)") { graph?.moveRight() }
                 .disabled(graph?.hasSelection != true)
             Divider()
-            Button("Копировать работы (⌘C)") { graph?.copyJobs() }
+            // Без выделения ⌘C копирует граф целиком, поэтому подпись
+            // без слова «работы»: пункт про то и другое.
+            Button("Копировать (⌘C)") { graph?.copyJobs() }
                 .disabled(graph?.canCopy != true)
-            Button("Вставить работы (⌘V)") { graph?.pasteJobs() }
-                .disabled(graph == nil)
+            Button("Вставить (⌘V)") { graph?.pasteJobs() }
+                .disabled(graph?.canPaste != true)
             Divider()
             Button("Свернуть цепочку (⌥←)") { graph?.collapseChain() }
                 .disabled(graph?.canCollapse != true)
@@ -270,6 +272,10 @@ struct AppShellView: View {
             }
             .listStyle(.sidebar)
             .navigationSplitViewColumnWidth(min: 190, ideal: 230, max: 300)
+            // ⌘C/⌘V по выбранному графу. Пункты меню «Правка» здесь
+            // выключены (сайдбар копирование не реализует), поэтому
+            // клавиши доходят сюда сами — перехватывать меню не нужно.
+            .onKeyPress(phases: .down) { press in handleSidebarKey(press) }
         } detail: {
             // Панель агента живёт внутри detail-колонки (как AI-панель
             // в Cursor): контент ужимается, окно размер не меняет.
@@ -594,10 +600,35 @@ struct AppShellView: View {
         }
     }
 
-    /// Пункты меню графа, специфичные для группировки: создать вложенный
-    /// и перенести в другую группу.
+    /// ⌘C — копия выбранного графа в буфер, ⌘V — вставка графа из буфера.
+    /// Вставка всегда даёт граф верхнего уровня: копия не должна заезжать
+    /// внутрь исходного (вложенность — отдельный жест, «Создать новый
+    /// внутри» или перетаскивание).
+    private func handleSidebarKey(_ press: KeyPress) -> KeyPress.Result {
+        guard press.modifiers.contains(.command), renamingID == nil else { return .ignored }
+        switch press.characters.lowercased() {
+        case "c":
+            guard document.selectedResearchItem == nil,
+                  let stage = document.graphStages.first(where: { $0.id == document.selectedGraphID })
+            else { return .ignored }
+            ExportImport.copyGraphJSON(stage)
+            return .handled
+        case "v":
+            return ExportImport.pasteGraph(into: document) ? .handled : .ignored
+        default:
+            return .ignored
+        }
+    }
+
+    /// Пункты меню графа: копирование и вставка целого графа, создание
+    /// вложенного и перенос в другую группу.
     @ViewBuilder
     private func graphContextItems(_ stage: Envelope.Stage) -> some View {
+        Button("Скопировать граф (⌘C)") { ExportImport.copyGraphJSON(stage) }
+        if ExportImport.hasGraphInClipboard {
+            Button("Вставить граф (⌘V)") { ExportImport.pasteGraph(into: document) }
+        }
+        Divider()
         Button("Создать новый внутри") {
             collapsedGraphs.remove(stage.id) // новый граф должен быть виден
             document.addGraph(parent: stage.id)
