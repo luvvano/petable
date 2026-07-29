@@ -10,19 +10,33 @@ enum MechanicCatalogStore {
 
 /// Палитра механик ценности (⌘K): все 25 механик канона, поиск, ↑/↓ с
 /// живым призраком на канвасе, Enter — применить, ⌥Enter — форк, Esc —
-/// закрыть. Мёртвых плиток нет: топология и карточка дают превью,
-/// стикер вешается заметкой; неприменимые серые с причиной.
+/// закрыть. Мёртвых и серых плиток нет: все механики одного активного
+/// цвета вне зависимости от выделения; Enter на механике, неприменимой
+/// к текущему выделению, взводит её — цель выбирается кликом на канвасе.
+/// Нижняя панель — русское описание и превью механики на примере графа.
 struct MechanicPaletteView: View {
     let catalog: Catalog
     /// Якорь из выделения канваса — палитра его не меняет.
     let anchor: MechanicAnchor
     let graph: WorkGraph
+    /// Потолок размера — видимая область канваса: палитра не должна
+    /// вылезать за окно даже после ресайза на большом мониторе.
+    var maxSize = CGSize(width: 900, height: 1000)
     /// Механика под курсором списка — канвас рисует по ней призрак.
     @Binding var highlighted: String?
     /// Заметка стикера — вводится прямо в палитре.
     @State private var stickerNote = ""
     @State private var query = ""
     @FocusState private var searchFocused: Bool
+
+    /// Размер палитры: тянется за грип в правом нижнем углу,
+    /// запоминается между запусками (паттерн agent.chatWidth).
+    @AppStorage("mechanics.paletteWidth") private var paletteWidth = 430.0
+    @AppStorage("mechanics.paletteHeight") private var paletteHeight = 620.0
+    @State private var sizeAtDragStart: CGSize?
+
+    private static let minWidth = 360.0
+    private static let minHeight = 420.0
 
     let onApply: (Mechanic, String) -> Void
     /// Клик по строке: взвести механику — палитра закрывается, курсор
@@ -64,6 +78,15 @@ struct MechanicPaletteView: View {
         }
     }
 
+    /// Фактический размер: пользовательский, зажатый между минимумом
+    /// (ниже — ломается вёрстка) и видимой областью канваса.
+    private var displaySize: CGSize {
+        CGSize(
+            width: min(max(paletteWidth, Self.minWidth), max(maxSize.width, Self.minWidth)),
+            height: min(max(paletteHeight, Self.minHeight), max(maxSize.height, Self.minHeight))
+        )
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             searchField
@@ -72,13 +95,13 @@ struct MechanicPaletteView: View {
             Divider()
             detailPane
         }
-        .frame(width: 430)
-        .frame(maxHeight: 560)
+        .frame(width: displaySize.width, height: displaySize.height)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(.separator, lineWidth: 1)
         )
+        .overlay(alignment: .bottomTrailing) { resizeGrip }
         .shadow(color: .black.opacity(0.25), radius: 24, y: 8)
         .onAppear {
             searchFocused = true
@@ -142,7 +165,13 @@ struct MechanicPaletteView: View {
     }
 
     private func commit(fork: Bool) {
-        guard let mechanic = highlightedMechanic, unavailability(mechanic) == nil else { return }
+        guard let mechanic = highlightedMechanic else { return }
+        // Механика неприменима к текущему выделению — Enter не мёртвый:
+        // взводит её, цель выбирается кликом на канвасе.
+        guard unavailability(mechanic) == nil else {
+            onArm(mechanic)
+            return
+        }
         if fork {
             onFork(mechanic)
         } else {
@@ -163,7 +192,9 @@ struct MechanicPaletteView: View {
                 }
                 .padding(6)
             }
-            .frame(maxHeight: 300)
+            // Список забирает всю высоту между поиском и нижней панелью —
+            // именно он растёт при вертикальном ресайзе палитры.
+            .frame(maxHeight: .infinity)
             .onChange(of: highlighted) { _, id in
                 guard let id else { return }
                 proxy.scrollTo(id)
@@ -173,26 +204,22 @@ struct MechanicPaletteView: View {
 
     @ViewBuilder
     private func row(_ mechanic: Mechanic) -> some View {
-        let reason = unavailability(mechanic)
         let isHighlighted = highlighted == mechanic.id
 
+        // Все плитки одного активного цвета вне зависимости от выделения:
+        // клик всегда работает (взводит механику), значит и выглядеть
+        // выключенной плитка не имеет права. Применимость к текущему
+        // выделению объясняет нижняя панель, а не серость строки.
         HStack(spacing: 8) {
-            Image(systemName: icon(for: mechanic.mechanicClass))
+            // Изображение механики — то же, что у её комментария на графе:
+            // одна картинка от палитры до бейджа на работе.
+            Image(systemName: mechanic.symbol)
                 .font(.caption)
-                .foregroundStyle(reason == nil ? Color.accentColor : Color.secondary)
+                .foregroundStyle(Color.accentColor)
                 .frame(width: 16)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(mechanic.title)
-                    .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(reason == nil ? .primary : .secondary)
-                if let reason {
-                    // Серая плитка не прячется — причина словами (проверка
-                    // типов, не совет).
-                    Text(reason.title)
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.tertiary)
-                }
-            }
+            Text(mechanic.title)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(.primary)
             Spacer()
             Text(mechanic.mechanicClass.title)
                 .font(.system(size: 9.5))
@@ -219,26 +246,71 @@ struct MechanicPaletteView: View {
         .help("Клик — выбрать цель на канвасе · Enter — применить к выделенному")
     }
 
-    private func icon(for mechanicClass: MechanicClass) -> String {
-        switch mechanicClass {
-        case .topology: return "point.3.connected.trianglepath.dotted"
-        case .jobCard: return "list.bullet.rectangle"
-        case .sticker: return "note.text"
+    // MARK: - Ресайз
+
+    /// Грип в правом нижнем углу: тянется по горизонтали и вертикали,
+    /// размер зажимается в displaySize и живёт в AppStorage.
+    private var resizeGrip: some View {
+        Path { path in
+            path.move(to: CGPoint(x: 13, y: 5))
+            path.addLine(to: CGPoint(x: 5, y: 13))
+            path.move(to: CGPoint(x: 13, y: 9))
+            path.addLine(to: CGPoint(x: 9, y: 13))
         }
+        .stroke(Color.secondary.opacity(0.7), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+        .frame(width: 18, height: 18)
+        .padding(4)
+        .contentShape(Rectangle())
+        .onHover { inside in
+            if inside {
+                resizeCursor.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .gesture(
+            DragGesture(minimumDistance: 1)
+                .onChanged { value in
+                    let start = sizeAtDragStart ?? displaySize
+                    sizeAtDragStart = start
+                    paletteWidth = start.width + value.translation.width
+                    paletteHeight = start.height + value.translation.height
+                }
+                .onEnded { _ in
+                    sizeAtDragStart = nil
+                    // Захлопнуть сохранённое значение в допустимые рамки:
+                    // за пределами оно всё равно не отображается.
+                    paletteWidth = displaySize.width
+                    paletteHeight = displaySize.height
+                }
+        )
+        .help("Потянуть — изменить размер палитры")
     }
 
-    // MARK: - Карточка канона
+    /// Диагональный курсор ресайза появился в macOS 15; на 14 — стрелки.
+    private var resizeCursor: NSCursor {
+        if #available(macOS 15.0, *) {
+            return .frameResize(position: .bottomRight, directions: .all)
+        }
+        return .resizeLeftRight
+    }
+
+    // MARK: - Карточка механики: описание + превью на примере
 
     @ViewBuilder
     private var detailPane: some View {
         if let mechanic = highlightedMechanic {
             VStack(alignment: .leading, spacing: 6) {
-                // Тезис и примеры — английский as-is (P7): перевод канона
-                // пришлось бы поддерживать при каждом обновлении файла.
-                Text(mechanic.thesis)
+                // Русское описание — своя формулировка из словаря; тезис
+                // канона остаётся английским в самом файле канона (P7).
+                Text(mechanic.summary.isEmpty ? mechanic.thesis : mechanic.summary)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
-                    .lineLimit(4)
+                    .fixedSize(horizontal: false, vertical: true)
+                // Превью механики на каноническом примере графа работ —
+                // видно, что она делает, даже без выделения на канвасе.
+                MechanicMiniPreview(mechanic: mechanic)
+                    .id(mechanic.id)
                 if mechanic.mechanicClass == .sticker, unavailability(mechanic) == nil {
                     TextField("Заметка: почему эта механика здесь…", text: $stickerNote)
                         .textFieldStyle(.roundedBorder)
@@ -261,7 +333,9 @@ struct MechanicPaletteView: View {
 
     private func hint(for mechanic: Mechanic) -> String {
         // Клик работает всегда: цель выбирается на канвасе после взвода.
-        guard unavailability(mechanic) == nil else { return "Клик — выбрать цель на канвасе" }
+        guard unavailability(mechanic) == nil else {
+            return "Клик или Enter — выбрать цель на канвасе"
+        }
         switch mechanic.mechanicClass {
         case .topology: return "Клик — выбрать цель · Enter — применить · ⌥Enter — в новый граф"
         case .jobCard: return "Клик — выбрать цель · Enter — применить к карточке"

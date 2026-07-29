@@ -44,6 +44,12 @@ public struct Mechanic: Identifiable, Equatable, Sendable {
     public let canonTitle: String
     /// Русский заголовок для UI.
     public let title: String
+    /// Русское описание для нижней панели палитры: своя короткая
+    /// формулировка (не перевод канона — перевод пришлось бы
+    /// поддерживать при каждом обновлении файла).
+    public let summary: String
+    /// SF Symbol механики — изображение её комментария-записи на графе.
+    public let symbol: String
     public let mechanicClass: MechanicClass
     /// Первый абзац секции — обычно жирный тезис. Может быть пустым.
     public let thesis: String
@@ -57,6 +63,8 @@ public struct Mechanic: Identifiable, Equatable, Sendable {
         slug: String,
         canonTitle: String,
         title: String,
+        summary: String = "",
+        symbol: String = "envelope.fill",
         mechanicClass: MechanicClass,
         thesis: String,
         body: String,
@@ -65,6 +73,8 @@ public struct Mechanic: Identifiable, Equatable, Sendable {
         self.slug = slug
         self.canonTitle = canonTitle
         self.title = title
+        self.summary = summary
+        self.symbol = symbol
         self.mechanicClass = mechanicClass
         self.thesis = thesis
         self.body = body
@@ -131,6 +141,8 @@ public enum MechanicCatalog {
                     slug: entry.slug,
                     canonTitle: entry.canonTitle,
                     title: entry.title,
+                    summary: entry.summary,
+                    symbol: entry.symbol,
                     mechanicClass: entry.mechanicClass,
                     thesis: section.thesis,
                     body: section.body,

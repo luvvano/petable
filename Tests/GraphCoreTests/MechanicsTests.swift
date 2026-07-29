@@ -1,6 +1,9 @@
 import Foundation
 import Testing
 @testable import GraphCore
+#if canImport(AppKit)
+import AppKit
+#endif
 
 @Suite("Справочник механик")
 struct MechanicsTests {
@@ -56,6 +59,60 @@ struct MechanicsTests {
                 mechanic.examples.hasPrefix("Examples:"),
                 "нет блока примеров у \(mechanic.slug)"
             )
+        }
+    }
+
+    @Test("6a. У каждой механики есть русское описание для палитры")
+    func summariesFilled() throws {
+        let catalog = try MechanicCatalog.load().get()
+        for mechanic in catalog.mechanics {
+            #expect(!mechanic.summary.isEmpty, "пустое описание у \(mechanic.slug)")
+        }
+    }
+
+    @Test("6c. У каждой механики свой SF Symbol: непустой, уникальный, существующий")
+    func symbolsUniqueAndValid() throws {
+        let catalog = try MechanicCatalog.load().get()
+        var seen: Set<String> = []
+        for mechanic in catalog.mechanics {
+            #expect(!mechanic.symbol.isEmpty, "пустой символ у \(mechanic.slug)")
+            #expect(seen.insert(mechanic.symbol).inserted,
+                    "символ \(mechanic.symbol) повторяется (\(mechanic.slug))")
+            #if canImport(AppKit)
+            // Опечатка в имени SF Symbol даёт пустую картинку в бейдже —
+            // ловим на тестах, а не глазами в приложении.
+            #expect(
+                NSImage(systemSymbolName: mechanic.symbol, accessibilityDescription: nil) != nil,
+                "SF Symbol «\(mechanic.symbol)» не существует (\(mechanic.slug))"
+            )
+            #endif
+        }
+    }
+
+    @Test("6b. Пример превью применяется для каждой механики")
+    func exampleSamplesApply() throws {
+        // Гарантия нижней панели палитры: на примере-графе каждая
+        // топологическая и карточная механика обязана примениться —
+        // иначе превью показало бы пустоту.
+        let catalog = try MechanicCatalog.load().get()
+        for mechanic in catalog.mechanics {
+            let sample = MechanicExample.sample(for: mechanic.slug)
+            switch mechanic.mechanicClass {
+            case .topology:
+                if case let .failure(reason) = MechanicTransform.preview(
+                    mechanic.slug, in: sample.graph, anchor: sample.anchor
+                ) {
+                    Issue.record("превью примера не применяется у \(mechanic.slug): \(reason)")
+                }
+            case .jobCard:
+                if case let .failure(reason) = MechanicTransform.cardPreview(
+                    mechanic.slug, in: sample.graph, anchor: sample.anchor
+                ) {
+                    Issue.record("карточка примера не применяется у \(mechanic.slug): \(reason)")
+                }
+            case .sticker:
+                #expect(sample.graph.jobCount > 0)
+            }
         }
     }
 

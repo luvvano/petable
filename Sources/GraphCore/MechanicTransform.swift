@@ -20,6 +20,8 @@ public enum MechanicUnavailable: Error, Equatable, Sendable {
     case noCycleHere
     /// Карточная механика: исходный список карточки пуст.
     case emptyField
+    /// `kill-a-job`: работа уже перечёркнута — убивать нечего.
+    case alreadyKilled
 
     public var title: String {
         switch self {
@@ -37,6 +39,8 @@ public enum MechanicUnavailable: Error, Equatable, Sendable {
             return "От этой работы не видно цикла в цепочке"
         case .emptyField:
             return "Соответствующее поле карточки пусто"
+        case .alreadyKilled:
+            return "Работа уже убита — вернуть можно из её меню"
         }
     }
 }
@@ -80,27 +84,35 @@ public enum MechanicTransform {
 
     // MARK: - Топологические трансформации
 
-    /// «Убить работу»: узел исчезает, его источники СШИВАЮТСЯ с целями —
-    /// родитель выполняет большую работу через меньшее число нижних работ
-    /// (формулировка канона), а не просто теряет ветку.
+    /// «Убить работу»: узел НЕ исчезает — остаётся на графе перечёркнутым
+    /// (`killed`), чтобы было видно, что именно убила гипотеза. Источники
+    /// СШИВАЮТСЯ с целями в обход — родитель выполняет большую работу
+    /// через меньшее число живых работ (формулировка канона), цепочка не
+    /// рвётся. Рёбра самого узла остаются и рисуются приглушённо.
     static func killAJob(
         _ graph: WorkGraph, anchor: MechanicAnchor
     ) -> Result<WorkGraph, MechanicUnavailable> {
         guard case let .node(id) = anchor else { return .failure(.needsSelection) }
-        guard let levelIndex = graph.levelIndex(of: id) else { return .failure(.needsSelection) }
+        guard let levelIndex = graph.levelIndex(of: id),
+              let job = graph.job(id)
+        else { return .failure(.needsSelection) }
+        guard !job.killed else { return .failure(.alreadyKilled) }
 
         var copy = expandingCollapsedChain(graph, at: id)
         let sources = copy.sources(of: id)
         let targets = copy.targets(of: id)
 
-        copy.levels[levelIndex].jobs.removeAll { $0.id == id }
-        copy.edges.removeAll { $0.from == id || $0.to == id }
+        for jobIndex in copy.levels[levelIndex].jobs.indices
+        where copy.levels[levelIndex].jobs[jobIndex].id == id {
+            copy.levels[levelIndex].jobs[jobIndex].killed = true
+        }
 
-        // Сшивка. Декартово произведение source × target, но с отсевами
-        // (P6a): петля A→A возможна, если у узла были рёбра A→N и N→A
-        // (цикл — легальное состояние графа), а дубликат ребра — если
-        // A→B уже существовал рядом с A→N→B. edges — массив без дедупа,
-        // канвас рисует ForEach(edges, id: \.self): дубль = коллизия ID.
+        // Сшивка живых соседей в обход убитой. Декартово произведение
+        // source × target, но с отсевами (P6a): петля A→A возможна, если
+        // у узла были рёбра A→N и N→A (цикл — легальное состояние графа),
+        // а дубликат ребра — если A→B уже существовал рядом с A→N→B.
+        // edges — массив без дедупа, канвас рисует ForEach(edges,
+        // id: \.self): дубль = коллизия ID.
         for source in sources {
             for target in targets where source != target {
                 let exists = copy.edges.contains {

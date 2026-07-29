@@ -527,6 +527,47 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
         }
     }
 
+    /// Применение механики с записью: трансформация графа (превью или
+    /// правка карточки) и стикер-запись ложатся в ОДНУ undo-группу —
+    /// ⌘Z откатывает применение целиком, как один шаг. Запись остаётся
+    /// в документе всегда: применение механики — событие, его след не
+    /// должен исчезать после следующего действия.
+    @MainActor
+    func applyMechanic(
+        record: MechanicSticker,
+        preview: WorkGraph? = nil,
+        cardDetails: (jobID: UUID, details: JobDetails)? = nil
+    ) {
+        guard let selectedGraphID,
+              stages.contains(where: { $0.id == selectedGraphID })
+        else { return }
+        windowUndoManager?.beginUndoGrouping()
+        if let preview {
+            applyMechanicPreview(preview)
+        }
+        if let cardDetails {
+            perform(.setDetails(cardDetails.jobID, details: cardDetails.details))
+        }
+        addMechanicSticker(record)
+        windowUndoManager?.endUndoGrouping()
+    }
+
+    /// Реплика в тред стикера-комментария (сайдбар комментариев или
+    /// окно конвертика). Тот же undo-стек.
+    @MainActor
+    func addStickerMessage(_ stickerID: UUID, text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let selectedGraphID,
+              let index = stages.firstIndex(where: { $0.id == selectedGraphID }),
+              let stickerIndex = stages[index].stickers.firstIndex(where: { $0.id == stickerID })
+        else { return }
+        applyListChange {
+            stages[index].stickers[stickerIndex].messages.append(StickerMessage(text: trimmed))
+            stages[index].modifiedAt = Date()
+        }
+    }
+
     /// Стикеры выбранного графа — бейджи на канвасе.
     var stickers: [MechanicSticker] {
         stages.first(where: { $0.id == selectedGraphID })?.stickers ?? []

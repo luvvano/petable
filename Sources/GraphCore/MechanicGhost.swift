@@ -46,7 +46,14 @@ public enum MechanicGhost {
 
         for (id, job) in previewJobs {
             if let old = currentJobs[id] {
-                fates[id] = old == job ? .unchanged : .changed
+                if job.killed, !old.killed {
+                    // Работа убита превью: рисуется перечёркнутой — тот же
+                    // вид, что у неё будет после применения (v13: узел
+                    // остаётся на графе).
+                    fates[id] = .removed
+                } else {
+                    fates[id] = old == job ? .unchanged : .changed
+                }
             } else {
                 fates[id] = .added
             }
@@ -204,10 +211,15 @@ public extension WorkGraph {
         let movedToCore = selfJobs.values.count { job in
             job.zoneID != nil && otherJobs[job.id]?.zoneID == nil
         }
+        // Убитая работа (v13) не удаляется из графа, но для дельты это
+        // «−1 работа»: живых работ стало меньше.
+        let killed = selfJobs.values.count { job in
+            !job.killed && otherJobs[job.id]?.killed == true
+        }
 
         return Delta(
             jobsAdded: otherJobs.keys.filter { selfJobs[$0] == nil }.count,
-            jobsRemoved: selfJobs.keys.filter { otherJobs[$0] == nil }.count,
+            jobsRemoved: selfJobs.keys.filter { otherJobs[$0] == nil }.count + killed,
             edgesAdded: otherEdges.subtracting(selfEdges).count,
             edgesRemoved: selfEdges.subtracting(otherEdges).count,
             zonesRemoved: selfZones.subtracting(otherZones).count,

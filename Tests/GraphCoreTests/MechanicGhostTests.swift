@@ -103,17 +103,18 @@ struct MechanicGhostTests {
 
     // MARK: - Delta
 
-    @Test("6. Дельта kill-a-job: −1 работа, связи сшиты")
+    @Test("6. Дельта kill-a-job: −1 работа (убита), связь сшита в обход")
     func deltaKillAJob() throws {
         let (graph, _, b, _) = chainGraph()
         let preview = try MechanicTransform.preview("kill-a-job", in: graph, anchor: .node(b)).get()
         let delta = graph.delta(to: preview)
+        // v13: узел не удаляется, но помечен убитым — для дельты это
+        // «−1 работа». Рёбра убитой остаются, добавилась сшивка A→C.
         #expect(delta.jobsRemoved == 1)
         #expect(delta.jobsAdded == 0)
-        // A→B и B→C ушли, A→C появилось.
-        #expect(delta.edgesRemoved == 2)
+        #expect(delta.edgesRemoved == 0)
         #expect(delta.edgesAdded == 1)
-        #expect(delta.summary == "−1 работа · −2 связи · +1 связь")
+        #expect(delta.summary == "−1 работа · +1 связь")
     }
 
     @Test("7. Дельта absorb: область снята, работы в кóровых")

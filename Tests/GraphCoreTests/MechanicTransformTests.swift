@@ -44,23 +44,34 @@ struct MechanicTransformTests {
 
     // MARK: - kill-a-job
 
-    @Test("1. Убить работу: узел исчез, источники сшиты с целями")
+    @Test("1. Убить работу: узел остаётся перечёркнутым, источники сшиты с целями")
     func killAJobStitches() throws {
         let (graph, a, b, c) = chainGraph()
         let result = try MechanicTransform.preview("kill-a-job", in: graph, anchor: .node(b)).get()
-        #expect(result.job(b) == nil)
-        // A и C сшиты: цепочка не разорвана.
+        // v13: узел не исчезает — виден на графе с крестиком.
+        #expect(result.job(b)?.killed == true)
+        // A и C сшиты в обход: живая цепочка не разорвана.
         #expect(result.edges.contains { $0.from == a && $0.to == c })
+        // Рёбра убитой остаются — рисуются приглушённо.
+        #expect(result.edges.contains { $0.from == a && $0.to == b })
     }
 
-    @Test("2. Убить работу без источников: цели остаются автономными")
+    @Test("2. Убить работу без источников: пометка без новых рёбер")
     func killAJobNoSources() throws {
         let (graph, a, b, _) = chainGraph()
         let result = try MechanicTransform.preview("kill-a-job", in: graph, anchor: .node(a)).get()
-        #expect(result.job(a) == nil)
-        // B осталась, новых рёбер к ней не появилось сверху цепочки.
-        #expect(result.job(b) != nil)
-        #expect(!result.edges.contains { $0.from == a || $0.to == a })
+        #expect(result.job(a)?.killed == true)
+        // B жива, сшивать нечего — набор рёбер не изменился.
+        #expect(result.job(b)?.killed == false)
+        #expect(Set(result.edges) == Set(graph.edges))
+    }
+
+    @Test("2a. Уже убитую работу убить нельзя — честный отказ")
+    func killAJobAlreadyKilled() throws {
+        let (graph, _, b, _) = chainGraph()
+        let once = try MechanicTransform.preview("kill-a-job", in: graph, anchor: .node(b)).get()
+        let again = MechanicTransform.preview("kill-a-job", in: once, anchor: .node(b))
+        #expect(again == .failure(.alreadyKilled))
     }
 
     @Test("3. P6a: сшивка не создаёт дубликат ребра")
@@ -89,10 +100,8 @@ struct MechanicTransformTests {
         #expect(!result.edges.contains { $0.from == a.id && $0.to == a.id })
     }
 
-    @Test("5. Последняя работа уровня удаляется — как клавиша Delete")
+    @Test("5. Последняя работа уровня: пометка не трогает уровни")
     func killAJobLastOnLevel() throws {
-        // .delete оставляет пустой уровень; механика не должна отказывать
-        // там, где работает обычная клавиша.
         let only = JobNode(verb: "единственная")
         var graph = WorkGraph(levels: [
             GraphLevel(jobs: [JobNode(verb: "кор")], isCore: true),
@@ -100,7 +109,7 @@ struct MechanicTransformTests {
         ])
         graph.ensureCoreLevel()
         let result = try MechanicTransform.preview("kill-a-job", in: graph, anchor: .node(only.id)).get()
-        #expect(result.job(only.id) == nil)
+        #expect(result.job(only.id)?.killed == true)
         #expect(result.levels.count == 2)
     }
 

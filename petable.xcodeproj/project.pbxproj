@@ -10,6 +10,7 @@
 		030313CC5FCAF18A801F6FC0 /* GraphGroupingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A3B916C8B868F1AFF2FCF9B /* GraphGroupingUITests.swift */; };
 		2182349EFAF633AE04318EDE /* JobCardUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C118770D8716012B071DA6E7 /* JobCardUITests.swift */; };
 		257681894B444D2784735B69 /* CanvasHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D48D8C6ACF85E367BFD35260 /* CanvasHostView.swift */; };
+		301D78B093CF673A5EFF57F2 /* MechanicPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50A7B7850B3D4727BC24D751 /* MechanicPreviewView.swift */; };
 		3AC5D72F0299A596AE1926B9 /* ResearchViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F11456C586746FF698A909A /* ResearchViews.swift */; };
 		49CCBD5C8181CD3F83390558 /* MechanicPaletteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6459D748ADC3C00C1AE5A9C /* MechanicPaletteView.swift */; };
 		50E82C33EBB43877BD0C18EE /* PetableDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5784A5AD0A8680F74738F4F5 /* PetableDocument.swift */; };
@@ -24,6 +25,7 @@
 		9D5E004F8ED6D6011C82B12A /* ProjectsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D79E12F8644248968D9CD2C3 /* ProjectsView.swift */; };
 		9DDC7ACAB3123B16C752B7CE /* EdgeShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6DADB00ADC81C9ACD5DD30C /* EdgeShape.swift */; };
 		A6F3D1C110EF637FA99C4AE0 /* AgentChatViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5569EF7D17D2C3983BED72E8 /* AgentChatViews.swift */; };
+		A86588359D034340588FE72A /* CommentsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19ACB25414799E8B2D80DDCA /* CommentsViews.swift */; };
 		A946A0CE79277B538609A251 /* AgentViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52B817033A06DD9CB5F87525 /* AgentViews.swift */; };
 		BC2E5ECFEA80278D956B6A8D /* LevelColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DCB7854D3BB308FACCA6CA8 /* LevelColors.swift */; };
 		BC48987AD696E5470DA2F4AB /* SegmentViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD15B5C36F969484C7736B95 /* SegmentViews.swift */; };
@@ -45,9 +47,11 @@
 /* Begin PBXFileReference section */
 		047B9837F8FEFE53EDB0338C /* ProjectStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectStore.swift; sourceTree = "<group>"; };
 		1331AC4697E53BAD68A9316F /* ExportImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportImport.swift; sourceTree = "<group>"; };
+		19ACB25414799E8B2D80DDCA /* CommentsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommentsViews.swift; sourceTree = "<group>"; };
 		2868A061FB43B50F42D5122B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		2F11456C586746FF698A909A /* ResearchViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResearchViews.swift; sourceTree = "<group>"; };
 		2FEBA89EB1ABD5AE0D0A3553 /* CopyPasteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopyPasteUITests.swift; sourceTree = "<group>"; };
+		50A7B7850B3D4727BC24D751 /* MechanicPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MechanicPreviewView.swift; sourceTree = "<group>"; };
 		52B817033A06DD9CB5F87525 /* AgentViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentViews.swift; sourceTree = "<group>"; };
 		5569EF7D17D2C3983BED72E8 /* AgentChatViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentChatViews.swift; sourceTree = "<group>"; };
 		5784A5AD0A8680F74738F4F5 /* PetableDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetableDocument.swift; sourceTree = "<group>"; };
@@ -109,11 +113,13 @@
 				52B817033A06DD9CB5F87525 /* AgentViews.swift */,
 				D48D8C6ACF85E367BFD35260 /* CanvasHostView.swift */,
 				C70377BEAC79F596245F8956 /* CanvasRootView.swift */,
+				19ACB25414799E8B2D80DDCA /* CommentsViews.swift */,
 				E6DADB00ADC81C9ACD5DD30C /* EdgeShape.swift */,
 				1331AC4697E53BAD68A9316F /* ExportImport.swift */,
 				AFA44484780ECA08BBAAC77D /* GraphSnapshotView.swift */,
 				8DCB7854D3BB308FACCA6CA8 /* LevelColors.swift */,
 				E6459D748ADC3C00C1AE5A9C /* MechanicPaletteView.swift */,
+				50A7B7850B3D4727BC24D751 /* MechanicPreviewView.swift */,
 				ECBCDF746F95FA51C02169F2 /* PetableApp.swift */,
 				5784A5AD0A8680F74738F4F5 /* PetableDocument.swift */,
 				047B9837F8FEFE53EDB0338C /* ProjectStore.swift */,
@@ -269,11 +275,13 @@
 				A946A0CE79277B538609A251 /* AgentViews.swift in Sources */,
 				257681894B444D2784735B69 /* CanvasHostView.swift in Sources */,
 				66ACAE8195976D7C719E5D32 /* CanvasRootView.swift in Sources */,
+				A86588359D034340588FE72A /* CommentsViews.swift in Sources */,
 				9DDC7ACAB3123B16C752B7CE /* EdgeShape.swift in Sources */,
 				900E3D2ADF383CAD72DF5DC8 /* ExportImport.swift in Sources */,
 				9A1A09F8C6438DB47574E315 /* GraphSnapshotView.swift in Sources */,
 				BC2E5ECFEA80278D956B6A8D /* LevelColors.swift in Sources */,
 				49CCBD5C8181CD3F83390558 /* MechanicPaletteView.swift in Sources */,
+				301D78B093CF673A5EFF57F2 /* MechanicPreviewView.swift in Sources */,
 				930AC76E00837B4E7908006A /* PetableApp.swift in Sources */,
 				50E82C33EBB43877BD0C18EE /* PetableDocument.swift in Sources */,
 				D0D86A1C5D5226B88F0BC93B /* ProjectStore.swift in Sources */,

@@ -61,6 +61,13 @@ struct CanvasRootView: View {
     /// работе (или связи) применяет её к цели. Esc — отбой.
     @State private var armedMechanic: String?
 
+    /// Правый сайдбар комментариев (записей механик) графа.
+    @State private var commentsShown = false
+    /// Узел, чьё окно комментариев открыто кликом по конвертику.
+    @State private var commentsPopoverNodeID: UUID?
+    /// Комментарий, чей якорь выделен кликом в сайдбаре.
+    @State private var revealedStickerID: UUID?
+
     private static let contentSpace = "canvas-content"
 
     /// Живой призрак: union-граф + судьбы + дельта. Считается только для
@@ -215,6 +222,28 @@ struct CanvasRootView: View {
         .overlay(alignment: .bottom) {
             if showsHints { hintsBar }
         }
+        // Комментарии графа: кнопка-конвертик, пока сайдбар закрыт,
+        // и сам сайдбар справа (как список комментариев в Confluence).
+        .overlay(alignment: .topTrailing) {
+            if !commentsShown {
+                commentsToggleButton
+                    .padding(.top, 10)
+                    .padding(.trailing, 12)
+            }
+        }
+        .overlay(alignment: .trailing) {
+            if commentsShown {
+                CommentsSidebar(
+                    document: document,
+                    revealedID: revealedStickerID,
+                    onReveal: { sticker in revealComment(sticker) },
+                    onClose: {
+                        withAnimation(.spring(duration: 0.25)) { commentsShown = false }
+                    }
+                )
+                .transition(.move(edge: .trailing))
+            }
+        }
         .overlay(alignment: .top) {
             VStack(spacing: 6) {
                 if let armed = armedMechanic {
@@ -362,6 +391,8 @@ struct CanvasRootView: View {
             detailsId = nil
             mechanicsShown = false
             mechanicHighlight = nil
+            commentsPopoverNodeID = nil
+            revealedStickerID = nil
             disarmMechanic()
             autoEditFreshDocument()
         }
@@ -387,6 +418,12 @@ struct CanvasRootView: View {
                     catalog: catalog,
                     anchor: mechanicAnchor,
                     graph: document.graph,
+                    // Потолок ресайза — видимая область канваса минус отступ
+                    // сверху: палитра не должна вылезать за окно.
+                    maxSize: CGSize(
+                        width: max(viewportSize.width - 40, 360),
+                        height: max(viewportSize.height - 70, 420)
+                    ),
                     highlighted: $mechanicHighlight,
                     onApply: { mechanic, note in applyMechanic(mechanic, note: note) },
                     onArm: { mechanic in armMechanic(mechanic) },
@@ -398,6 +435,74 @@ struct CanvasRootView: View {
                 MechanicCatalogErrorView(error: error) { closeMechanicPalette() }
                     .padding(.top, 46)
             }
+        }
+    }
+
+    // MARK: - Комментарии
+
+    /// Кнопка-конвертик: открыть сайдбар комментариев; счётчик — сколько
+    /// записей механик висит на графе.
+    private var commentsToggleButton: some View {
+        Button {
+            withAnimation(.spring(duration: 0.25)) { commentsShown = true }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "envelope")
+                    .font(.system(size: 12, weight: .medium))
+                if !document.stickers.isEmpty {
+                    Text("\(document.stickers.count)")
+                        .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                }
+            }
+            .foregroundStyle(document.stickers.isEmpty ? Color.secondary : Color.orange)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.regularMaterial, in: Capsule())
+            .overlay(Capsule().strokeBorder(.separator, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .help("Комментарии графа: записи применённых механик ценности")
+        .accessibilityIdentifier("commentsToggle")
+    }
+
+    /// Клик по комментарию в сайдбаре: выделить якорь и показать его —
+    /// работа (или связь) центрируется на канвасе.
+    private func revealComment(_ sticker: MechanicSticker) {
+        revealedStickerID = sticker.id
+        switch sticker.anchor {
+        case let .node(id):
+            guard document.graph.job(id) != nil else { return }
+            selection = id
+            selectedEdge = nil
+            centerOn(nodeID: id)
+        case let .chainEdge(from, to):
+            guard document.graph.edges.contains(where: { $0.from == from && $0.to == to })
+            else { return }
+            selectedEdge = JobEdge(from: from, to: to)
+            selection = nil
+            centerOn(nodeID: from)
+        case let .zone(id):
+            if let job = document.graph.allJobs.first(where: { $0.zoneID == id }) {
+                centerOn(nodeID: job.id)
+            }
+        case .unanchored:
+            break
+        }
+    }
+
+    /// Центрирует работу в видимой части канваса (правее сайдбара
+    /// комментариев, если он открыт).
+    private func centerOn(nodeID: UUID) {
+        guard viewportSize.width > 0,
+              let position = GraphLayout.layout(document.graph)[nodeID]
+        else { return }
+        let target = point(position)
+        let visibleWidth = viewportSize.width - (commentsShown ? 300 : 0)
+        withAnimation(.spring(duration: 0.3)) {
+            offset = CGSize(
+                width: visibleWidth / 2 - target.x * scale,
+                height: viewportSize.height / 2 - target.y * scale
+            )
         }
     }
 
@@ -494,16 +599,24 @@ struct CanvasRootView: View {
     }
 
     /// Enter в палитре или выстрел взведённой механикой: топология —
-    /// заменить граф превью (⌘Z откатывает), карточка — правка через
-    /// .setDetails или редактор карточки, стикер — заметка на якоре.
+    /// заменить граф превью, карточка — правка через .setDetails или
+    /// редактор карточки, стикер — заметка на якоре. ЛЮБОЕ применение
+    /// оставляет запись-стикер на якоре (конвертик): применение механики —
+    /// событие документа, его след не исчезает после следующего действия.
+    /// Трансформация и запись — одна undo-группа, ⌘Z откатывает целиком.
     private func applyMechanic(_ mechanic: Mechanic, note: String, anchor: MechanicAnchor? = nil) {
         let anchor = anchor ?? mechanicAnchor
+        // Запись снимается из графа ДО применения — подписи якорных работ
+        // фиксируются на момент решения (тексты потом могут править).
+        let record = MechanicSticker.capture(
+            slug: mechanic.slug, anchor: anchor, note: note, in: document.graph
+        )
         switch mechanic.mechanicClass {
         case .topology:
             guard case let .success(preview) = MechanicTransform.preview(
                 mechanic.slug, in: document.graph, anchor: anchor
             ) else { return }
-            document.applyMechanicPreview(preview)
+            document.applyMechanic(record: record, preview: preview)
             closeMechanicPalette()
         case .jobCard:
             guard case let .node(id) = anchor,
@@ -514,18 +627,17 @@ struct CanvasRootView: View {
             else { return }
             if details != job.details {
                 // Детерминированная правка (перенос эмоций) — интентом.
-                document.perform(.setDetails(id, details: details))
+                document.applyMechanic(record: record, cardDetails: (id, details))
                 closeMechanicPalette()
             } else {
                 // Критериальные механики: новые пороги пишет человек —
                 // палитра закрывается, открывается редактор карточки.
+                document.applyMechanic(record: record)
                 closeMechanicPalette()
                 openDetails(job)
             }
         case .sticker:
-            document.addMechanicSticker(
-                MechanicSticker(slug: mechanic.slug, anchor: anchor, note: note)
-            )
+            document.applyMechanic(record: record)
             closeMechanicPalette()
         }
     }
@@ -1193,6 +1305,10 @@ struct CanvasRootView: View {
             let isDimmed = highlightedJobs.map {
                 !($0.contains(edge.from) && $0.contains(edge.to))
             } ?? false
+            // Рёбра убитой работы (v13) остаются в графе, но гаснут:
+            // живая цепочка идёт по сшитым рёбрам в обход.
+            let touchesKilled = graph.job(edge.from)?.killed == true
+                || graph.job(edge.to)?.killed == true
 
             shape
                 .stroke(
@@ -1205,7 +1321,7 @@ struct CanvasRootView: View {
                         dash: ghostStyle == .added ? [5, 4] : []
                     )
                 )
-                .opacity(ghostStyle == .removed ? 0.2 : (isDimmed ? 0.2 : 1))
+                .opacity((ghostStyle == .removed || isDimmed || touchesKilled) ? 0.2 : 1)
                 // Хит-зона — сама линия, раздутая до 16pt; клики мимо линии
                 // проходят дальше (пустота, узлы).
                 .contentShape(EdgeHitShape(base: shape))
@@ -1333,25 +1449,25 @@ struct CanvasRootView: View {
                 }
             }
             .overlay {
-                switch fate {
-                case .removed:
-                    // Фантом: перечёркнут — «эту работу механика убивает».
+                if fate == .removed || job.killed {
+                    // Перечёркнута: фантом призрака или работа, убитая
+                    // kill-a-job (v13) — узел остаётся на графе с крестом.
                     Path { path in
                         let inset = diameter * scale * 0.18
                         path.move(to: CGPoint(x: inset, y: inset))
                         path.addLine(to: CGPoint(
                             x: diameter * scale - inset, y: diameter * scale - inset
                         ))
+                        path.move(to: CGPoint(x: diameter * scale - inset, y: inset))
+                        path.addLine(to: CGPoint(x: inset, y: diameter * scale - inset))
                     }
                     .stroke(Color.secondary.opacity(0.8), lineWidth: 2 * scale)
-                case .changed:
+                } else if fate == .changed {
                     // Работа изменилась (переехала из области, слилась):
                     // мягкое кольцо-подсветка.
                     Circle()
                         .strokeBorder(Color.accentColor.opacity(0.55), lineWidth: 2 * scale)
                         .padding(-4 * scale)
-                default:
-                    EmptyView()
                 }
             }
             .shadow(
@@ -1365,20 +1481,47 @@ struct CanvasRootView: View {
             .animation(.spring(duration: 0.25), value: isHovered)
             .animation(.spring(duration: 0.2), value: isDragging)
             // Фантом гаснет до 25% — как узлы вне подсветки поддерева.
-            .opacity((isDimmed || fate == .removed) ? 0.25 : 1)
+            // Убитая работа приглушена мягче: она — постоянный житель
+            // графа, а не превью, и должна оставаться читаемой.
+            .opacity((isDimmed || fate == .removed) ? 0.25 : (job.killed ? 0.45 : 1))
             .zIndex(isDragging ? 10 : 0)
             .overlay(alignment: .topTrailing) {
                 if !nodeStickers.isEmpty {
-                    // Бейдж механик-заметок: видно, что на работе висит
-                    // гипотеза ценности; тултип называет какие.
-                    Image(systemName: "note.text")
-                        .font(.system(size: 8 * scale, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(3 * scale)
-                        .background(Circle().fill(Color.orange.gradient))
-                        .scaleEffect(1 / scale)
-                        .offset(x: 4, y: -4)
-                        .help(stickerHelp(nodeStickers))
+                    // Бейджи комментариев: у каждой механики своё
+                    // изображение — записи узнаются без чтения тултипа.
+                    // Больше трёх — счётчик остатка. Клик открывает окно
+                    // с тредами.
+                    HStack(spacing: 2 * scale) {
+                        ForEach(nodeStickers.prefix(3)) { sticker in
+                            Image(systemName: CommentsUI.mechanicSymbol(sticker.slug))
+                                .font(.system(size: 8 * scale, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 11 * scale, height: 11 * scale)
+                                .padding(2.5 * scale)
+                                .background(Circle().fill(Color.orange.gradient))
+                        }
+                        if nodeStickers.count > 3 {
+                            Text("+\(nodeStickers.count - 3)")
+                                .font(.system(size: 8 * scale, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 3 * scale)
+                                .padding(.vertical, 2.5 * scale)
+                                .background(Capsule().fill(Color.orange.gradient))
+                        }
+                    }
+                    .scaleEffect(1 / scale)
+                    .offset(x: 4, y: -4)
+                    .help(stickerHelp(nodeStickers))
+                    .onTapGesture { commentsPopoverNodeID = job.id }
+                    .popover(
+                        isPresented: Binding(
+                            get: { commentsPopoverNodeID == job.id },
+                            set: { if !$0 { commentsPopoverNodeID = nil } }
+                        ),
+                        arrowEdge: .bottom
+                    ) {
+                        NodeCommentsPopover(document: document, jobID: job.id)
+                    }
                 }
             }
             .position(position)
@@ -1401,6 +1544,12 @@ struct CanvasRootView: View {
             .contextMenu {
                 Button("Редактировать") { beginEditing(job) }
                 Button("Карточка работы (двойной клик)") { openDetails(job) }
+                if job.killed {
+                    // Снять крестик kill-a-job: работа снова живая.
+                    Button("Вернуть работу (снять крестик)") {
+                        document.perform(.setKilled(job.id, false))
+                    }
+                }
                 if !nodeStickers.isEmpty {
                     Divider()
                     ForEach(nodeStickers) { sticker in
@@ -1757,12 +1906,15 @@ struct CanvasRootView: View {
                     size: (style.isTopScale ? 12 : 11) * scale,
                     weight: style.isTopScale ? .semibold : .regular
                 ))
+                // Убитая работа: подпись зачёркнута, как и сам узел.
+                .strikethrough(job.killed)
                 // Резерв 3 строки — совпадает с labelReserve раскладки;
                 // длиннее — truncation, полный текст в редакторе.
                 .lineLimit(job.role == nil ? 3 : 2)
                 .truncationMode(.tail)
                 .multilineTextAlignment(.center)
         }
+        .opacity(job.killed ? 0.45 : 1)
         .frame(width: (LayoutMetrics.columnWidth - 6) * scale)
         .scaleEffect(1 / scale)
     }

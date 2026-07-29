@@ -25,9 +25,14 @@ import Foundation
 /// v11: механики ценности — `stickers` у стадии (аннотации механик без
 /// структурной формы) и `mechanicOrigin` (какая механика породила этот
 /// граф-потомок при форке). Старые файлы читаются без того и другого.
-/// v1–v10 читаются и мигрируют на лету; запись всегда в v11.
+/// v12: стикер стал записью-комментарием — `messages` (тред обсуждения)
+/// и `anchorLabels` (тексты якорных работ на момент применения) у
+/// MechanicSticker. Старые файлы читаются с пустыми.
+/// v13: `killed` у работы — kill-a-job больше не удаляет узел, а
+/// перечёркивает его на графе. Старые файлы читаются с живыми работами.
+/// v1–v12 читаются и мигрируют на лету; запись всегда в v13.
 public struct Envelope: Codable, Equatable, Sendable {
-    public static let currentVersion = 11
+    public static let currentVersion = 13
     public static let jobGraphStageType = "jobGraph"
     public static let defaultGraphName = "Граф работ"
 
