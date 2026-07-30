@@ -8,16 +8,23 @@
 
 /* Begin PBXBuildFile section */
 		030313CC5FCAF18A801F6FC0 /* GraphGroupingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A3B916C8B868F1AFF2FCF9B /* GraphGroupingUITests.swift */; };
+		0D5D17616531FFCC080125DD /* OrgShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66F677C38136504A3ADFEE31 /* OrgShared.swift */; };
+		1FF0B197461697A81BA29481 /* OrganizationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BDCCD39A977C740B0701381 /* OrganizationController.swift */; };
 		2182349EFAF633AE04318EDE /* JobCardUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C118770D8716012B071DA6E7 /* JobCardUITests.swift */; };
 		257681894B444D2784735B69 /* CanvasHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D48D8C6ACF85E367BFD35260 /* CanvasHostView.swift */; };
 		301D78B093CF673A5EFF57F2 /* MechanicPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50A7B7850B3D4727BC24D751 /* MechanicPreviewView.swift */; };
+		31E314912EF3116B4C826AFC /* AgentRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = E51CEF3AEB39594A291DFC9F /* AgentRuntime */; };
 		3AC5D72F0299A596AE1926B9 /* ResearchViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F11456C586746FF698A909A /* ResearchViews.swift */; };
 		49CCBD5C8181CD3F83390558 /* MechanicPaletteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6459D748ADC3C00C1AE5A9C /* MechanicPaletteView.swift */; };
 		50E82C33EBB43877BD0C18EE /* PetableDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5784A5AD0A8680F74738F4F5 /* PetableDocument.swift */; };
+		5EF50B53413A1EFAF4B2ADA0 /* UpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82EFC37AA58788E77160B2A6 /* UpdateService.swift */; };
 		66ACAE8195976D7C719E5D32 /* CanvasRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C70377BEAC79F596245F8956 /* CanvasRootView.swift */; };
 		7B55BEE04721BA91D1D33F2C /* AgentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E62A45FA71D4D0DD484A33F5 /* AgentService.swift */; };
+		7B74C16418BD6040B8BE4FD7 /* OrgEngine in Frameworks */ = {isa = PBXBuildFile; productRef = 4D85D01F699957E758E47075 /* OrgEngine */; };
 		7CA5AF489D5849BAE4BD256F /* MechanicPaletteUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A16AD5F31A553C1F92C9B595 /* MechanicPaletteUITests.swift */; };
 		82184708D4ACED543534C1D3 /* GraphCore in Frameworks */ = {isa = PBXBuildFile; productRef = 36C73F57FA1089A82679D3FD /* GraphCore */; };
+		8375C6C2F813DCD849E9A245 /* OrganizationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBCAB0B7A981DB7D71A04004 /* OrganizationView.swift */; };
+		88A1C648540F9840B24425AC /* PipelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07A8413C3F50E96E8C8A1DAE /* PipelineView.swift */; };
 		8CD193EA4E65C5142B10BD61 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2868A061FB43B50F42D5122B /* Assets.xcassets */; };
 		900E3D2ADF383CAD72DF5DC8 /* ExportImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1331AC4697E53BAD68A9316F /* ExportImport.swift */; };
 		930AC76E00837B4E7908006A /* PetableApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECBCDF746F95FA51C02169F2 /* PetableApp.swift */; };
@@ -46,9 +53,11 @@
 
 /* Begin PBXFileReference section */
 		047B9837F8FEFE53EDB0338C /* ProjectStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectStore.swift; sourceTree = "<group>"; };
+		07A8413C3F50E96E8C8A1DAE /* PipelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineView.swift; sourceTree = "<group>"; };
 		1331AC4697E53BAD68A9316F /* ExportImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportImport.swift; sourceTree = "<group>"; };
 		19ACB25414799E8B2D80DDCA /* CommentsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommentsViews.swift; sourceTree = "<group>"; };
 		2868A061FB43B50F42D5122B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		2BDCCD39A977C740B0701381 /* OrganizationController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizationController.swift; sourceTree = "<group>"; };
 		2F11456C586746FF698A909A /* ResearchViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResearchViews.swift; sourceTree = "<group>"; };
 		2FEBA89EB1ABD5AE0D0A3553 /* CopyPasteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopyPasteUITests.swift; sourceTree = "<group>"; };
 		50A7B7850B3D4727BC24D751 /* MechanicPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MechanicPreviewView.swift; sourceTree = "<group>"; };
@@ -56,12 +65,16 @@
 		5569EF7D17D2C3983BED72E8 /* AgentChatViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentChatViews.swift; sourceTree = "<group>"; };
 		5784A5AD0A8680F74738F4F5 /* PetableDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetableDocument.swift; sourceTree = "<group>"; };
 		5EB6C462D7DAA6E097ACD327 /* petableUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = petableUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		66F677C38136504A3ADFEE31 /* OrgShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrgShared.swift; sourceTree = "<group>"; };
 		6A3B916C8B868F1AFF2FCF9B /* GraphGroupingUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphGroupingUITests.swift; sourceTree = "<group>"; };
+		82EFC37AA58788E77160B2A6 /* UpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateService.swift; sourceTree = "<group>"; };
+		84D258FBEF767A24F6E72BA5 /* effervescent-squishing-valley */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "effervescent-squishing-valley"; path = .; sourceTree = SOURCE_ROOT; };
 		8DCB7854D3BB308FACCA6CA8 /* LevelColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LevelColors.swift; sourceTree = "<group>"; };
 		9569C7DB8D26BBD48DECBDA9 /* KeyboardFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardFlowUITests.swift; sourceTree = "<group>"; };
 		98C30A1BAAAF4FDF1990FED8 /* petable.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = petable.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A16AD5F31A553C1F92C9B595 /* MechanicPaletteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MechanicPaletteUITests.swift; sourceTree = "<group>"; };
 		AFA44484780ECA08BBAAC77D /* GraphSnapshotView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphSnapshotView.swift; sourceTree = "<group>"; };
+		BBCAB0B7A981DB7D71A04004 /* OrganizationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizationView.swift; sourceTree = "<group>"; };
 		BD15B5C36F969484C7736B95 /* SegmentViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SegmentViews.swift; sourceTree = "<group>"; };
 		C118770D8716012B071DA6E7 /* JobCardUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobCardUITests.swift; sourceTree = "<group>"; };
 		C70377BEAC79F596245F8956 /* CanvasRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasRootView.swift; sourceTree = "<group>"; };
@@ -71,7 +84,6 @@
 		E6459D748ADC3C00C1AE5A9C /* MechanicPaletteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MechanicPaletteView.swift; sourceTree = "<group>"; };
 		E6DADB00ADC81C9ACD5DD30C /* EdgeShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EdgeShape.swift; sourceTree = "<group>"; };
 		ECBCDF746F95FA51C02169F2 /* PetableApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetableApp.swift; sourceTree = "<group>"; };
-		F3388C174372778E56827C28 /* quirky-wishing-catmull */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "quirky-wishing-catmull"; path = .; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -80,6 +92,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				82184708D4ACED543534C1D3 /* GraphCore in Frameworks */,
+				31E314912EF3116B4C826AFC /* AgentRuntime in Frameworks */,
+				7B74C16418BD6040B8BE4FD7 /* OrgEngine in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -100,7 +114,7 @@
 		1552D3B1E9C190B2D297339D /* Packages */ = {
 			isa = PBXGroup;
 			children = (
-				F3388C174372778E56827C28 /* quirky-wishing-catmull */,
+				84D258FBEF767A24F6E72BA5 /* effervescent-squishing-valley */,
 			);
 			name = Packages;
 			sourceTree = "<group>";
@@ -120,12 +134,17 @@
 				8DCB7854D3BB308FACCA6CA8 /* LevelColors.swift */,
 				E6459D748ADC3C00C1AE5A9C /* MechanicPaletteView.swift */,
 				50A7B7850B3D4727BC24D751 /* MechanicPreviewView.swift */,
+				2BDCCD39A977C740B0701381 /* OrganizationController.swift */,
+				BBCAB0B7A981DB7D71A04004 /* OrganizationView.swift */,
+				66F677C38136504A3ADFEE31 /* OrgShared.swift */,
 				ECBCDF746F95FA51C02169F2 /* PetableApp.swift */,
 				5784A5AD0A8680F74738F4F5 /* PetableDocument.swift */,
+				07A8413C3F50E96E8C8A1DAE /* PipelineView.swift */,
 				047B9837F8FEFE53EDB0338C /* ProjectStore.swift */,
 				D79E12F8644248968D9CD2C3 /* ProjectsView.swift */,
 				2F11456C586746FF698A909A /* ResearchViews.swift */,
 				BD15B5C36F969484C7736B95 /* SegmentViews.swift */,
+				82EFC37AA58788E77160B2A6 /* UpdateService.swift */,
 			);
 			name = Sources;
 			path = App/Sources;
@@ -189,6 +208,7 @@
 				DA467A911BE9A0D35A0D3A9C /* Sources */,
 				1A94F7FB56B6B1B8CD8004D0 /* Resources */,
 				72326585BBE2C40A34F8699A /* Frameworks */,
+				6449190CA146BFABD1F936C6 /* Embed build SHA */,
 			);
 			buildRules = (
 			);
@@ -197,6 +217,8 @@
 			name = petable;
 			packageProductDependencies = (
 				36C73F57FA1089A82679D3FD /* GraphCore */,
+				E51CEF3AEB39594A291DFC9F /* AgentRuntime */,
+				4D85D01F699957E758E47075 /* OrgEngine */,
 			);
 			productName = petable;
 			productReference = 98C30A1BAAAF4FDF1990FED8 /* petable.app */;
@@ -253,6 +275,28 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		6449190CA146BFABD1F936C6 /* Embed build SHA */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed build SHA";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "PLIST=\"$BUILT_PRODUCTS_DIR/$INFOPLIST_PATH\"\n[ -f \"$PLIST\" ] || exit 0\nSHA=$(cd \"$PROJECT_DIR\" && /usr/bin/git rev-parse HEAD 2>/dev/null || echo unknown)\n/usr/libexec/PlistBuddy -c \"Set :PetableBuildSHA $SHA\" \"$PLIST\" 2>/dev/null \\\n  || /usr/libexec/PlistBuddy -c \"Add :PetableBuildSHA string $SHA\" \"$PLIST\"\n/usr/libexec/PlistBuddy -c \"Set :PetableRepoPath $PROJECT_DIR\" \"$PLIST\" 2>/dev/null \\\n  || /usr/libexec/PlistBuddy -c \"Add :PetableRepoPath string $PROJECT_DIR\" \"$PLIST\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		8FD2904A24BDE5ECFA09AF3D /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -282,12 +326,17 @@
 				BC2E5ECFEA80278D956B6A8D /* LevelColors.swift in Sources */,
 				49CCBD5C8181CD3F83390558 /* MechanicPaletteView.swift in Sources */,
 				301D78B093CF673A5EFF57F2 /* MechanicPreviewView.swift in Sources */,
+				0D5D17616531FFCC080125DD /* OrgShared.swift in Sources */,
+				1FF0B197461697A81BA29481 /* OrganizationController.swift in Sources */,
+				8375C6C2F813DCD849E9A245 /* OrganizationView.swift in Sources */,
 				930AC76E00837B4E7908006A /* PetableApp.swift in Sources */,
 				50E82C33EBB43877BD0C18EE /* PetableDocument.swift in Sources */,
+				88A1C648540F9840B24425AC /* PipelineView.swift in Sources */,
 				D0D86A1C5D5226B88F0BC93B /* ProjectStore.swift in Sources */,
 				9D5E004F8ED6D6011C82B12A /* ProjectsView.swift in Sources */,
 				3AC5D72F0299A596AE1926B9 /* ResearchViews.swift in Sources */,
 				BC48987AD696E5470DA2F4AB /* SegmentViews.swift in Sources */,
+				5EF50B53413A1EFAF4B2ADA0 /* UpdateService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -540,6 +589,14 @@
 		36C73F57FA1089A82679D3FD /* GraphCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = GraphCore;
+		};
+		4D85D01F699957E758E47075 /* OrgEngine */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = OrgEngine;
+		};
+		E51CEF3AEB39594A291DFC9F /* AgentRuntime */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AgentRuntime;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -1,6 +1,8 @@
+import AgentRuntime
 import Foundation
 import Security
 import GraphCore
+import OrgEngine
 
 // MARK: - Провайдеры и конфигурация
 
@@ -152,6 +154,151 @@ enum AgentTokenStore {
             kSecAttrService as String: service,
             kSecAttrAccount as String: provider.rawValue,
         ]
+    }
+}
+
+// MARK: - Настройки Jira (слайс 7, П4″)
+
+/// Адрес и e-mail — UserDefaults, API-токен — Keychain (паттерн
+/// AgentTokenStore). Токен принадлежит приложению; демону передаётся
+/// по XPC и живёт у него только в памяти (Безопасность дизайн-дока).
+enum JiraSettingsStore {
+    private static let service = "com.egorproskurin.petable.jira"
+    private static let account = "api-token"
+    private static let baseURLKey = "jira.baseURL"
+    private static let emailKey = "jira.email"
+
+    static var baseURL: String {
+        get { UserDefaults.standard.string(forKey: baseURLKey) ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: baseURLKey) }
+    }
+
+    static var email: String {
+        get { UserDefaults.standard.string(forKey: emailKey) ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: emailKey) }
+    }
+
+    static var token: String? {
+        var query = baseQuery()
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data,
+              let token = String(data: data, encoding: .utf8),
+              !token.isEmpty
+        else { return nil }
+        return token
+    }
+
+    static func setToken(_ token: String) {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            SecItemDelete(baseQuery() as CFDictionary)
+            return
+        }
+        let data = Data(trimmed.utf8)
+        var query = baseQuery()
+        let update: [String: Any] = [kSecValueData as String: data]
+        let status = SecItemUpdate(query as CFDictionary, update as CFDictionary)
+        if status == errSecItemNotFound {
+            query[kSecValueData as String] = data
+            SecItemAdd(query as CFDictionary, nil)
+        }
+    }
+
+    /// Полный конфиг или nil — чего-то не хватает (баннер борда).
+    static func config() -> JiraConfig? {
+        guard let token, !baseURL.isEmpty, !email.isEmpty else { return nil }
+        return JiraConfig(baseURL: baseURL, email: email, token: token)
+    }
+
+    private static func baseQuery() -> [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+    }
+}
+
+// MARK: - Настройки GitHub (П7′, интеграции)
+
+/// Токен — Keychain, логин подключённого аккаунта — UserDefaults.
+enum GitHubSettingsStore {
+    private static let service = "com.egorproskurin.petable.github"
+    private static let account = "api-token"
+    private static let loginKey = "github.login"
+
+    static var login: String {
+        get { UserDefaults.standard.string(forKey: loginKey) ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: loginKey) }
+    }
+
+    static var token: String? {
+        var query = baseQuery()
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data,
+              let token = String(data: data, encoding: .utf8),
+              !token.isEmpty
+        else { return nil }
+        return token
+    }
+
+    static func setToken(_ token: String) {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            SecItemDelete(baseQuery() as CFDictionary)
+            login = ""
+            return
+        }
+        let data = Data(trimmed.utf8)
+        var query = baseQuery()
+        let update: [String: Any] = [kSecValueData as String: data]
+        let status = SecItemUpdate(query as CFDictionary, update as CFDictionary)
+        if status == errSecItemNotFound {
+            query[kSecValueData as String] = data
+            SecItemAdd(query as CFDictionary, nil)
+        }
+    }
+
+    private static func baseQuery() -> [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+    }
+}
+
+// MARK: - Оркестратор (правки автора №8/№9)
+
+/// Настройки дефолтного агента-оркестратора: следит за Jira, стягивает
+/// новые задачи, напоминает о зависших. Момент взятия в работу
+/// конфигурируем: спрашивать или брать автоматически.
+enum OrchestratorSettings {
+    private static let enabledKey = "orchestrator.enabled"
+    private static let minutesKey = "orchestrator.intervalMinutes"
+    private static let autoStartKey = "orchestrator.autoStart"
+
+    static var enabled: Bool {
+        get { UserDefaults.standard.bool(forKey: enabledKey) }
+        set { UserDefaults.standard.set(newValue, forKey: enabledKey) }
+    }
+
+    /// Интервал проверки Jira; по умолчанию 5 минут.
+    static var intervalMinutes: Int {
+        get { max(1, UserDefaults.standard.object(forKey: minutesKey) as? Int ?? 5) }
+        set { UserDefaults.standard.set(max(1, newValue), forKey: minutesKey) }
+    }
+
+    /// true — новая задача берётся в работу без вопроса.
+    static var autoStart: Bool {
+        get { UserDefaults.standard.bool(forKey: autoStartKey) }
+        set { UserDefaults.standard.set(newValue, forKey: autoStartKey) }
     }
 }
 
@@ -369,36 +516,14 @@ enum AgentServiceError: Error, LocalizedError {
 
 // MARK: - Локальные CLI (режим подписки)
 
-/// Поиск и запуск локальных CLI. GUI-приложение не видит PATH шелла,
-/// поэтому бинарь ищется через логин-zsh один раз и кэшируется.
+/// Поиск и запуск локальных CLI. Поиск бинаря — общий `CLIDiscovery`
+/// из AgentRuntime (одна реализация на приложение и демон, решение 4A);
+/// запуск здесь остаётся one-shot (граф-агент), стриминговый путь —
+/// `CLIProcessAdapter` там же.
 enum AgentCLI {
-    private static var cache: [AgentProvider: URL?] = [:]
-
     /// Путь к CLI провайдера; nil — не установлен.
     static func locate(_ provider: AgentProvider) -> URL? {
-        if let cached = cache[provider] { return cached }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-lc", "command -v \(provider.cliName)"]
-        let out = Pipe()
-        process.standardOutput = out
-        process.standardError = Pipe()
-        var url: URL?
-        do {
-            try process.run()
-            process.waitUntilExit()
-            if process.terminationStatus == 0 {
-                let path = String(
-                    data: out.fileHandleForReading.readDataToEndOfFile(),
-                    encoding: .utf8
-                )?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                if !path.isEmpty { url = URL(fileURLWithPath: path) }
-            }
-        } catch {
-            url = nil
-        }
-        cache[provider] = url
-        return url
+        CLIDiscovery.locate(provider.cliName)
     }
 
     static func isAvailable(_ provider: AgentProvider) -> Bool {

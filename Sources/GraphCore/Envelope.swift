@@ -30,9 +30,12 @@ import Foundation
 /// MechanicSticker. Старые файлы читаются с пустыми.
 /// v13: `killed` у работы — kill-a-job больше не удаляет узел, а
 /// перечёркивает его на графе. Старые файлы читаются с живыми работами.
-/// v1–v12 читаются и мигрируют на лету; запись всегда в v13.
+/// v14: опциональная секция `organization` — ИИ-сотрудники и флоу
+/// (определение организации; runtime-история живёт у демона, П1′).
+/// Старые файлы читаются без организации.
+/// v1–v13 читаются и мигрируют на лету; запись всегда в v14.
 public struct Envelope: Codable, Equatable, Sendable {
-    public static let currentVersion = 13
+    public static let currentVersion = 14
     public static let jobGraphStageType = "jobGraph"
     public static let defaultGraphName = "Граф работ"
 
@@ -43,6 +46,8 @@ public struct Envelope: Codable, Equatable, Sendable {
     public var research: Research?
     /// Раздел «Сегменты»; nil у файлов до v6 — пустой список.
     public var segmentation: Segmentation?
+    /// Раздел «Организация»; nil у файлов до v14 — организации нет.
+    public var organization: Organization?
 
     public struct Stage: Codable, Equatable, Identifiable, Sendable {
         public var id: UUID
@@ -137,13 +142,19 @@ public struct Envelope: Codable, Equatable, Sendable {
         self.init(stages: [Stage(graph: graph)])
     }
 
-    public init(stages: [Stage], research: Research? = nil, segmentation: Segmentation? = nil) {
+    public init(
+        stages: [Stage],
+        research: Research? = nil,
+        segmentation: Segmentation? = nil,
+        organization: Organization? = nil
+    ) {
         self.version = Self.currentVersion
         var stages = stages
         stages.normalizeGraphParents()
         self.stages = stages
         self.research = research
         self.segmentation = segmentation
+        self.organization = organization
     }
 
     /// Первая стадия jobGraph — граф по умолчанию (для миграций и тестов).
@@ -167,7 +178,7 @@ public struct Envelope: Codable, Equatable, Sendable {
         }
     }
 
-    enum CodingKeys: String, CodingKey { case version, stages, research, segmentation }
+    enum CodingKeys: String, CodingKey { case version, stages, research, segmentation, organization }
 
     /// Стадия v1: граф — дерево Job. Нужна только для миграции при чтении.
     private struct LegacyStage: Codable {
@@ -195,6 +206,7 @@ public struct Envelope: Codable, Equatable, Sendable {
         self.stages.normalizeGraphParents()
         self.research = try container.decodeIfPresent(Research.self, forKey: .research)
         self.segmentation = try container.decodeIfPresent(Segmentation.self, forKey: .segmentation)
+        self.organization = try container.decodeIfPresent(Organization.self, forKey: .organization)
         self.version = Self.currentVersion
     }
 

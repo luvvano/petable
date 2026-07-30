@@ -28,6 +28,10 @@ targets:
     dependencies:
       - package: GraphCore
         product: GraphCore
+      - package: GraphCore
+        product: AgentRuntime
+      - package: GraphCore
+        product: OrgEngine
     settings:
       base:
         SWIFT_VERSION: "5.0"
@@ -38,3 +42,16 @@ targets:
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGN_STYLE: Automatic
         ENABLE_HARDENED_RUNTIME: false
+    # SHA и путь репо сборки — для самообновления (UpdateService):
+    # скрипт-фаза бежит ДО подписи, правка Info.plist продукта безопасна.
+    postBuildScripts:
+      - name: Embed build SHA
+        basedOnDependencyAnalysis: false
+        script: |
+          PLIST="$BUILT_PRODUCTS_DIR/$INFOPLIST_PATH"
+          [ -f "$PLIST" ] || exit 0
+          SHA=$(cd "$PROJECT_DIR" && /usr/bin/git rev-parse HEAD 2>/dev/null || echo unknown)
+          /usr/libexec/PlistBuddy -c "Set :PetableBuildSHA $SHA" "$PLIST" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Add :PetableBuildSHA string $SHA" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :PetableRepoPath $PROJECT_DIR" "$PLIST" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Add :PetableRepoPath string $PROJECT_DIR" "$PLIST"

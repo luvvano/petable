@@ -1,0 +1,575 @@
+import SwiftUI
+import GraphCore
+import OrgEngine
+
+/// Конвейер (правки автора №1–№3): открывается СПИСКОМ задач по статусам;
+/// клик по задаче — флоу-диаграмма её пути (пройденные этапы, текущий);
+/// клик по этапу — панель этапа с чатом агенту (изменить поведение —
+/// в границах П9: чат активен в {ждёт гейта, требует внимания}).
+struct PipelineView: View {
+    @ObservedObject var document: PetableDocument
+    @ObservedObject var controller: OrganizationController
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.undoManager) private var undoManager
+
+    /// Открытая задача; nil — список.
+    @State private var selectedTaskID: UUID?
+    /// Выбранный этап в детали задачи.
+    @State private var selectedStageID: UUID?
+    @State private var newTaskTitle = ""
+    @State private var chatDrafts: [UUID: String] = [:]
+    /// Двухшаговый ⌘Enter на финальном гейте (11A).
+    @State private var armedApproveRunID: UUID?
+    /// Память позиций токенов — распознаёт возврат (9A).
+    @State private var stageMemo: [UUID: Int] = [:]
+    @State private var flashedStages: Set<UUID> = []
+
+    var body: some View {
+        Group {
+            if let organization = document.organization {
+                content(organization)
+            } else {
+                emptyOrganization
+            }
+        }
+        .task { await controller.connect(document: document) }
+        .onChange(of: controller.runs) { _, newRuns in trackReturns(newRuns) }
+        // Undo-менеджер окна: без него правки организации не помечают
+        // документ изменённым — и автосейв их не пишет.
+        .onAppear { document.attach(undoManager) }
+        .onChange(of: undoManager) { _, newValue in document.attach(newValue) }
+    }
+
+    private var emptyOrganization: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "person.2.gobackward")
+                .font(.system(size: 36, weight: .light))
+                .foregroundStyle(.secondary)
+            Text("Организации ещё нет")
+                .font(.title3.weight(.semibold))
+            Text("ИИ-сотрудники берут задачи и ведут их по флоу:\nразработка → ревью → тесты → merge.")
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+            Button("Создать организацию") {
+                document.createOrganizationIfNeeded()
+            }
+            .keyboardShortcut(.defaultAction)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func content(_ organization: Organization) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                if let banner = controller.mode.banner {
+                    Label(banner, systemImage: "exclamationmark.triangle")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.orange)
+                }
+                if let selected = selectedItem(organization) {
+                    taskDetail(selected.task, run: selected.run, organization: organization)
+                } else {
+                    taskList(organization)
+                }
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(Color(nsColor: .textBackgroundColor))
+        .focusable()
+        .focusEffectDisabled()
+        .onKeyPress { press in handleKey(press) }
+    }
+
+    /// Открытая задача: с борда или (после финала) из runtime-запуска.
+    private func selectedItem(_ organization: Organization) -> (task: OrgTask, run: OrganizationRun?)? {
+        guard let id = selectedTaskID else { return nil }
+        if let task = organization.tasks.first(where: { $0.id == id }) {
+            return (task, controller.run(forTask: id))
+        }
+        if let run = controller.run(forTask: id) {
+            return (run.task, run)
+        }
+        return nil
+    }
+
+    // MARK: Список задач по статусам (правка №1)
+
+    private func taskList(_ organization: Organization) -> some View {
+        let items = organization.tasks.map { task in
+            (task: task, run: controller.run(forTask: task.id))
+        }
+        return VStack(alignment: .leading, spacing: 20) {
+            if let status = controller.jiraStatus {
+                HStack(spacing: 8) {
+                    Text(status)
+                        .font(.system(size: 11))
+                        .foregroundStyle(controller.jiraNeedsReauth ? Color.orange : Color.secondary)
+                }
+            }
+            section("ТРЕБУЕТ ВНИМАНИЯ", items.filter { $0.run?.status == .needsAttention },
+                    organization: organization)
+            section("ЖДЁТ РЕШЕНИЯ", items.filter { $0.run?.status == .waitingGate },
+                    organization: organization)
+            section("В РАБОТЕ", items.filter {
+                switch $0.run?.status {
+                case .running, .merging, .waitingChildren: return true
+                default: return false
+                }
+            }, organization: organization)
+            queueSection(items.filter { $0.run == nil || $0.run?.status == .finished },
+                         organization: organization)
+            if !organization.runSummaries.isEmpty {
+                historySection(organization)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func section(
+        _ title: String,
+        _ items: [(task: OrgTask, run: OrganizationRun?)],
+        organization: Organization
+    ) -> some View {
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                sectionHeader(title)
+                ForEach(items, id: \.task.id) { item in
+                    taskRow(item.task, run: item.run, organization: organization)
+                }
+            }
+        }
+    }
+
+    private func queueSection(
+        _ items: [(task: OrgTask, run: OrganizationRun?)],
+        organization: Organization
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                sectionHeader("В ОЧЕРЕДИ")
+                Spacer()
+                if controller.jiraImporting {
+                    ProgressView().controlSize(.small)
+                }
+                Button("Импорт из Jira") {
+                    Task { await controller.importFromJira() }
+                }
+                .font(.system(size: 11))
+                .disabled(controller.jiraImporting)
+            }
+            if items.isEmpty {
+                Text("Задач нет — импортируй из Jira или создай (⏎).")
+                    .foregroundStyle(.secondary)
+                    .font(.system(size: 12))
+            }
+            ForEach(items, id: \.task.id) { item in
+                taskRow(item.task, run: item.run, organization: organization)
+            }
+            HStack {
+                TextField("Новая задача… (⏎)", text: $newTaskTitle)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 360)
+                    .onSubmit(addTask)
+                Button("Добавить", action: addTask)
+                    .disabled(newTaskTitle.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 10, weight: .medium))
+            .kerning(1.2)
+            .foregroundStyle(.tertiary)
+    }
+
+    /// Строка списка: клик открывает флоу задачи (правка №2).
+    private func taskRow(
+        _ task: OrgTask, run: OrganizationRun?, organization: Organization
+    ) -> some View {
+        let blockReason = run == nil ? OrgUI.startBlockReason(task, organization: organization) : nil
+        return HStack(spacing: 8) {
+            Circle()
+                .fill(OrgUI.taskColor(run?.status))
+                .frame(width: 8, height: 8)
+            Text(task.jiraKey.isEmpty ? task.title : "\(task.jiraKey) · \(task.title)")
+                .font(.system(size: 12, weight: run?.status == .needsAttention ? .semibold : .regular))
+            Spacer()
+            Text(blockReason ?? OrgUI.statusText(run))
+                .font(.system(size: 10))
+                .foregroundStyle(
+                    run?.status == .needsAttention
+                        ? Color.red
+                        : blockReason != nil ? Color.orange : Color.secondary
+                )
+            if run == nil {
+                Button("Запустить") { controller.start(task: task) }
+                    .font(.system(size: 11))
+                    .disabled(controller.mode.isUnavailable || blockReason != nil)
+                    .help(blockReason ?? "")
+            } else if let run, run.status != .finished {
+                Button("Отменить") { controller.cancel(run.id) }
+                    .font(.system(size: 11))
+            }
+        }
+        .padding(.vertical, 3)
+        .contentShape(Rectangle())
+        .onTapGesture { open(taskID: task.id, run: run) }
+        .accessibilityAddTraits(.isButton)
+    }
+
+    private func open(taskID: UUID, run: OrganizationRun?) {
+        selectedTaskID = taskID
+        selectedStageID = run?.currentStageID
+    }
+
+    private func addTask() {
+        let title = newTaskTitle.trimmingCharacters(in: .whitespaces)
+        guard !title.isEmpty else { return }
+        document.updateOrganization { org in
+            org.tasks.append(OrgTask(
+                title: title,
+                taskTypeID: org.taskTypes.first?.id,
+                repoID: org.repos.first?.id
+            ))
+        }
+        newTaskTitle = ""
+    }
+
+    // MARK: История
+
+    private func historySection(_ organization: Organization) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionHeader("ЗАВЕРШЁННЫЕ")
+            ForEach(organization.runSummaries.reversed()) { summary in
+                HStack(spacing: 8) {
+                    Image(systemName: outcomeIcon(summary.outcome))
+                        .foregroundStyle(outcomeColor(summary.outcome))
+                        .font(.system(size: 11))
+                    Text(summary.jiraKey.isEmpty ? summary.taskTitle : "\(summary.jiraKey) · \(summary.taskTitle)")
+                        .font(.system(size: 12))
+                    Spacer()
+                    if summary.returnCount > 0 {
+                        Text("возвратов: \(summary.returnCount)")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                    }
+                    if summary.costEstimate > 0 {
+                        Text("≈$\(summary.costEstimate, specifier: "%.2f")")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        }
+    }
+
+    private func outcomeIcon(_ outcome: RunOutcome) -> String {
+        switch outcome {
+        case .merged: return "checkmark.circle.fill"
+        case .cancelled: return "xmark.circle"
+        case .closed: return "minus.circle"
+        case .broken: return "exclamationmark.triangle.fill"
+        }
+    }
+
+    private func outcomeColor(_ outcome: RunOutcome) -> Color {
+        switch outcome {
+        case .merged: return .green
+        case .cancelled, .closed: return .secondary
+        case .broken: return .red
+        }
+    }
+
+    // MARK: Деталь задачи: флоу-диаграмма пути (правка №2)
+
+    @ViewBuilder
+    private func taskDetail(
+        _ task: OrgTask, run: OrganizationRun?, organization: Organization
+    ) -> some View {
+        let flow = run?.flow ?? task.taskTypeID.flatMap { organization.flow(for: $0) }
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 8) {
+                Button {
+                    closeDetail()
+                } label: {
+                    Label("Задачи", systemImage: "chevron.left")
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Esc — назад к списку")
+                Text(task.jiraKey.isEmpty ? task.title : "\(task.jiraKey) · \(task.title)")
+                    .font(.system(size: 13, weight: .semibold))
+                Spacer()
+                if let run, run.status != .finished {
+                    Button("Отменить") { controller.cancel(run.id) }
+                        .font(.system(size: 11))
+                } else if run == nil {
+                    let reason = OrgUI.startBlockReason(task, organization: organization)
+                    Button("Запустить") { controller.start(task: task) }
+                        .font(.system(size: 11))
+                        .disabled(controller.mode.isUnavailable || reason != nil)
+                        .help(reason ?? "")
+                }
+            }
+            HStack(spacing: 12) {
+                Circle()
+                    .fill(OrgUI.taskColor(run?.status))
+                    .frame(width: 8, height: 8)
+                Text(OrgUI.statusText(run))
+                    .font(.system(size: 12))
+                    .foregroundStyle(run?.status == .needsAttention ? Color.red : Color.primary)
+                Spacer()
+                if let run, run.costEstimate > 0 {
+                    Text("≈$\(run.costEstimate, specifier: "%.2f")")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            if let flow {
+                flowDiagram(flow, run: run)
+                if let stageID = selectedStageID ?? run?.currentStageID,
+                   let stage = flow.stage(stageID) {
+                    stagePanel(stage, flow: flow, run: run)
+                }
+            } else {
+                Text("Тип задачи не смаршрутизирован на флоу — Организация → Типы задач.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.orange)
+            }
+            if armedApproveRunID != nil, armedApproveRunID == run?.id {
+                Text("Финальный гейт: ⌘Enter ещё раз — Принять и merge")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.orange)
+            }
+        }
+    }
+
+    /// Диаграмма пути: пройденные этапы — галки, текущий — токен,
+    /// впереди — приглушены. Клик по этапу — панель с чатом (правка №3).
+    private func flowDiagram(_ flow: OrgFlow, run: OrganizationRun?) -> some View {
+        let stages = OrgUI.orderedStages(flow)
+        let currentIndex = run.map { r in
+            stages.firstIndex(where: { $0.id == r.currentStageID }) ?? 0
+        }
+        return ZStack(alignment: .topLeading) {
+            HStack(spacing: 0) {
+                ForEach(Array(stages.enumerated()), id: \.element.id) { index, stage in
+                    StageNodeView(
+                        stage: stage,
+                        subtitle: OrgUI.stageSubtitle(stage, employees: run?.employees ?? []),
+                        emphasis: emphasis(for: stage, index: index, currentIndex: currentIndex)
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        selectedStageID = selectedStageID == stage.id ? nil : stage.id
+                    }
+                    if stage.id != stages.last?.id {
+                        EdgeArrowView()
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.top, run == nil ? 0 : 26)
+            if let run, run.status != .finished, let currentIndex {
+                runToken(run, index: currentIndex)
+            }
+        }
+    }
+
+    private func emphasis(for stage: OrgStage, index: Int, currentIndex: Int?) -> StageEmphasis {
+        if flashedStages.contains(stage.id) { return .flashed }
+        if selectedStageID == stage.id { return .selected }
+        guard let currentIndex else { return .idle }
+        if index < currentIndex { return .passed }
+        if index == currentIndex { return .current }
+        return .dimmed
+    }
+
+    /// Переход токена — единственная крупная анимация: ease-out 220 мс,
+    /// Reduce Motion — мгновенно (9A).
+    private func runToken(_ run: OrganizationRun, index: Int) -> some View {
+        Text(run.task.jiraKey.isEmpty ? String(run.task.title.prefix(12)) : run.task.jiraKey)
+            .font(.system(size: 9, weight: .medium))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(OrgUI.taskColor(run.status).opacity(0.16)))
+            .overlay(Capsule().strokeBorder(OrgUI.taskColor(run.status), lineWidth: 1))
+            .position(x: CGFloat(index) * 124 + 48, y: 10)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: index)
+            .accessibilityLabel("\(run.task.title): \(OrgUI.statusText(run))")
+    }
+
+    // MARK: Панель этапа + чат агенту (правка №3, границы П9)
+
+    @ViewBuilder
+    private func stagePanel(_ stage: OrgStage, flow: OrgFlow, run: OrganizationRun?) -> some View {
+        let isCurrent = run != nil && run?.currentStageID == stage.id && run?.status != .finished
+        let isPassed = run.map { $0.path.contains(stage.id) && $0.currentStageID != stage.id } ?? false
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: OrgUI.stageIcon(stage.kind))
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                Text(stage.name)
+                    .font(.system(size: 12, weight: .semibold))
+                Text(OrgUI.stageSubtitle(stage, employees: run?.employees ?? []))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(isCurrent ? "текущий этап" : isPassed ? "пройден" : run == nil ? "" : "впереди")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+            }
+            if let run, isCurrent {
+                currentStageControls(run)
+            } else if isPassed {
+                Text("Этап пройден — переписка по нему read-only (П9).")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+            } else if run == nil {
+                Text("Задача не запущена — этап ждёт токена.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+            } else {
+                Text("Этап впереди — токен ещё не дошёл.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.06)))
+    }
+
+    /// Чат текущего этапа: активен в {ждёт гейта, требует внимания} —
+    /// сообщение перезапускает этап с контекстом и меняет поведение
+    /// сотрудника; в работе — заблокирован с причиной (7A).
+    @ViewBuilder
+    private func currentStageControls(_ run: OrganizationRun) -> some View {
+        switch run.status {
+        case .waitingGate, .needsAttention:
+            if run.status == .needsAttention {
+                Text(run.statusReason)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.red)
+            }
+            HStack(spacing: 8) {
+                if run.status == .waitingGate {
+                    Button("Принять") { controller.approve(run.id) }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                    Button("Вернуть") {
+                        controller.reject(run.id, comment: chatDrafts[run.id] ?? "")
+                        chatDrafts[run.id] = nil
+                    }
+                    .controlSize(.small)
+                }
+                TextField(
+                    run.status == .needsAttention
+                        ? "Ответить сотруднику… (⏎)"
+                        : "Комментарий или правка поведения… (⏎)",
+                    text: Binding(
+                        get: { chatDrafts[run.id] ?? "" },
+                        set: { chatDrafts[run.id] = $0 }
+                    )
+                )
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 11))
+                .onSubmit {
+                    let text = (chatDrafts[run.id] ?? "").trimmingCharacters(in: .whitespaces)
+                    guard !text.isEmpty else { return }
+                    controller.chat(run.id, text: text)
+                    chatDrafts[run.id] = nil
+                }
+            }
+        case .running:
+            Text("Сотрудник работает — чат откроется на гейте или при вопросе.")
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+        case .merging:
+            Text("rebase → повторные тесты → merge…")
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+        default:
+            EmptyView()
+        }
+    }
+
+    // MARK: Клавиатура (11A) и возвраты (9A)
+
+    private func closeDetail() {
+        selectedTaskID = nil
+        selectedStageID = nil
+        armedApproveRunID = nil
+    }
+
+    private func handleKey(_ press: KeyPress) -> KeyPress.Result {
+        switch press.key {
+        case .escape where selectedTaskID != nil:
+            closeDetail()
+            return .handled
+        case KeyEquivalent("n") where press.modifiers.isEmpty:
+            return focusAttention(offset: 1)
+        case KeyEquivalent("p") where press.modifiers.isEmpty:
+            return focusAttention(offset: -1)
+        case .return where press.modifiers == .command:
+            return approveFocusedGate()
+        default:
+            return .ignored
+        }
+    }
+
+    /// N/P — очередь внимания: открывает деталь следующего/предыдущего.
+    private func focusAttention(offset: Int) -> KeyPress.Result {
+        let queue = controller.attentionRuns
+        guard !queue.isEmpty else { return .ignored }
+        let current = queue.firstIndex(where: { $0.task.id == selectedTaskID })
+        let next: Int
+        if let current {
+            next = (current + offset + queue.count) % queue.count
+        } else {
+            next = offset > 0 ? 0 : queue.count - 1
+        }
+        open(taskID: queue[next].task.id, run: queue[next])
+        armedApproveRunID = nil
+        return .handled
+    }
+
+    /// ⌘Enter — Принять только на открытом гейте; финальный гейт —
+    /// двухшаговое подтверждение (11A).
+    private func approveFocusedGate() -> KeyPress.Result {
+        guard let id = selectedTaskID, let run = controller.run(forTask: id),
+              run.status == .waitingGate
+        else { return .ignored }
+        if armedApproveRunID == run.id {
+            armedApproveRunID = nil
+            controller.approve(run.id)
+        } else {
+            armedApproveRunID = run.id
+            Task {
+                try? await Task.sleep(for: .seconds(3))
+                if armedApproveRunID == run.id { armedApproveRunID = nil }
+            }
+        }
+        return .handled
+    }
+
+    /// Токен поехал назад — возврат: янтарная вспышка узла-получателя (9A).
+    private func trackReturns(_ newRuns: [UUID: OrganizationRun]) {
+        for run in newRuns.values {
+            let index = OrgUI.orderedStages(run.flow)
+                .firstIndex(where: { $0.id == run.currentStageID }) ?? 0
+            defer { stageMemo[run.id] = index }
+            guard let previous = stageMemo[run.id], index < previous else { continue }
+            let stageID = run.currentStageID
+            flashedStages.insert(stageID)
+            Task {
+                try? await Task.sleep(for: .milliseconds(450))
+                _ = flashedStages.remove(stageID)
+            }
+        }
+    }
+}

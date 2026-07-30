@@ -126,6 +126,8 @@ struct AppShellView: View {
         case template(UUID)
         case segment(UUID)
         case segmentMap
+        case organization
+        case organizationSettings
     }
 
     /// Фильтр артефактов по происхождению: все / человек / агент.
@@ -147,6 +149,7 @@ struct AppShellView: View {
     @State private var interviewsExpanded = true
     @State private var templatesExpanded = false
     @State private var segmentsExpanded = true
+    @State private var organizationExpanded = true
     @State private var hoveredRow: UUID?
     @State private var renamingID: UUID?
     @State private var renameDraft = ""
@@ -164,6 +167,8 @@ struct AppShellView: View {
     /// Граф, над которым сейчас висит перетаскиваемый — подсветка цели.
     @State private var graphDropTarget: UUID?
     @FocusState private var renameFocused: Bool
+    /// Самообновление: плашка над контентом при новом origin/main.
+    @StateObject private var updater = UpdateService()
 
     var body: some View {
         NavigationSplitView {
@@ -273,6 +278,33 @@ struct AppShellView: View {
                     Label("Сегменты", systemImage: "person.3")
                         .font(.system(size: 13, weight: .semibold))
                 }
+
+                DisclosureGroup(isExpanded: $organizationExpanded) {
+                    if document.organization != nil {
+                        HStack {
+                            Label("Конвейер", systemImage: "arrow.triangle.branch")
+                            Spacer()
+                        }
+                        .tag(SidebarItem.organization)
+                        .help("Задачи по статусам; клик по задаче — её флоу и чат с этапом")
+                        HStack {
+                            Label("Организация", systemImage: "gearshape.2")
+                            Spacer()
+                        }
+                        .tag(SidebarItem.organizationSettings)
+                        .help("Типы задач · сотрудники · редактор флоу · интеграции")
+                    } else {
+                        newItemRow(
+                            "Создать организацию",
+                            help: "ИИ-сотрудники и конвейер задач: дефолтный флоу «Разработка → Ревью → Тесты → Merge»"
+                        ) {
+                            document.createOrganizationIfNeeded()
+                        }
+                    }
+                } label: {
+                    Label("Организация", systemImage: "person.2.gobackward")
+                        .font(.system(size: 13, weight: .semibold))
+                }
             }
             .listStyle(.sidebar)
             .navigationSplitViewColumnWidth(min: 190, ideal: 230, max: 300)
@@ -286,6 +318,8 @@ struct AppShellView: View {
             // GeometryReader не запрашивает размер у окна — панель капится
             // долей доступной ширины, окну расти не из-за чего.
             GeometryReader { geometry in
+                VStack(spacing: 0) {
+                    UpdateBannerView(updater: updater)
                 HStack(spacing: 0) {
                     detailContent
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -304,7 +338,9 @@ struct AppShellView: View {
                         .frame(maxHeight: .infinity)
                     }
                 }
+                }
             }
+            .task { updater.startPeriodicChecks() }
         }
         .navigationTitle("")
         .toolbar {
@@ -410,6 +446,10 @@ struct AppShellView: View {
             SegmentEditorView(document: document, segmentID: id)
         case .segmentMap:
             SegmentMapView(document: document)
+        case .organization:
+            PipelineView(document: document, controller: document.organizationController)
+        case .organizationSettings:
+            OrganizationView(document: document, controller: document.organizationController)
         case nil:
             CanvasRootView(document: document)
         }
@@ -448,7 +488,7 @@ struct AppShellView: View {
                 }
                 .help("Поделиться шаблоном или экспортировать: файл, буфер обмена")
             }
-        case .segment, .segmentMap:
+        case .segment, .segmentMap, .organization, .organizationSettings:
             EmptyView()
         case nil:
             if let stage = document.graphStages.first(where: { $0.id == document.selectedGraphID }) {
@@ -522,6 +562,8 @@ struct AppShellView: View {
                 case .template(let id): return .template(id)
                 case .segment(let id): return .segment(id)
                 case .segmentMap: return .segmentMap
+                case .organization: return .organization
+                case .organizationSettings: return .organizationSettings
                 case nil: return document.selectedGraphID.map(SidebarItem.graph)
                 }
             },
@@ -532,6 +574,8 @@ struct AppShellView: View {
                 case .template(let id): document.selectResearch(.template(id))
                 case .segment(let id): document.selectResearch(.segment(id))
                 case .segmentMap: document.selectResearch(.segmentMap)
+                case .organization: document.selectResearch(.organization)
+                case .organizationSettings: document.selectResearch(.organizationSettings)
                 case nil: break
                 }
             }

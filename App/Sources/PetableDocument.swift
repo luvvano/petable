@@ -29,6 +29,8 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
     @Published private(set) var research: Research
     /// Раздел «Сегменты»: сегментация AJTBD.
     @Published private(set) var segmentation: Segmentation
+    /// Раздел «Организация»: ИИ-сотрудники и флоу (v14); nil — не создана.
+    @Published private(set) var organization: Organization?
     /// Что открыто в detail вместо канваса; nil — показывается граф.
     @Published private(set) var selectedResearchItem: ResearchSelection?
 
@@ -38,6 +40,23 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
         case segment(UUID)
         /// Карта сегментов: сравнительная таблица всех сегментов проекта.
         case segmentMap
+        /// Конвейер: задачи по статусам, флоу задачи, чат с этапом.
+        case organization
+        /// Настройки организации: типы задач · сотрудники · конвейер ·
+        /// интеграции (правка автора №1/№4 — отделены от конвейера).
+        case organizationSettings
+    }
+
+    /// Контроллер конвейера — ОДИН на документ, общий для «Конвейера» и
+    /// «Организации»: один транспорт, одна подписка, один оркестратор.
+    private var orgControllerStorage: OrganizationController?
+
+    @MainActor
+    var organizationController: OrganizationController {
+        if let orgControllerStorage { return orgControllerStorage }
+        let controller = OrganizationController()
+        orgControllerStorage = controller
+        return controller
     }
 
     /// Сессия на каждый граф, к которому прикасались. Живут, пока жив
@@ -72,6 +91,8 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
         research = envelope.research ?? Research(templates: InterviewTemplate.defaultTemplates())
         // Файлы до v6 без сегментов получают пустой список.
         segmentation = envelope.segmentation ?? Segmentation()
+        // Файлы до v14 без организации — организации нет.
+        organization = envelope.organization
         // Открывается последний граф по времени изменения;
         // без отметок (старые файлы) — первый.
         selectedGraphID = (graphs.max {
@@ -80,7 +101,12 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
     }
 
     func snapshot(contentType: UTType) throws -> Envelope {
-        Envelope(stages: stages, research: research, segmentation: segmentation)
+        Envelope(
+            stages: stages,
+            research: research,
+            segmentation: segmentation,
+            organization: organization
+        )
     }
 
     func fileWrapper(snapshot: Envelope, configuration: WriteConfiguration) throws -> FileWrapper {
@@ -117,10 +143,61 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
             guard research.templates.contains(where: { $0.id == id }) else { return }
         case .segment(let id):
             guard segmentation.segments.contains(where: { $0.id == id }) else { return }
-        case .segmentMap:
+        case .segmentMap, .organization, .organizationSettings:
             break
         }
         selectedResearchItem = item
+    }
+
+    // MARK: - Организация
+
+    /// Создаёт дефолтную организацию (линейный флоу «Разработка → Ревью →
+    /// Тесты → Merge», слайс 1) и открывает её. Повторный вызов — только
+    /// открывает: определение не перетирается.
+    @MainActor
+    func createOrganizationIfNeeded() {
+        if organization == nil {
+            organization = Organization.makeDefault()
+            registerOrganizationUndo(restoring: nil)
+        }
+        selectedResearchItem = .organization
+    }
+
+    /// Правка определения организации (роли, флоу, задачи борда, реестр).
+    /// Регистрирует undo — это же помечает документ изменённым: без
+    /// undo-регистрации ReferenceFileDocument не автосейвит, и организация
+    /// терялась при перезапуске (правка автора).
+    @MainActor
+    func updateOrganization(_ transform: (inout Organization) -> Void) {
+        guard var org = organization else { return }
+        let before = org
+        transform(&org)
+        guard org != before else { return }
+        organization = org
+        registerOrganizationUndo(restoring: before)
+    }
+
+    @MainActor
+    private func registerOrganizationUndo(restoring state: Organization?) {
+        guard let windowUndoManager else { return }
+        windowUndoManager.beginUndoGrouping()
+        windowUndoManager.registerUndo(withTarget: self) { document in
+            MainActor.assumeIsolated {
+                let current = document.organization
+                document.organization = state
+                document.registerOrganizationUndo(restoring: current)
+            }
+        }
+        windowUndoManager.endUndoGrouping()
+    }
+
+    /// Реконсиляция саммари запусков (П1′): идемпотентно по runID,
+    /// вне undo-стека — системная мутация, не правка человека.
+    @MainActor
+    func reconcileRunSummaries(_ summaries: [RunSummary]) {
+        guard var org = organization else { return }
+        org.reconcile(summaries: summaries)
+        organization = org
     }
 
     // MARK: - Undo
