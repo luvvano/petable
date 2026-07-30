@@ -208,9 +208,22 @@ enum JiraSettingsStore {
     }
 
     /// Полный конфиг или nil — чего-то не хватает (баннер борда).
+    /// OAuth-коннектор приоритетнее ручного API-токена.
     static func config() -> JiraConfig? {
+        if let tokens = JiraOAuthTokenStore.load() {
+            return JiraConfig(
+                baseURL: "https://api.atlassian.com/ex/jira/\(tokens.cloudID)",
+                bearerToken: tokens.accessToken
+            )
+        }
         guard let token, !baseURL.isEmpty, !email.isEmpty else { return nil }
         return JiraConfig(baseURL: baseURL, email: email, token: token)
+    }
+
+    /// Подпись подключения для карточки интеграций.
+    static var connectedSiteDisplay: String? {
+        if let tokens = JiraOAuthTokenStore.load() { return tokens.siteURL }
+        return config() != nil ? baseURL : nil
     }
 
     private static func baseQuery() -> [String: Any] {

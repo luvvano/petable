@@ -57,14 +57,36 @@ public struct ConfigureCommand: Codable, Equatable, Sendable {
     }
 }
 
-/// Команда старта запуска.
+/// Команда старта запуска. `candidates` — репозитории GitHub-аккаунта
+/// на случай пустого реестра: демон выберет агентом и склонирует сам
+/// (правка автора: ничего не привязывать руками).
 public struct StartRunCommand: Codable, Equatable, Sendable {
     public var organization: Organization
     public var taskID: UUID
+    public var candidates: [RemoteRepoCandidate]?
 
-    public init(organization: Organization, taskID: UUID) {
+    public init(
+        organization: Organization,
+        taskID: UUID,
+        candidates: [RemoteRepoCandidate]? = nil
+    ) {
         self.organization = organization
         self.taskID = taskID
+        self.candidates = candidates
+    }
+}
+
+/// Кандидат на клонирование: оба URL — демон пробует ssh (ключи юзера),
+/// затем https (credential helper git).
+public struct RemoteRepoCandidate: Codable, Equatable, Sendable {
+    public var name: String
+    public var sshURL: String
+    public var httpsURL: String
+
+    public init(name: String, sshURL: String, httpsURL: String) {
+        self.name = name
+        self.sshURL = sshURL
+        self.httpsURL = httpsURL
     }
 }
 

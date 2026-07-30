@@ -32,6 +32,8 @@ struct OrganizationView: View {
     @State private var selectedEmployeeID: UUID?
     // Интеграции.
     @State private var showJiraSettings = false
+    @State private var oauthClientIDDraft = JiraOAuthAppStore.clientID
+    @State private var oauthSecretDraft = ""
     @State private var githubTokenDraft = ""
     @State private var newRepoPath = ""
     @State private var cloneURLDraft = ""
@@ -417,16 +419,40 @@ struct OrganizationView: View {
     private var jiraCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             sectionHeader("JIRA")
-            HStack(spacing: 8) {
-                if JiraSettingsStore.config() != nil {
-                    Label("Подключена · \(JiraSettingsStore.baseURL)", systemImage: "checkmark.circle")
+            if let site = JiraSettingsStore.connectedSiteDisplay {
+                HStack(spacing: 8) {
+                    Label("Подключена · \(site)", systemImage: "checkmark.circle")
                         .font(.system(size: 12))
                         .foregroundStyle(.green)
-                    Button("Настроить") { showJiraSettings = true }
+                    if JiraOAuthTokenStore.load() != nil {
+                        Button("Отключить") { controller.disconnectJiraOAuth() }
+                            .font(.system(size: 11))
+                    } else {
+                        Button("Настроить") { showJiraSettings = true }
+                            .font(.system(size: 11))
+                    }
+                }
+            } else {
+                HStack(spacing: 8) {
+                    // Коннектор: браузер → «Согласен» → готово; сайт
+                    // подтянется сам (правка автора).
+                    Button("Подключить Jira") {
+                        Task { await controller.connectJiraOAuth() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(!JiraOAuthAppStore.isConfigured || controller.jiraConnecting)
+                    if controller.jiraConnecting {
+                        ProgressView().controlSize(.small)
+                        Text("жду подтверждения в браузере…")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                    Button("Вручную (API-токен)…") { showJiraSettings = true }
                         .font(.system(size: 11))
-                } else {
-                    Button("Подключить Jira") { showJiraSettings = true }
-                        .font(.system(size: 12))
+                }
+                if !JiraOAuthAppStore.isConfigured {
+                    jiraConnectorSetup
                 }
             }
             if let status = controller.jiraStatus {
@@ -435,6 +461,38 @@ struct OrganizationView: View {
                     .foregroundStyle(controller.jiraNeedsReauth ? Color.orange : Color.secondary)
             }
         }
+    }
+
+    /// Однократная настройка коннектора: Atlassian требует своё OAuth-
+    /// приложение (client_id + secret) — дальше только кнопка.
+    private var jiraConnectorSetup: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Однократная настройка коннектора: developer.atlassian.com → Create → OAuth 2.1 integration → разрешения Jira API (read/write) → Callback URL:")
+                .font(.system(size: 10))
+                .foregroundStyle(.tertiary)
+            Text(JiraOAuthFlow.redirectURI)
+                .font(.system(size: 10, design: .monospaced))
+                .textSelection(.enabled)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                TextField("Client ID", text: $oauthClientIDDraft)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 200)
+                SecureField("Secret", text: $oauthSecretDraft)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 200)
+                Button("Сохранить") {
+                    JiraOAuthAppStore.clientID = oauthClientIDDraft
+                        .trimmingCharacters(in: .whitespaces)
+                    JiraOAuthAppStore.clientSecret = oauthSecretDraft
+                        .trimmingCharacters(in: .whitespaces)
+                    oauthSecretDraft = ""
+                }
+                .disabled(oauthClientIDDraft.trimmingCharacters(in: .whitespaces).isEmpty
+                          || oauthSecretDraft.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(.top, 2)
     }
 
     private var githubCard: some View {

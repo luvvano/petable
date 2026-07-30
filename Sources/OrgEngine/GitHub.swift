@@ -29,6 +29,29 @@ public struct GitHubClient: Sendable {
         return try decode(Viewer.self, from: data).login
     }
 
+    public struct RemoteRepo: Equatable, Sendable {
+        public var name: String
+        public var sshURL: String
+        public var httpsURL: String
+
+        public init(name: String, sshURL: String, httpsURL: String) {
+            self.name = name
+            self.sshURL = sshURL
+            self.httpsURL = httpsURL
+        }
+    }
+
+    /// Репозитории аккаунта (включая организации), свежие сверху —
+    /// кандидаты автоклона при пустом реестре.
+    public func listRepos(token: String, limit: Int = 100) async throws -> [RemoteRepo] {
+        let data = try await send(request(
+            token: token, path: "/user/repos?per_page=\(limit)&sort=updated"
+        ))
+        return try decode([RepoListItem].self, from: data).map {
+            RemoteRepo(name: $0.name, sshURL: $0.ssh_url ?? "", httpsURL: $0.clone_url ?? "")
+        }
+    }
+
     /// Создаёт приватный репозиторий; возвращает https-URL для клона.
     public func createRepo(token: String, name: String) async throws -> String {
         var request = request(token: token, path: "/user/repos")
@@ -68,6 +91,12 @@ public struct GitHubClient: Sendable {
 
     private struct Viewer: Decodable { var login: String }
     private struct Repo: Decodable { var clone_url: String }
+
+    private struct RepoListItem: Decodable {
+        var name: String
+        var ssh_url: String?
+        var clone_url: String?
+    }
 }
 
 /// Локальное разворачивание репозиториев реестра.

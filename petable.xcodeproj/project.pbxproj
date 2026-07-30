@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		030313CC5FCAF18A801F6FC0 /* GraphGroupingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A3B916C8B868F1AFF2FCF9B /* GraphGroupingUITests.swift */; };
 		0D5D17616531FFCC080125DD /* OrgShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66F677C38136504A3ADFEE31 /* OrgShared.swift */; };
+		152A4F21C15E4D9BED9312D5 /* JiraOAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A3EE239B459EE503E0DFB00 /* JiraOAuth.swift */; };
 		1FF0B197461697A81BA29481 /* OrganizationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BDCCD39A977C740B0701381 /* OrganizationController.swift */; };
 		2182349EFAF633AE04318EDE /* JobCardUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C118770D8716012B071DA6E7 /* JobCardUITests.swift */; };
 		257681894B444D2784735B69 /* CanvasHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D48D8C6ACF85E367BFD35260 /* CanvasHostView.swift */; };
@@ -67,6 +68,7 @@
 		5EB6C462D7DAA6E097ACD327 /* petableUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = petableUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		66F677C38136504A3ADFEE31 /* OrgShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrgShared.swift; sourceTree = "<group>"; };
 		6A3B916C8B868F1AFF2FCF9B /* GraphGroupingUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphGroupingUITests.swift; sourceTree = "<group>"; };
+		6A3EE239B459EE503E0DFB00 /* JiraOAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JiraOAuth.swift; sourceTree = "<group>"; };
 		82EFC37AA58788E77160B2A6 /* UpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateService.swift; sourceTree = "<group>"; };
 		84D258FBEF767A24F6E72BA5 /* effervescent-squishing-valley */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "effervescent-squishing-valley"; path = .; sourceTree = SOURCE_ROOT; };
 		8DCB7854D3BB308FACCA6CA8 /* LevelColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LevelColors.swift; sourceTree = "<group>"; };
@@ -131,6 +133,7 @@
 				E6DADB00ADC81C9ACD5DD30C /* EdgeShape.swift */,
 				1331AC4697E53BAD68A9316F /* ExportImport.swift */,
 				AFA44484780ECA08BBAAC77D /* GraphSnapshotView.swift */,
+				6A3EE239B459EE503E0DFB00 /* JiraOAuth.swift */,
 				8DCB7854D3BB308FACCA6CA8 /* LevelColors.swift */,
 				E6459D748ADC3C00C1AE5A9C /* MechanicPaletteView.swift */,
 				50A7B7850B3D4727BC24D751 /* MechanicPreviewView.swift */,
@@ -323,6 +326,7 @@
 				9DDC7ACAB3123B16C752B7CE /* EdgeShape.swift in Sources */,
 				900E3D2ADF383CAD72DF5DC8 /* ExportImport.swift in Sources */,
 				9A1A09F8C6438DB47574E315 /* GraphSnapshotView.swift in Sources */,
+				152A4F21C15E4D9BED9312D5 /* JiraOAuth.swift in Sources */,
 				BC2E5ECFEA80278D956B6A8D /* LevelColors.swift in Sources */,
 				49CCBD5C8181CD3F83390558 /* MechanicPaletteView.swift in Sources */,
 				301D78B093CF673A5EFF57F2 /* MechanicPreviewView.swift in Sources */,

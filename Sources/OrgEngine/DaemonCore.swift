@@ -92,10 +92,13 @@ public actor DaemonCore {
     // MARK: Запуск
 
     private func startRun(_ command: StartRunCommand) async throws {
-        guard let task = command.organization.tasks.first(where: { $0.id == command.taskID }) else {
+        guard let picked = command.organization.tasks.first(where: { $0.id == command.taskID }) else {
             return
         }
-        var run = try Engine.startRun(organization: command.organization, task: task, now: now())
+        let (task, organization) = await resolveRepoIfNeeded(
+            picked, organization: command.organization, candidates: command.candidates ?? []
+        )
+        var run = try Engine.startRun(organization: organization, task: task, now: now())
         organizations[run.orgID] = command.organization
         try store.append(
             RunEvent(seq: 0, date: now(), kind: .runStarted), orgID: run.orgID, runID: run.id
@@ -115,6 +118,95 @@ public actor DaemonCore {
         )
         await syncJiraStage(run)
         await continueRunIfRunning(run.id)
+    }
+
+    /// Задача без репозитория (правка автора: ничего не привязывать
+    /// руками): реестр есть — один берётся сам, из нескольких выбирает
+    /// короткий LLM-вызов по тексту задачи; реестр ПУСТ — выбор из
+    /// GitHub-кандидатов приложения и автоклон в хранилище демона.
+    /// Агента нет или ответ не распознан — первый вариант.
+    private func resolveRepoIfNeeded(
+        _ task: OrgTask, organization: Organization, candidates: [RemoteRepoCandidate]
+    ) async -> (OrgTask, Organization) {
+        if let id = task.repoID, organization.repos.contains(where: { $0.id == id }) {
+            return (task, organization)
+        }
+        var resolved = task
+
+        if !organization.repos.isEmpty {
+            let names = organization.repos.map { repo in
+                "\(repo.name)\(repo.jiraProject.isEmpty ? "" : " (Jira: \(repo.jiraProject))")"
+            }
+            let pickedName = await pickRepoName(
+                options: names, plain: organization.repos.map(\.name),
+                task: task, organization: organization
+            )
+            let chosen = organization.repos.first {
+                $0.name.caseInsensitiveCompare(pickedName ?? "") == .orderedSame
+            } ?? organization.repos[0]
+            resolved.repoID = chosen.id
+            return (resolved, organization)
+        }
+
+        // Реестр пуст: агент выбирает из GitHub-кандидатов, демон клонирует.
+        guard !candidates.isEmpty else { return (task, organization) }
+        let pickedName = await pickRepoName(
+            options: candidates.map(\.name), plain: candidates.map(\.name),
+            task: task, organization: organization
+        )
+        let candidate = candidates.first {
+            $0.name.caseInsensitiveCompare(pickedName ?? "") == .orderedSame
+        } ?? candidates[0]
+        guard let repo = cloneCandidate(candidate) else { return (task, organization) }
+        var updated = organization
+        updated.repos.append(repo)
+        resolved.repoID = repo.id
+        return (resolved, updated)
+    }
+
+    /// Клон кандидата в `<store>/repos/<имя>`; уже есть на диске —
+    /// используется как есть (идемпотентно). ssh → https.
+    private func cloneCandidate(_ candidate: RemoteRepoCandidate) -> RepoRef? {
+        let root = store.root.appendingPathComponent("repos", isDirectory: true)
+        let target = root.appendingPathComponent(candidate.name, isDirectory: true)
+        if FileManager.default.fileExists(atPath: target.path) {
+            return RepoRef(name: candidate.name, path: target.path)
+        }
+        for url in [candidate.sshURL, candidate.httpsURL] where !url.isEmpty {
+            if let path = try? RepoProvisioner.clone(url: url, into: root, name: candidate.name) {
+                return RepoRef(name: candidate.name, path: path)
+            }
+        }
+        return nil
+    }
+
+    /// Короткий LLM-выбор имени из списка; один вариант/нет адаптера/не
+    /// распознан → первый.
+    private func pickRepoName(
+        options: [String], plain: [String], task: OrgTask, organization: Organization
+    ) async -> String? {
+        guard plain.count > 1 else { return plain.first }
+        let config = organization.employees.first?.adapter ?? AdapterConfig()
+        guard let adapter = registry.adapter(for: config) else { return plain.first }
+        let prompt = """
+        Выбери репозиторий, в котором нужны изменения для задачи. Варианты:
+        \(options.map { "- \($0)" }.joined(separator: "\n"))
+
+        Задача \(task.jiraKey.isEmpty ? "" : "[\(task.jiraKey)] ")«\(task.title)».
+        \(task.details.isEmpty ? "" : task.details + "\n")\
+        Ничего не делай с кодом. Ответь ТОЛЬКО JSON-блоком:
+        {"status": "done", "note": "<имя репозитория из списка>"}
+        """
+        try? FileManager.default.createDirectory(at: store.root, withIntermediateDirectories: true)
+        var picked: String?
+        for await event in adapter.run(AgentRequest(
+            prompt: prompt, workingDirectory: store.root, config: config
+        )) {
+            if case let .finished(verdict, _) = event {
+                picked = plain.first { verdict.note.localizedCaseInsensitiveContains($0) }
+            }
+        }
+        return picked ?? plain.first
     }
 
     /// Гоняет LLM/тест-этапы, пока запуск в `.running` (гейты и

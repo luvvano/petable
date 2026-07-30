@@ -40,7 +40,7 @@ install: build
 	@echo "✓ Установлено: $(INSTALL_DIR)/$(APP).app"
 	open "$(INSTALL_DIR)/$(APP).app"
 
-run: build
+run: daemon-install install
 	open "$(APP_BUNDLE)"
 
 test:

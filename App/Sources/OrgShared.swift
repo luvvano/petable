@@ -98,9 +98,12 @@ enum OrgUI {
         if !issues.isEmpty {
             return "флоу «\(flow.name)»: \(issues.count) \(issues.count == 1 ? "ошибка" : "ошибки") — Организация → Конвейер"
         }
-        guard let repoID = task.repoID,
-              organization.repos.contains(where: { $0.id == repoID })
-        else { return "не выбран репозиторий" }
+        // Репозиторий не выбран — не блок: возьмётся из реестра или
+        // GitHub-аккаунта агентом на старте (правка автора). Блок только
+        // когда взять неоткуда совсем.
+        if organization.repos.isEmpty, GitHubSettingsStore.token == nil {
+            return "подключи GitHub или добавь репозиторий — задаче некуда ехать"
+        }
         return nil
     }
 }

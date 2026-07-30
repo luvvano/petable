@@ -99,6 +99,7 @@ final class OrganizationController: ObservableObject {
         }
         // Секреты — демону при коннекте (Безопасность дизайн-дока):
         // он держит их в памяти и разгружает очередь write-back.
+        await ensureFreshJira()
         configureJira()
         restartOrchestrator()
     }
@@ -112,26 +113,73 @@ final class OrganizationController: ObservableObject {
         send(.configure, ConfigureCommand(jira: config))
     }
 
+    /// OAuth-коннектор (правка автора): браузер → «Согласен» → готово;
+    /// сайт подтягивается сам из accessible-resources.
+    @Published var jiraConnecting = false
+
+    func connectJiraOAuth() async {
+        jiraConnecting = true
+        defer { jiraConnecting = false }
+        do {
+            let tokens = try await JiraOAuthFlow.connect()
+            JiraOAuthTokenStore.save(tokens)
+            jiraNeedsReauth = false
+            configureJira()
+            // Сразу пробуем импорт: статус либо покажет задачи, либо
+            // подскажет следующий шаг (привязать проект к репозиторию).
+            await importFromJira()
+        } catch {
+            jiraStatus = "Jira: \((error as? JiraOAuthFlow.OAuthError)?.message ?? error.localizedDescription)"
+        }
+    }
+
+    func disconnectJiraOAuth() {
+        JiraOAuthTokenStore.delete()
+        jiraStatus = "Jira отключена"
+    }
+
+    /// Access-токен коннектора короткоживущий: освежаем с запасом 5 минут
+    /// перед configure/импортом; демон между конфигурациями переживает
+    /// истечение очередью write-back. Refresh rotating — сохраняем.
+    func ensureFreshJira() async {
+        guard let tokens = JiraOAuthTokenStore.load(),
+              tokens.expiresAt < Date().addingTimeInterval(300)
+        else { return }
+        do {
+            let fresh = try await JiraOAuthFlow.refresh(tokens)
+            JiraOAuthTokenStore.save(fresh)
+            configureJira()
+        } catch {
+            jiraNeedsReauth = true
+            jiraStatus = "Jira: сессия истекла — подключи заново"
+        }
+    }
+
     /// Read-only импорт: JQL по привязанным проектам, маппинг типов и
     /// репозиториев — `JiraImporter`, идемпотентно по jiraKey.
     /// Возвращает добавленные задачи (оркестратору — для взятия в работу).
     @discardableResult
     func importFromJira() async -> [OrgTask] {
         guard let document, let organization = document.organization else { return [] }
+        await ensureFreshJira()
         guard let config = JiraSettingsStore.config() else {
             jiraStatus = "Jira не настроена — Организация → Интеграции"
             jiraNeedsReauth = true
             return []
         }
-        let projects = Set(organization.repos.map(\.jiraProject).filter { !$0.isEmpty })
-        guard !projects.isEmpty else {
-            jiraStatus = "Ни один репозиторий не привязан к Jira-проекту — заполни «Jira-проект» в Организации → Интеграциях"
+        guard !organization.repos.isEmpty else {
+            jiraStatus = "Реестр репозиториев пуст — добавь клон в Организации → Интеграциях, задачам нужно где-то ехать"
             return []
         }
         jiraImporting = true
         defer { jiraImporting = false }
-        let jql = "project in (\(projects.sorted().joined(separator: ","))) "
-            + "AND statusCategory != Done ORDER BY updated DESC"
+        // Маппинг проект→репо не обязателен: привязок нет — тянем все
+        // открытые задачи, репозиторий выберет агент на старте.
+        let projects = Set(organization.repos.map(\.jiraProject).filter { !$0.isEmpty })
+        let jql = (projects.isEmpty
+            ? ""
+            : "project in (\(projects.sorted().joined(separator: ","))) AND ")
+            + "statusCategory != Done ORDER BY updated DESC"
         do {
             let issues = try await JiraClient().searchIssues(config, jql: jql)
             var existing = Set(organization.tasks.map(\.jiraKey))
@@ -315,6 +363,15 @@ final class OrganizationController: ObservableObject {
             if run.status != .needsAttention, run.status != .waitingGate {
                 stuckNotified.remove(run.id) // оркестратор напомнит про следующий затык
             }
+            // Демон сам склонировал репозиторий (пустой реестр) —
+            // подхватываем его в реестр документа.
+            if document?.organization?.repos.contains(where: { $0.id == run.repo.id }) == false {
+                document?.updateOrganization { org in
+                    if !org.repos.contains(where: { $0.id == run.repo.id || $0.path == run.repo.path }) {
+                        org.repos.append(run.repo)
+                    }
+                }
+            }
             notifyIfNeeded(run, previous: previous)
             updateDockBadge()
             if run.status == .finished, let summary = run.summary {
@@ -381,7 +438,37 @@ final class OrganizationController: ObservableObject {
 
     func start(task: OrgTask) {
         guard let organization = document?.organization else { return }
-        send(.startRun, StartRunCommand(organization: organization, taskID: task.id))
+        Task { await startProvisioned(task: task, organization: organization) }
+    }
+
+    /// Реестр пуст — кандидаты из GitHub-аккаунта: агент в движке выберет
+    /// подходящий по задаче и склонирует сам (правка автора: ничего не
+    /// привязывать руками).
+    private func startProvisioned(task: OrgTask, organization: Organization) async {
+        var candidates: [RemoteRepoCandidate] = []
+        if organization.repos.isEmpty {
+            guard let token = GitHubSettingsStore.token else {
+                jiraStatus = "Задаче некуда ехать: подключи GitHub (репозиторий выберется и склонируется сам) или добавь клон в Интеграциях"
+                return
+            }
+            do {
+                candidates = try await GitHubClient().listRepos(token: token).map {
+                    RemoteRepoCandidate(name: $0.name, sshURL: $0.sshURL, httpsURL: $0.httpsURL)
+                }
+            } catch {
+                jiraStatus = "GitHub: не смог получить список репозиториев — \(shortError(error))"
+                return
+            }
+            guard !candidates.isEmpty else {
+                jiraStatus = "В GitHub-аккаунте нет репозиториев — создай в Интеграциях"
+                return
+            }
+        }
+        send(.startRun, StartRunCommand(
+            organization: organization,
+            taskID: task.id,
+            candidates: candidates.isEmpty ? nil : candidates
+        ))
     }
 
     func approve(_ runID: UUID) { send(.approve, runID) }

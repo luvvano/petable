@@ -8,20 +8,36 @@ import GraphCore
 
 /// Учётные данные Jira Cloud. Приложение читает их из Keychain и передаёт
 /// демону по XPC при коннекте; демон НЕ персистит.
+///
+/// Два способа авторизации: OAuth-коннектор (`bearerToken`, база
+/// `https://api.atlassian.com/ex/jira/<cloudId>`) — приоритетный; и
+/// ручной API-токен (`email`+`token`, Basic, база сайта).
 public struct JiraConfig: Codable, Equatable, Sendable {
-    /// `https://team.atlassian.net` — без завершающего «/».
+    /// База REST без завершающего «/»: сайт (`https://team.atlassian.net`)
+    /// для Basic или `https://api.atlassian.com/ex/jira/<cloudId>` для OAuth.
     public var baseURL: String
     public var email: String
     public var token: String
+    /// Access-токен OAuth-коннектора; непустой — используется вместо Basic.
+    /// Короткоживущий: приложение освежает его при каждом configure, демон
+    /// между конфигурациями переживает истечение очередью write-back.
+    public var bearerToken: String
 
-    public init(baseURL: String, email: String, token: String) {
+    public init(baseURL: String, email: String = "", token: String = "", bearerToken: String = "") {
         self.baseURL = baseURL
         self.email = email
         self.token = token
+        self.bearerToken = bearerToken
+    }
+
+    public var authorizationHeader: String? {
+        if !bearerToken.isEmpty { return "Bearer \(bearerToken)" }
+        guard !email.isEmpty, !token.isEmpty else { return nil }
+        return "Basic \(Data("\(email):\(token)".utf8).base64EncodedString())"
     }
 
     public var isComplete: Bool {
-        !baseURL.isEmpty && !email.isEmpty && !token.isEmpty
+        !baseURL.isEmpty && authorizationHeader != nil
     }
 }
 
@@ -193,8 +209,9 @@ public struct JiraClient: JiraGateway, Sendable {
         var components = URLComponents(string: base + path) ?? URLComponents()
         if !query.isEmpty { components.queryItems = query }
         var request = URLRequest(url: components.url ?? URL(fileURLWithPath: "/"))
-        let credentials = Data("\(config.email):\(config.token)".utf8).base64EncodedString()
-        request.setValue("Basic \(credentials)", forHTTPHeaderField: "Authorization")
+        if let authorization = config.authorizationHeader {
+            request.setValue(authorization, forHTTPHeaderField: "Authorization")
+        }
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         return request
     }
@@ -259,8 +276,10 @@ public struct JiraClient: JiraGateway, Sendable {
 
 /// Маппинг импорта (П4″) — чистая функция, тестируется без сети:
 /// тип задачи из поля Jira → `OrgTaskType.jiraType`, Jira-проект →
-/// `RepoRef.jiraProject`; не разрешился проект — задача пропускается
-/// с причиной (вопрос человеку до старта, Модель данных).
+/// `RepoRef.jiraProject`. Маппинг проекта НЕ обязателен (правка автора):
+/// не разрешился — единственный репозиторий берётся сам, при нескольких
+/// репозиторий выберет агент на старте (`repoID = nil`); пропуск только
+/// когда реестр пуст.
 public enum JiraImporter {
     public struct Result: Equatable, Sendable {
         public var tasks: [OrgTask]
@@ -280,15 +299,12 @@ public enum JiraImporter {
         var result = Result()
         for issue in issues {
             guard !existingKeys.contains(issue.key) else { continue } // идемпотентный повтор
-            guard let repo = organization.repos.first(where: {
+            // Репозиторий не условие импорта: nil выберется агентом на
+            // старте (при пустом реестре — из GitHub-кандидатов).
+            let repo = organization.repos.first(where: {
                 !$0.jiraProject.isEmpty
                     && $0.jiraProject.caseInsensitiveCompare(issue.projectKey) == .orderedSame
-            }) else {
-                result.skipped.append(
-                    "\(issue.key): проект \(issue.projectKey) не привязан к репозиторию"
-                )
-                continue
-            }
+            }) ?? (organization.repos.count == 1 ? organization.repos[0] : nil)
             let taskType = organization.taskTypes.first(where: {
                 !$0.jiraType.isEmpty
                     && $0.jiraType.caseInsensitiveCompare(issue.typeName) == .orderedSame
@@ -303,7 +319,7 @@ public enum JiraImporter {
                 title: issue.summary,
                 details: issue.description,
                 taskTypeID: taskType.id,
-                repoID: repo.id,
+                repoID: repo?.id,
                 source: .jira,
                 jiraKey: issue.key
             ))

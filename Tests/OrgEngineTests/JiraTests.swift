@@ -182,6 +182,25 @@ struct JiraClientTests {
         #expect(none.requests.count == 1) // no-op
     }
 
+    @Test("OAuth-коннектор: bearerToken приоритетнее Basic; без кред — nil")
+    func bearerPriority() async throws {
+        let oauth = JiraConfig(
+            baseURL: "https://api.atlassian.com/ex/jira/cloud1",
+            email: "e@x.com", token: "tok", bearerToken: "BR"
+        )
+        #expect(oauth.authorizationHeader == "Bearer BR")
+        #expect(oauth.isComplete)
+        #expect(JiraConfig(baseURL: "https://x").isComplete == false)
+
+        let transport = FakeTransport([("{\"issues\":[]}", 200)])
+        _ = try await JiraClient(transport: transport).searchIssues(oauth, jql: "x")
+        let request = try #require(transport.requests.first)
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer BR")
+        #expect(request.url?.absoluteString.hasPrefix(
+            "https://api.atlassian.com/ex/jira/cloud1/rest/api/2/search"
+        ) == true)
+    }
+
     @Test("401 → JiraError со statusCode для баннера переавторизации")
     func unauthorized() async throws {
         let client = JiraClient(transport: FakeTransport([("{}", 401)]))
@@ -230,15 +249,38 @@ struct JiraImporterTests {
         #expect(result.tasks[0].jiraKey == "DN-1")
     }
 
-    @Test("Непривязанный проект — пропуск с причиной (вопрос человеку)")
+    @Test("Непривязанный проект: один репозиторий — берётся сам; несколько — repoID nil (агент выберет на старте)")
     func unmappedProject() {
-        let result = JiraImporter.map(
+        var single = makeOrg() // один репозиторий
+        single.repos[0].jiraProject = ""
+        let one = JiraImporter.map(
             issues: [JiraIssue(key: "OPS-7", summary: "Фича", projectKey: "OPS")],
-            organization: makeOrg(), existingKeys: []
+            organization: single, existingKeys: []
         )
-        #expect(result.tasks.isEmpty)
-        #expect(result.skipped.count == 1)
-        #expect(result.skipped[0].contains("OPS"))
+        #expect(one.skipped.isEmpty)
+        #expect(one.tasks.first?.repoID == single.repos[0].id)
+
+        var multi = makeOrg()
+        multi.repos.append(RepoRef(name: "beta", path: "/y"))
+        let many = JiraImporter.map(
+            issues: [JiraIssue(key: "OPS-7", summary: "Фича", projectKey: "OPS")],
+            organization: multi, existingKeys: []
+        )
+        #expect(many.skipped.isEmpty)
+        #expect(many.tasks.first?.repoID == nil)
+    }
+
+    @Test("Пустой реестр — задачи всё равно импортируются: репозиторий найдётся на старте")
+    func emptyRegistry() {
+        var org = makeOrg()
+        org.repos = []
+        let result = JiraImporter.map(
+            issues: [JiraIssue(key: "DN-1", summary: "Баг", projectKey: "DN")],
+            organization: org, existingKeys: []
+        )
+        #expect(result.skipped.isEmpty)
+        #expect(result.tasks.count == 1)
+        #expect(result.tasks[0].repoID == nil)
     }
 
     @Test("Повторный импорт идемпотентен: существующие ключи молча пропускаются")
@@ -426,6 +468,128 @@ struct JiraWriteBackTests {
         #expect(gateway2.transitioned == ["DN-7"])
         let log = events(store, orgID: org.orgID, runID: runID)
         #expect(EventStore.pendingIntents(in: log).isEmpty)
+    }
+}
+
+// MARK: - Выбор репозитория агентом
+
+@Suite("DaemonCore: репозиторий задачи выбирает агент (правка автора)")
+struct RepoResolutionTests {
+    private let t0 = Date(timeIntervalSince1970: 9000)
+
+    private func makeWorld(
+        repos: [RepoRef], scripts: [[AgentEvent]]
+    ) throws -> (DaemonCore, Organization, OrgTask) {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("petable-repo-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        var org = Organization.makeDefault()
+        org.repos = repos
+        let task = OrgTask(title: "Починить логин", taskTypeID: org.taskTypes[0].id)
+        org.tasks = [task]
+        let core = DaemonCore(
+            store: EventStore(root: root),
+            registry: AdapterRegistry([
+                ScriptedJiraAdapter(cliID: "claude", scripts: scripts),
+                ScriptedJiraAdapter(cliID: "codex", scripts: scripts),
+            ]),
+            jira: FakeJiraGateway(),
+            now: { self.t0 }
+        )
+        return (core, org, task)
+    }
+
+    @Test("Несколько репозиториев: LLM-ответ в note выбирает по имени")
+    func agentPicks() async throws {
+        let resolver: [AgentEvent] = [
+            .started(sessionID: "r"),
+            .finished(Verdict(status: .done, note: "beta"), usage: AgentUsage()),
+        ]
+        let work: [AgentEvent] = [
+            .started(sessionID: "s"),
+            .finished(Verdict(status: .done), usage: AgentUsage()),
+        ]
+        let (core, org, task) = try makeWorld(
+            repos: [
+                RepoRef(name: "alpha", path: "/nonexistent/a"),
+                RepoRef(name: "beta", path: "/nonexistent/b"),
+            ],
+            scripts: [resolver, work, work]
+        )
+        try await core.handle(WireEnvelope.pack(
+            .startRun, StartRunCommand(organization: org, taskID: task.id)
+        ))
+        let runID = try #require(await core.runID(forTask: task.id))
+        let run = try #require(await core.run(runID))
+        #expect(run.repo.name == "beta")
+        #expect(run.status == .waitingGate) // конвейер поехал дальше
+    }
+
+    @Test("Пустой реестр: агент выбирает GitHub-кандидата, демон клонирует его сам")
+    func cloneFromCandidate() async throws {
+        // Живой локальный «GitHub»: репозиторий с коммитом.
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("petable-candidate-\(UUID().uuidString)")
+        let origin = base.appendingPathComponent("beta")
+        try FileManager.default.createDirectory(at: origin, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        func git(_ args: String...) throws {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+            process.arguments = args
+            process.currentDirectoryURL = origin
+            try process.run()
+            process.waitUntilExit()
+            #expect(process.terminationStatus == 0)
+        }
+        try git("init", "-q")
+        try "x".write(to: origin.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        try git("add", ".")
+        try git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init")
+
+        let resolver: [AgentEvent] = [
+            .started(sessionID: "r"),
+            .finished(Verdict(status: .done, note: "выбираю beta"), usage: AgentUsage()),
+        ]
+        let work: [AgentEvent] = [
+            .started(sessionID: "s"),
+            .finished(Verdict(status: .done), usage: AgentUsage()),
+        ]
+        let (core, org, task) = try makeWorld(repos: [], scripts: [resolver, work, work])
+        try await core.handle(WireEnvelope.pack(
+            .startRun,
+            StartRunCommand(organization: org, taskID: task.id, candidates: [
+                RemoteRepoCandidate(name: "alpha", sshURL: "/nonexistent/alpha", httpsURL: ""),
+                RemoteRepoCandidate(name: "beta", sshURL: origin.path, httpsURL: ""),
+            ])
+        ))
+        let runID = try #require(await core.runID(forTask: task.id))
+        let run = try #require(await core.run(runID))
+        #expect(run.repo.name == "beta")
+        #expect(run.repo.path.contains("/repos/beta"))
+        #expect(FileManager.default.fileExists(atPath: run.repo.path + "/a.txt"))
+        #expect(run.status == .waitingGate)
+    }
+
+    @Test("Один репозиторий: берётся без вызова агента")
+    func singleRepoNoAgent() async throws {
+        let work: [AgentEvent] = [
+            .started(sessionID: "s"),
+            .finished(Verdict(status: .done), usage: AgentUsage()),
+        ]
+        // Скриптов ровно на work+review: лишний вызов резолвера сломал бы
+        // конвейер («сценарии кончились» → failed).
+        let (core, org, task) = try makeWorld(
+            repos: [RepoRef(name: "solo", path: "/nonexistent/solo")],
+            scripts: [work, work]
+        )
+        try await core.handle(WireEnvelope.pack(
+            .startRun, StartRunCommand(organization: org, taskID: task.id)
+        ))
+        let runID = try #require(await core.runID(forTask: task.id))
+        let run = try #require(await core.run(runID))
+        #expect(run.repo.name == "solo")
+        #expect(run.status == .waitingGate)
     }
 }
 
