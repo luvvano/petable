@@ -313,6 +313,7 @@ struct DebuggerView: View {
         case .effectConfirmed: return "Эффект подтверждён"
         case .processSpawned: return "Процесс порождён"
         case .runFinished: return "Запуск завершён"
+        case .chatMessage: return "Сообщение человека"
         case nil: return event.kind
         }
     }

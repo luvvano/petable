@@ -15,8 +15,12 @@ struct OrganizationView: View {
     enum Section: String, CaseIterable, Identifiable {
         case taskTypes = "Типы задач"
         case employees = "Сотрудники"
-        case pipeline = "Конвейер"
-        case integrations = "Интеграции"
+        case pipeline = "Конвейеры"
+        case engine = "Движок"
+        case jira = "Jira"
+        case github = "GitHub"
+        case repos = "Репозитории"
+        case orchestrator = "Оркестратор"
 
         var id: String { rawValue }
     }
@@ -43,8 +47,13 @@ struct OrganizationView: View {
     @State private var orchestratorAuto = OrchestratorSettings.autoStart
     @State private var orchestratorMinutes = OrchestratorSettings.intervalMinutes
     @State private var orchestratorResolve = OrchestratorSettings.resolveStuck
+    @State private var orchestratorFlowLLM = OrchestratorSettings.flowByLLM
+    @State private var orchestratorInstructions = OrchestratorSettings.instructions
     /// Черновики маппинга статусов Jira (правка №7), коммит по ⏎.
     @State private var jiraStatusDrafts: [String: String] = [:]
+    /// Черновики настроек исполнителей движка (путь/модель), коммит по ⏎.
+    @State private var cliPathDrafts: [String: String] = [:]
+    @State private var cliModelDrafts: [String: String] = [:]
 
     var body: some View {
         Group {
@@ -82,32 +91,224 @@ struct OrganizationView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    /// Мастер-детейл (редизайн 2026-07-31): слева — разделы со статусами
+    /// «одним взглядом» (что подключено, где ошибки), справа — деталь
+    /// раздела; сверху детали — чек-лист готовности к первому запуску.
     private func content(_ organization: Organization) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Picker("Раздел", selection: $section) {
-                ForEach(Section.allCases) { section in
-                    Text(section.rawValue).tag(section)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: 480)
-            .padding(24)
+        HSplitView {
+            sectionList(organization)
+                .frame(minWidth: 210, maxWidth: 260)
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    readinessChecklist(organization)
                     switch section {
                     case .taskTypes: taskTypesSection(organization)
                     case .employees: employeesSection(organization)
                     case .pipeline: pipelineSection(organization)
-                    case .integrations: integrationsSection(organization)
+                    case .engine: engineCard
+                    case .jira: jiraCard(organization)
+                    case .github: githubDetail
+                    case .repos: reposDetail(organization)
+                    case .orchestrator: orchestratorCard
                     }
                 }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 24)
+                .padding(24)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(maxWidth: .infinity)
         }
         .background(Color(nsColor: .textBackgroundColor))
+    }
+
+    // MARK: Навигация разделов со статусами
+
+    private func sectionList(_ organization: Organization) -> some View {
+        List(selection: $section) {
+            SwiftUI.Section("ОРГАНИЗАЦИЯ") {
+                ForEach([Section.taskTypes, .employees, .pipeline]) { item in
+                    sectionRow(item, organization: organization).tag(item)
+                }
+            }
+            SwiftUI.Section("ПОДКЛЮЧЕНИЯ") {
+                ForEach([Section.engine, .jira, .github, .repos, .orchestrator]) { item in
+                    sectionRow(item, organization: organization).tag(item)
+                }
+            }
+        }
+        .listStyle(.sidebar)
+    }
+
+    private func sectionRow(_ item: Section, organization: Organization) -> some View {
+        let status = sectionStatus(item, organization: organization)
+        return HStack(spacing: 8) {
+            Image(systemName: sectionIcon(item))
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+            Text(item.rawValue)
+                .font(.system(size: 13))
+            Spacer()
+            if !status.text.isEmpty {
+                Text(status.text)
+                    .font(.system(size: 10))
+                    .foregroundStyle(status.color == .clear ? Color.secondary : status.color)
+            }
+            if status.color != .clear {
+                Circle()
+                    .fill(status.color)
+                    .frame(width: 7, height: 7)
+            }
+        }
+        .padding(.vertical, 1)
+        .accessibilityLabel("\(item.rawValue): \(status.text)")
+    }
+
+    private func sectionIcon(_ item: Section) -> String {
+        switch item {
+        case .taskTypes: return "square.grid.2x2"
+        case .employees: return "person.2"
+        case .pipeline: return "arrow.triangle.branch"
+        case .engine: return "gearshape.2"
+        case .jira: return "tray.and.arrow.down"
+        case .github: return "chevron.left.forwardslash.chevron.right"
+        case .repos: return "folder"
+        case .orchestrator: return "brain"
+        }
+    }
+
+    /// Статус раздела: цветная точка + короткий текст. Видно ДО захода
+    /// в раздел, что настроено, а что требует руки.
+    private func sectionStatus(
+        _ item: Section, organization: Organization
+    ) -> (color: Color, text: String) {
+        switch item {
+        case .taskTypes:
+            return (.clear, "\(organization.taskTypes.count)")
+        case .employees:
+            return (.clear, "\(organization.employees.count)")
+        case .pipeline:
+            let errors = organization.flows.map { $0.validate().count }.reduce(0, +)
+            return errors > 0
+                ? (.red, "\(errors) ош.")
+                : (.clear, "\(organization.flows.count)")
+        case .engine:
+            switch controller.mode {
+            case .daemon:
+                return controller.engineUpdateAvailable
+                    ? (.orange, "обновить") : (.green, "демон")
+            case .inProcess: return (.orange, "в приложении")
+            case .unavailable: return (.red, "нет")
+            }
+        case .jira:
+            if JiraSettingsStore.connectedSiteDisplay == nil { return (.clear, "нет") }
+            return controller.jiraNeedsReauth
+                ? (.orange, "переавторизуй") : (.green, "подключена")
+        case .github:
+            return controller.githubLogin.isEmpty
+                ? (.clear, "нет") : (.green, controller.githubLogin)
+        case .repos:
+            return organization.repos.isEmpty && controller.githubLogin.isEmpty
+                ? (.orange, "0")
+                : (.clear, "\(organization.repos.count)")
+        case .orchestrator:
+            return orchestratorEnabled ? (.green, "вкл") : (.clear, "выкл")
+        }
+    }
+
+    // MARK: Чек-лист готовности (onboarding)
+
+    /// Что осталось до первого запуска — шаги-кнопки; всё готово —
+    /// одна зелёная строка.
+    @ViewBuilder
+    private func readinessChecklist(_ organization: Organization) -> some View {
+        let engineOK = { if case .daemon = controller.mode { return true } else { return false } }()
+        let repoOK = !organization.repos.isEmpty || !controller.githubLogin.isEmpty
+        let flowOK = organization.flows.contains { $0.validate().isEmpty }
+        let jiraOK = JiraSettingsStore.connectedSiteDisplay != nil
+        if engineOK && repoOK && flowOK {
+            HStack(spacing: 8) {
+                Label("Готово к запуску: движок работает, задачам есть куда ехать", systemImage: "checkmark.circle")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.green)
+                if !jiraOK {
+                    Button("Подключить Jira — задачи будут приезжать сами") { section = .jira }
+                        .font(.system(size: 11))
+                }
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("ДО ПЕРВОГО ЗАПУСКА")
+                    .font(.system(size: 9, weight: .medium))
+                    .kerning(1)
+                    .foregroundStyle(.tertiary)
+                readinessStep(
+                    done: engineOK,
+                    text: "Движок-демон установлен (конвейер живёт при закрытом приложении)",
+                    action: "Установить"
+                ) { section = .engine }
+                readinessStep(
+                    done: repoOK,
+                    text: "Есть куда ехать: GitHub или репозиторий в реестре",
+                    action: "Подключить"
+                ) { section = .github }
+                readinessStep(
+                    done: flowOK,
+                    text: "Есть валидный конвейер (флоу без ошибок)",
+                    action: "Открыть"
+                ) { section = .pipeline }
+                readinessStep(
+                    done: jiraOK,
+                    text: "Jira подключена — задачи импортируются сами (необязательно)",
+                    action: "Подключить"
+                ) { section = .jira }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.06)))
+        }
+    }
+
+    private func readinessStep(
+        done: Bool, text: String, action: String, open: @escaping () -> Void
+    ) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: done ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 11))
+                .foregroundStyle(done ? Color.green : Color.secondary)
+            Text(text)
+                .font(.system(size: 11))
+                .foregroundStyle(done ? .secondary : .primary)
+            Spacer()
+            if !done {
+                Button(action, action: open)
+                    .font(.system(size: 10))
+                    .controlSize(.small)
+            }
+        }
+    }
+
+    // MARK: Детали подключений
+
+    private var githubDetail: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            githubCard
+            if let status = controller.integrationStatus {
+                Text(status)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func reposDetail(_ organization: Organization) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            reposCard(organization)
+            if let status = controller.integrationStatus {
+                Text(status)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 
     // MARK: Типы задач → флоу (компактная таблица, не топология — D3)
@@ -247,6 +448,11 @@ struct OrganizationView: View {
                     }
                     Divider()
                     Button("С нуля") { addEmployee(preset: nil) }
+                    Button("Импорт из JSON…") {
+                        guard let imported = EmployeeTransfer.importJSON() else { return }
+                        document.updateOrganization { $0.employees.append(imported) }
+                        selectedEmployeeID = imported.id
+                    }
                 } label: {
                     Label("Добавить сотрудника", systemImage: "plus")
                         .font(.system(size: 11))
@@ -405,21 +611,7 @@ struct OrganizationView: View {
         }
     }
 
-    // MARK: Интеграции (правка №5): Jira, GitHub, репозитории, оркестратор
-
-    @ViewBuilder
-    private func integrationsSection(_ organization: Organization) -> some View {
-        engineCard
-        jiraCard(organization)
-        githubCard
-        reposCard(organization)
-        orchestratorCard
-        if let status = controller.integrationStatus {
-            Text(status)
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-        }
-    }
+    // MARK: Карточки подключений (Jira, GitHub, репозитории, оркестратор)
 
     /// Движок-демон (П0): состояние, установка/обновление из приложения.
     private var engineCard: some View {
@@ -464,7 +656,85 @@ struct OrganizationView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
+            Divider()
+            Text("ИСПОЛНИТЕЛИ (CLI)")
+                .font(.system(size: 9, weight: .medium))
+                .kerning(1)
+                .foregroundStyle(.tertiary)
+            ForEach(EngineSettings.clis, id: \.self) { cli in
+                cliRow(cli)
+            }
+            HStack(spacing: 8) {
+                Text("Смена пути или установка CLI после старта — «Перезапустить движок».")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+                Button("Перезапустить движок") {
+                    Task { await controller.restartEngine() }
+                }
+                .controlSize(.small)
+            }
         }
+    }
+
+    /// Исполнитель движка: найденный путь, ручной путь (пусто — автопоиск)
+    /// и модель по умолчанию (сотрудник со своей моделью — сильнее).
+    private func cliRow(_ cli: String) -> some View {
+        let located = CLIDiscovery.locate(cli)
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Text(cli)
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .frame(width: 60, alignment: .leading)
+                if let located {
+                    Label(located.path, systemImage: "checkmark.circle")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.green)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(located.path)
+                } else {
+                    Label("не найден — укажи путь или установи", systemImage: "xmark.circle")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.red)
+                }
+            }
+            HStack(spacing: 8) {
+                TextField(
+                    "Путь к бинарю (пусто — автопоиск, ⏎)",
+                    text: Binding(
+                        get: { cliPathDrafts[cli] ?? EngineSettings.cliPath(cli) },
+                        set: { cliPathDrafts[cli] = $0 }
+                    )
+                )
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 11, design: .monospaced))
+                .frame(maxWidth: 320)
+                .onSubmit {
+                    let path = (cliPathDrafts[cli] ?? "").trimmingCharacters(in: .whitespaces)
+                    EngineSettings.setCLIPath(cli, path)
+                    CLIDiscovery.setOverride(cli, path: path)
+                    controller.configureJira() // путь демону (fallback подхватит)
+                    controller.engineStatus = "Путь \(cli) сохранён — «Перезапустить движок», чтобы демон переискал"
+                    cliPathDrafts[cli] = nil
+                }
+                SearchableDropdown(
+                    placeholder: "Модель по умолчанию",
+                    options: CLICatalog.models(for: cli),
+                    text: Binding(
+                        get: { cliModelDrafts[cli] ?? EngineSettings.defaultModel(cli) },
+                        set: { cliModelDrafts[cli] = $0 }
+                    ),
+                    width: 230
+                ) { value in
+                    EngineSettings.setDefaultModel(
+                        cli, value.trimmingCharacters(in: .whitespaces)
+                    )
+                    cliModelDrafts[cli] = nil
+                }
+                .help("Модель для сотрудников этого CLI без своей модели; своя модель сотрудника сильнее")
+            }
+        }
+        .padding(.vertical, 2)
     }
 
     private func jiraCard(_ organization: Organization) -> some View {
@@ -507,9 +777,14 @@ struct OrganizationView: View {
                 }
             }
             if let status = controller.jiraStatus {
+                // Сырые ошибки API не расползаются: две строки + полный
+                // текст по наведению и выделению.
                 Text(status)
                     .font(.system(size: 11))
                     .foregroundStyle(controller.jiraNeedsReauth ? Color.orange : Color.secondary)
+                    .lineLimit(2)
+                    .textSelection(.enabled)
+                    .help(status)
             }
             if JiraSettingsStore.connectedSiteDisplay != nil {
                 jiraStatusMapEditor(organization)
@@ -680,11 +955,22 @@ struct OrganizationView: View {
         .font(.system(size: 12))
     }
 
-    /// Оркестратор (правки №8/№9): следит за Jira, момент взятия в
-    /// работу конфигурируем — спрашивать или брать автоматически.
+    /// Оркестратор (правки №8/№9 + «видеть и влиять»): сводка того, как
+    /// он работает при текущих настройках, тумблеры поведения и
+    /// инструкции, попадающие в его LLM-выборы.
     private var orchestratorCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             sectionHeader("ОРКЕСТРАТОР")
+            orchestratorSummary
+            Toggle(
+                "Флоу выбирает оркестратор-агент, когда маршрута нет или флоу с ошибками",
+                isOn: $orchestratorFlowLLM
+            )
+            .font(.system(size: 12))
+            .onChange(of: orchestratorFlowLLM) { _, value in
+                OrchestratorSettings.flowByLLM = value
+                controller.configureJira()
+            }
             Toggle("Проверять Jira на новые задачи и напоминать о зависших", isOn: $orchestratorEnabled)
                 .font(.system(size: 12))
                 .onChange(of: orchestratorEnabled) { _, value in
@@ -723,6 +1009,81 @@ struct OrganizationView: View {
                     OrchestratorSettings.resolveStuck = value
                 }
             }
+            Text("ИНСТРУКЦИИ ОРКЕСТРАТОРУ")
+                .font(.system(size: 9, weight: .medium))
+                .kerning(1)
+                .foregroundStyle(.tertiary)
+            TextEditor(text: $orchestratorInstructions)
+                .font(.system(size: 11))
+                .frame(minHeight: 40, maxHeight: 80)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(Color.secondary.opacity(0.25))
+                )
+            HStack {
+                Text("Попадают в его решения: выбор флоу, выбор репозитория, разбор зависших.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+                Spacer()
+                Button("Сохранить инструкции") {
+                    OrchestratorSettings.instructions = orchestratorInstructions
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    controller.configureJira()
+                }
+                .font(.system(size: 11))
+                .disabled(
+                    orchestratorInstructions.trimmingCharacters(in: .whitespacesAndNewlines)
+                        == OrchestratorSettings.instructions
+                )
+            }
+        }
+    }
+
+    /// «Как работает оркестратор» — живая сводка по текущим настройкам:
+    /// видно, что именно он сделает, до того как он это сделает.
+    private var orchestratorSummary: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            summaryRow(
+                "point.topleft.down.curvedto.point.bottomright.up",
+                "Запуск задачи: маршрут из таблицы «Типы задач → Флоу»; маршрута нет или флоу с ошибками — "
+                    + (orchestratorFlowLLM
+                        ? "выбирает агент по типу и статусу задачи из валидных флоу"
+                        : "берётся первый валидный флоу (агент выключен)")
+                    + "; валидных нет — линейная запаска «Разработка → Ревью → Тесты → Merge»."
+            )
+            summaryRow(
+                "folder",
+                "Репозиторий: указанный в задаче → единственный в реестре → выбор агентом по тексту задачи; реестр пуст — клон из GitHub-аккаунта."
+            )
+            summaryRow(
+                "clock",
+                orchestratorEnabled
+                    ? "Каждые \(orchestratorMinutes) мин: импорт новых задач из Jira; новая задача — "
+                        + (orchestratorAuto ? "берётся в работу автоматически." : "нотификация с вопросом.")
+                    : "Слежение за Jira выключено — импорт только кнопкой."
+            )
+            summaryRow(
+                "wrench.adjustable",
+                orchestratorEnabled && orchestratorResolve
+                    ? "Зависшие: оркестратор-агент разбирает сам (retry с советом / отмена); гейты — всегда вам."
+                    : "Зависшие: напоминание нотификацией, решение за вами."
+            )
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.06)))
+    }
+
+    private func summaryRow(_ icon: String, _ text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .frame(width: 14)
+            Text(text)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -789,6 +1150,11 @@ private struct EmployeeEditor: View {
                     .frame(width: 200)
                     .onSubmit(commitTexts)
                 Spacer()
+                Button("Экспорт JSON…") {
+                    // Экспортируются текущие черновики — то, что на экране.
+                    EmployeeTransfer.exportJSON(edited())
+                }
+                .font(.system(size: 11))
                 Button(role: .destructive, action: onDelete) {
                     Label("Удалить", systemImage: "trash")
                         .font(.system(size: 11))
@@ -819,14 +1185,24 @@ private struct EmployeeEditor: View {
                     Text("запись").tag("write")
                 }
                 .fixedSize()
-                TextField("Модель (пусто — дефолт CLI)", text: $model)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 200)
-                    .onSubmit(commitTexts)
-                TextField("Effort", text: $effort)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 90)
-                    .onSubmit(commitTexts)
+                SearchableDropdown(
+                    placeholder: "Модель (пусто — дефолт CLI)",
+                    options: CLICatalog.models(for: employee.adapter.cli),
+                    text: $model,
+                    width: 210
+                ) { value in
+                    model = value
+                    commit { $0.adapter.model = value.trimmingCharacters(in: .whitespaces) }
+                }
+                SearchableDropdown(
+                    placeholder: "Effort",
+                    options: CLICatalog.efforts(for: employee.adapter.cli),
+                    text: $effort,
+                    width: 130
+                ) { value in
+                    effort = value
+                    commit { $0.adapter.effort = value.trimmingCharacters(in: .whitespaces) }
+                }
             }
             if employee.adapter.cli == "claude", employee.adapter.permissionProfile == "readOnly" {
                 unsupportedNote("«Только чтение» не транслируется в claude CLI — права остаются у самого CLI")
@@ -840,9 +1216,21 @@ private struct EmployeeEditor: View {
                     .foregroundStyle(.tertiary)
             }
             VStack(alignment: .leading, spacing: 4) {
-                TextField("Allowlist инструментов через запятую (пусто — дефолт CLI)", text: $tools)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit(commitTexts)
+                SearchableMultiDropdown(
+                    placeholder: "Allowlist инструментов (пусто — дефолт CLI)",
+                    options: CLICatalog.tools(for: employee.adapter.cli),
+                    selection: Binding(
+                        get: {
+                            tools.split(separator: ",")
+                                .map { $0.trimmingCharacters(in: .whitespaces) }
+                                .filter { !$0.isEmpty }
+                        },
+                        set: { tools = $0.joined(separator: ", ") }
+                    )
+                ) { list in
+                    tools = list.joined(separator: ", ")
+                    commit { $0.adapter.allowedTools = list }
+                }
                 if employee.adapter.cli == "codex", !employee.adapter.allowedTools.isEmpty {
                     unsupportedNote("allowlist инструментов не поддерживается исполнителем codex")
                 }
@@ -975,7 +1363,14 @@ private struct EmployeeEditor: View {
     }
 
     private func commitTexts() {
-        let updated = edited()
+        commit()
+    }
+
+    /// Коммит черновиков; `override` применяет значение, пришедшее из
+    /// дропдауна, — не полагаемся на порядок обновления @State.
+    private func commit(_ override: (inout Employee) -> Void = { _ in }) {
+        var updated = edited()
+        override(&updated)
         guard updated != employee, !updated.name.isEmpty else { return }
         onChange(updated)
     }

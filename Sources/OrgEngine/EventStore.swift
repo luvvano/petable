@@ -53,6 +53,9 @@ public struct RunEvent: Codable, Equatable, Sendable {
         case intent, effectConfirmed
         case processSpawned
         case runFinished
+        /// Сообщение человека сотруднику (П9) — переписка живёт в
+        /// журнале и переживает рестарты.
+        case chatMessage
     }
 
     public var kindValue: Kind? { Kind(rawValue: kind) }

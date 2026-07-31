@@ -61,6 +61,9 @@ public struct OrganizationRun: Codable, Equatable, Identifiable, Sendable {
     public var lastEventAt: Date?
     /// Версия флоу на момент снапшота — бейдж «Запуск идёт по vN» (2A).
     public var flowVersion: Int?
+    /// Pull request рабочей ветки (правка автора): создаётся демоном при
+    /// входе на merge-гейт, ссылка живёт в окне этапа и карточке финала.
+    public var prURL: String?
     /// Итог merge для терминальной карточки (6A): SHA, ссылка (nil при
     /// отказе push — деградация до хеша, T7.4), дифф-стат.
     public var mergeSHA: String?
@@ -109,6 +112,7 @@ public struct OrganizationRun: Codable, Equatable, Identifiable, Sendable {
         self.childRunIDs = nil
         self.lastEventAt = nil
         self.flowVersion = flow.version
+        self.prURL = nil
         self.mergeSHA = nil
         self.commitURL = nil
         self.diffStat = nil
@@ -142,7 +146,8 @@ public struct OrganizationRun: Codable, Equatable, Identifiable, Sendable {
             mergeSHA: mergeSHA,
             commitURL: commitURL,
             diffStat: diffStat,
-            experimental: experimental
+            experimental: experimental,
+            prURL: prURL
         )
     }
 }

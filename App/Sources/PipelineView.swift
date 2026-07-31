@@ -26,6 +26,20 @@ struct PipelineView: View {
     /// Тихий пульс токена: реакция на событие этапа, не вечная анимация (6A).
     @State private var lastEventMemo: [UUID: Date] = [:]
     @State private var pulsingRuns: Set<UUID> = []
+    /// Фильтры списка (правка автора): поиск по имени/ключу, статус
+    /// конвейера, статус Jira.
+    @State private var searchText = ""
+    @State private var statusFilter: StatusFilter = .all
+    @State private var jiraStatusFilter = "Все"
+
+    enum StatusFilter: String, CaseIterable {
+        case all = "Все"
+        case attention = "Требует внимания"
+        case waiting = "Ждёт решения"
+        case working = "В работе"
+        case queued = "В очереди"
+        case finished = "Завершённые"
+    }
 
     var body: some View {
         Group {
@@ -104,9 +118,9 @@ struct PipelineView: View {
     // MARK: Список задач по статусам (правка №1)
 
     private func taskList(_ organization: Organization) -> some View {
-        let items = organization.tasks.map { task in
-            (task: task, run: controller.run(forTask: task.id))
-        }
+        let items = organization.tasks
+            .map { task in (task: task, run: controller.run(forTask: task.id)) }
+            .filter { matchesFilters($0.task, run: $0.run) }
         return VStack(alignment: .leading, spacing: 20) {
             if let status = controller.jiraStatus {
                 HStack(spacing: 8) {
@@ -115,6 +129,7 @@ struct PipelineView: View {
                         .foregroundStyle(controller.jiraNeedsReauth ? Color.orange : Color.secondary)
                 }
             }
+            filterBar(organization)
             section("ТРЕБУЕТ ВНИМАНИЯ", items.filter { $0.run?.status == .needsAttention },
                     organization: organization)
             section("ЖДЁТ РЕШЕНИЯ", items.filter { $0.run?.status == .waitingGate },
@@ -125,11 +140,80 @@ struct PipelineView: View {
                 default: return false
                 }
             }, organization: organization)
-            queueSection(items.filter { $0.run == nil || $0.run?.status == .finished },
-                         organization: organization)
-            if !organization.runSummaries.isEmpty {
+            if statusFilter == .all || statusFilter == .queued {
+                queueSection(items.filter { $0.run == nil || $0.run?.status == .finished },
+                             organization: organization)
+            }
+            if !organization.runSummaries.isEmpty,
+               statusFilter == .all || statusFilter == .finished {
                 historySection(organization)
             }
+        }
+    }
+
+    // MARK: Фильтры и поиск (правка автора)
+
+    private func filterBar(_ organization: Organization) -> some View {
+        let jiraStatuses = Set(organization.tasks.compactMap(\.jiraStatus))
+            .filter { !$0.isEmpty }
+            .sorted()
+        return HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            TextField("Поиск по имени или ключу…", text: $searchText)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 12))
+                .frame(maxWidth: 240)
+            Picker("Статус", selection: $statusFilter) {
+                ForEach(StatusFilter.allCases, id: \.self) { filter in
+                    Text(filter.rawValue).tag(filter)
+                }
+            }
+            .fixedSize()
+            .font(.system(size: 11))
+            if !jiraStatuses.isEmpty {
+                Picker("Jira", selection: $jiraStatusFilter) {
+                    Text("Все").tag("Все")
+                    ForEach(jiraStatuses, id: \.self) { status in
+                        Text(status).tag(status)
+                    }
+                }
+                .fixedSize()
+                .font(.system(size: 11))
+            }
+            if !searchText.isEmpty || statusFilter != .all || jiraStatusFilter != "Все" {
+                Button("Сбросить") {
+                    searchText = ""
+                    statusFilter = .all
+                    jiraStatusFilter = "Все"
+                }
+                .font(.system(size: 11))
+            }
+            Spacer()
+        }
+    }
+
+    private func matchesFilters(_ task: OrgTask, run: OrganizationRun?) -> Bool {
+        if !searchText.isEmpty,
+           !task.title.localizedCaseInsensitiveContains(searchText),
+           !task.jiraKey.localizedCaseInsensitiveContains(searchText) {
+            return false
+        }
+        if jiraStatusFilter != "Все", (task.jiraStatus ?? "") != jiraStatusFilter {
+            return false
+        }
+        switch statusFilter {
+        case .all: return true
+        case .attention: return run?.status == .needsAttention
+        case .waiting: return run?.status == .waitingGate
+        case .working:
+            switch run?.status {
+            case .running, .merging, .waitingChildren: return true
+            default: return false
+            }
+        case .queued: return run == nil || run?.status == .finished
+        case .finished: return false // борд не хранит завершённые — они в истории
         }
     }
 
@@ -203,6 +287,7 @@ struct PipelineView: View {
                 .frame(width: 8, height: 8)
             Text(task.jiraKey.isEmpty ? task.title : "\(task.jiraKey) · \(task.title)")
                 .font(.system(size: 12, weight: run?.status == .needsAttention ? .semibold : .regular))
+            jiraBadge(task)
             Spacer()
             Text(blockReason ?? OrgUI.statusText(run))
                 .font(.system(size: 10))
@@ -249,9 +334,14 @@ struct PipelineView: View {
     // MARK: История
 
     private func historySection(_ organization: Organization) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let summaries = organization.runSummaries.reversed().filter { summary in
+            searchText.isEmpty
+                || summary.taskTitle.localizedCaseInsensitiveContains(searchText)
+                || summary.jiraKey.localizedCaseInsensitiveContains(searchText)
+        }
+        return VStack(alignment: .leading, spacing: 8) {
             sectionHeader("ЗАВЕРШЁННЫЕ")
-            ForEach(organization.runSummaries.reversed()) { summary in
+            ForEach(summaries) { summary in
                 HStack(spacing: 8) {
                     Image(systemName: outcomeIcon(summary.outcome))
                         .foregroundStyle(outcomeColor(summary.outcome))
@@ -316,6 +406,7 @@ struct PipelineView: View {
                 .help("Esc — назад к списку")
                 Text(task.jiraKey.isEmpty ? task.title : "\(task.jiraKey) · \(task.title)")
                     .font(.system(size: 13, weight: .semibold))
+                jiraBadge(task)
                 Spacer()
                 if let run, run.status != .finished {
                     Menu("Тень") {
@@ -409,7 +500,13 @@ struct PipelineView: View {
                 flowDiagram(flow, run: run)
                 if let stageID = selectedStageID ?? run?.currentStageID,
                    let stage = flow.stage(stageID) {
-                    stagePanel(stage, flow: flow, run: run)
+                    if let run {
+                        // Окно этапа: лог агента + переписка + ссылки
+                        // (правка автора, референс Codex/Claude Code).
+                        StageActivityView(run: run, stage: stage, controller: controller)
+                    } else {
+                        stagePanel(stage, flow: flow, run: nil)
+                    }
                 }
             } else {
                 Text("Тип задачи не смаршрутизирован на флоу — Организация → Типы задач.")
@@ -442,6 +539,14 @@ struct PipelineView: View {
                     .contentShape(Rectangle())
                     .onTapGesture {
                         selectedStageID = selectedStageID == stage.id ? nil : stage.id
+                    }
+                    // Drag-and-drop токена: бросил на этап — задача едет
+                    // туда (движок пускает из {ждёт гейта, требует
+                    // внимания}; счётчик возвратов не трогается).
+                    .dropDestination(for: String.self) { items, _ in
+                        guard let run, items.contains(run.id.uuidString) else { return false }
+                        controller.moveRun(run.id, to: stage.id)
+                        return true
                     }
                     if stage.id != stages.last?.id {
                         EdgeArrowView()
@@ -476,6 +581,10 @@ struct PipelineView: View {
             .background(Capsule().fill(OrgUI.taskColor(run.status).opacity(0.16)))
             .overlay(Capsule().strokeBorder(OrgUI.taskColor(run.status), lineWidth: 1))
             .scaleEffect(pulsingRuns.contains(run.id) ? 1.12 : 1)
+            .draggable(run.id.uuidString) // dnd: бросить на этап (движение руками)
+            .help(run.status == .waitingGate || run.status == .needsAttention
+                ? "Перетащи на этап, чтобы двинуть задачу руками"
+                : "")
             .position(x: CGFloat(index) * 124 + 48, y: 10)
             .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: index)
             .animation(
@@ -517,6 +626,10 @@ struct PipelineView: View {
                     .foregroundStyle(.secondary)
             }
             HStack(spacing: 12) {
+                if let prURL = run.prURL, let url = URL(string: prURL) {
+                    Link("Pull request", destination: url)
+                        .font(.system(size: 11))
+                }
                 if let commitURL = run.commitURL, let url = URL(string: commitURL) {
                     Link("Коммит в origin", destination: url)
                         .font(.system(size: 11))
@@ -564,6 +677,31 @@ struct PipelineView: View {
         guard let site = JiraSettingsStore.connectedSiteDisplay else { return nil }
         let base = site.hasPrefix("http") ? site : "https://\(site)"
         return URL(string: "\(base)/browse/\(key)")
+    }
+
+    /// Jira-задача: статус из Jira (капсула) + ссылка на задачу.
+    @ViewBuilder
+    private func jiraBadge(_ task: OrgTask) -> some View {
+        if !task.jiraKey.isEmpty {
+            HStack(spacing: 6) {
+                if let status = task.jiraStatus, !status.isEmpty {
+                    Text(status)
+                        .font(.system(size: 9))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(Capsule().fill(Color.secondary.opacity(0.12)))
+                        .foregroundStyle(.secondary)
+                        .help("Статус в Jira на момент последнего импорта")
+                }
+                if let url = jiraBrowseURL(task.jiraKey) {
+                    Link(destination: url) {
+                        Image(systemName: "arrow.up.right.square")
+                            .font(.system(size: 10))
+                    }
+                    .help("Открыть \(task.jiraKey) в Jira")
+                }
+            }
+        }
     }
 
     // MARK: Панель этапа + чат агенту (правка №3, границы П9)
@@ -618,6 +756,11 @@ struct PipelineView: View {
                 Text(run.statusReason)
                     .font(.system(size: 11))
                     .foregroundStyle(.red)
+                // Понятный план устранения (правка автора): что делать —
+                // шагами, с кнопками, не голая причина.
+                if let plan = OrgUI.remediation(for: run.statusReason) {
+                    RemediationView(plan: plan, runID: run.id, controller: controller)
+                }
             }
             HStack(spacing: 8) {
                 if run.status == .waitingGate {

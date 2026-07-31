@@ -162,12 +162,15 @@ struct InvocationTests {
         #expect(writeArgs.contains("workspace-write"))
     }
 
-    @Test("codex resume: подкоманда resume <thread> перед промптом")
+    @Test("codex resume: подкоманда resume <thread> перед промптом; sandbox через -c, НЕ -s (exit 2 — находка SCRUM-35)")
     func codexResume() {
         let args = CLIInvocation.codexArguments(
-            request(AdapterConfig(cli: "codex"), resume: "th-9"), schemaPath: nil
+            request(AdapterConfig(cli: "codex", permissionProfile: "readOnly"), resume: "th-9"),
+            schemaPath: nil
         )
         #expect(Array(args.prefix(3)) == ["exec", "resume", "th-9"])
+        #expect(!args.contains("-s")) // `exec resume` не знает -s
+        #expect(args.contains("sandbox_mode=\"read-only\""))
     }
 
     @Test("Реестр адаптеров: неизвестный CLI → nil (состояние UI, не тихий провал)")

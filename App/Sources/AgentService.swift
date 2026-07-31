@@ -287,6 +287,50 @@ enum GitHubSettingsStore {
     }
 }
 
+// MARK: - Настройки движка (правка автора: пути CLI + дефолтные модели)
+
+/// Настройки исполнителей движка: ручной путь к CLI (пусто — автопоиск)
+/// и модель по умолчанию per-CLI (сотрудник со своей моделью — сильнее).
+enum EngineSettings {
+    private static func pathKey(_ cli: String) -> String { "engine.cliPath.\(cli)" }
+    private static func modelKey(_ cli: String) -> String { "engine.defaultModel.\(cli)" }
+
+    static let clis = ["claude", "codex"]
+
+    static func cliPath(_ cli: String) -> String {
+        UserDefaults.standard.string(forKey: pathKey(cli)) ?? ""
+    }
+
+    static func setCLIPath(_ cli: String, _ path: String) {
+        UserDefaults.standard.set(path, forKey: pathKey(cli))
+    }
+
+    static func defaultModel(_ cli: String) -> String {
+        UserDefaults.standard.string(forKey: modelKey(cli)) ?? ""
+    }
+
+    static func setDefaultModel(_ cli: String, _ model: String) {
+        UserDefaults.standard.set(model, forKey: modelKey(cli))
+    }
+
+    /// `cli → путь` для ConfigureCommand (пустые значения тоже едут —
+    /// демон снимает override).
+    static func cliPathOverrides() -> [String: String] {
+        Dictionary(uniqueKeysWithValues: clis.map { ($0, cliPath($0)) })
+    }
+
+    static func defaultModels() -> [String: String] {
+        Dictionary(uniqueKeysWithValues: clis.map { ($0, defaultModel($0)) })
+    }
+
+    /// Применить ручные пути к поиску CLI ТЕКУЩЕГО процесса (приложения).
+    static func applyLocalOverrides() {
+        for cli in clis {
+            CLIDiscovery.setOverride(cli, path: cliPath(cli))
+        }
+    }
+}
+
 // MARK: - Оркестратор (правки автора №8/№9)
 
 /// Настройки дефолтного агента-оркестратора: следит за Jira, стягивает
@@ -322,6 +366,24 @@ enum OrchestratorSettings {
     static var resolveStuck: Bool {
         get { UserDefaults.standard.bool(forKey: resolveStuckKey) }
         set { UserDefaults.standard.set(newValue, forKey: resolveStuckKey) }
+    }
+
+    private static let flowByLLMKey = "orchestrator.flowByLLM"
+    private static let instructionsKey = "orchestrator.instructions"
+
+    /// true (дефолт) — маршрута нет или флоу с ошибками: оркестратор
+    /// выбирает флоу LLM-вызовом по типу и статусу задачи; false —
+    /// первый валидный флоу без LLM.
+    static var flowByLLM: Bool {
+        get { UserDefaults.standard.object(forKey: flowByLLMKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: flowByLLMKey) }
+    }
+
+    /// Инструкции оркестратору от человека: добавляются в его LLM-выборы
+    /// (флоу, репозиторий, разбор зависших).
+    static var instructions: String {
+        get { UserDefaults.standard.string(forKey: instructionsKey) ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: instructionsKey) }
     }
 }
 

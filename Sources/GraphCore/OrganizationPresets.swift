@@ -134,4 +134,39 @@ extension Organization {
             routes: [OrgRoute(taskTypeID: taskType.id, flowID: flow.id)]
         )
     }
+
+    /// Линейный флоу-запаска оркестратора: когда у задачи нет ни одного
+    /// валидного флоу, запуск НЕ блокируется — строится
+    /// «Разработка → Ревью → Тесты → Merge» из имеющихся сотрудников
+    /// (организация без сотрудников получает их из пресетов). Флоу
+    /// добавляется в организацию и возвращается.
+    public mutating func makeFallbackFlow() -> OrgFlow {
+        if employees.isEmpty {
+            employees.append(OrganizationPresets.preset("backend-developer")!.makeEmployee())
+            employees.append(OrganizationPresets.preset("reviewer")!.makeEmployee())
+        }
+        let developer = employees[0]
+        let reviewer = employees.count > 1 ? employees[1] : nil
+
+        let merge = OrgStage(name: "Merge", kind: .merge, gate: .human)
+        let tests = OrgStage(name: "Тесты", kind: .test, next: [merge.id])
+        var stages: [OrgStage] = [tests, merge]
+        if let reviewer {
+            let review = OrgStage(
+                name: "Ревью", kind: .review, employeeID: reviewer.id, next: [tests.id]
+            )
+            let work = OrgStage(
+                name: "Разработка", kind: .work, employeeID: developer.id, next: [review.id]
+            )
+            stages = [work, review] + stages
+        } else {
+            let work = OrgStage(
+                name: "Разработка", kind: .work, employeeID: developer.id, next: [tests.id]
+            )
+            stages = [work] + stages
+        }
+        let flow = OrgFlow(name: "Задача → merge (запаска)", stages: stages)
+        flows.append(flow)
+        return flow
+    }
 }

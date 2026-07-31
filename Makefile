@@ -1,7 +1,8 @@
 # Сборка и установка petable на этот Mac.
 #
 #   make install          — Release-сборка → /Applications/petable.app → запуск
-#   make run              — Release-сборка и запуск из build/ (без установки)
+#   make run              — демон + install: закрыть старую копию, поставить
+#                           свежую в /Applications, открыть (одна иконка)
 #   make build            — только Release-сборка
 #   make test             — юнит-тесты GraphCore
 #   make clean            — удалить build/
@@ -40,8 +41,10 @@ install: build
 	@echo "✓ Установлено: $(INSTALL_DIR)/$(APP).app"
 	open "$(INSTALL_DIR)/$(APP).app"
 
+# install уже закрывает старую копию и открывает свежую из /Applications.
+# Раньше здесь был второй `open` сборки из build/ — В ДОКЕ ПОЯВЛЯЛИСЬ ДВЕ
+# КОПИИ приложения (два разных пути = два процесса).
 run: daemon-install install
-	open "$(APP_BUNDLE)"
 
 test:
 	swift test
@@ -51,6 +54,10 @@ clean:
 
 daemon-install:
 	swift build -c release --product petable-daemon
+	@# Стабильная подпись (как у приложения): TCC/Keychain-разрешения
+	@# демона переживают пересборку; нет identity — ad-hoc fallback.
+	-@codesign --force --sign "Apple Development" .build/release/petable-daemon 2>/dev/null \
+	  || codesign --force --sign - .build/release/petable-daemon
 	@# Снять старый инстанс, если был (иначе копия поверх работающего бинаря).
 	-@launchctl bootout gui/$(UID)/$(DAEMON_LABEL) 2>/dev/null; true
 	mkdir -p "$(DAEMON_DIR)"

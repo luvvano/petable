@@ -154,6 +154,33 @@ public struct WorktreeManager: Sendable {
         return Self.commitURL(remote: remote, sha: sha)
     }
 
+    /// Push ветки запуска в origin (для pull request'а до merge).
+    /// Возвращает `owner/repo` GitHub-remote'а; nil — remote нет,
+    /// push не прошёл или это не GitHub.
+    public func pushBranchForPullRequest(run: OrganizationRun) -> String? {
+        let repo = URL(fileURLWithPath: run.repo.path)
+        guard let remote = try? git(repo, "remote", "get-url", "origin"),
+              let ownerRepo = Self.githubOwnerRepo(remote: remote),
+              (try? git(repo, "push", "-u", "origin", run.branchName)) != nil
+        else { return nil }
+        return ownerRepo
+    }
+
+    /// `git@github.com:owner/repo.git` / `https://github.com/owner/repo(.git)`
+    /// → `owner/repo`; не GitHub — nil.
+    static func githubOwnerRepo(remote: String) -> String? {
+        var path = remote.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let sshRange = path.range(of: "^[^@/]+@([^:]+):", options: .regularExpression) {
+            let host = String(path[sshRange].dropLast().split(separator: "@").last ?? "")
+            path = "https://\(host)/" + String(path[sshRange.upperBound...])
+        }
+        guard let url = URL(string: path), url.host == "github.com" else { return nil }
+        var parts = url.path.split(separator: "/").map(String.init)
+        guard parts.count >= 2 else { return nil }
+        if parts[1].hasSuffix(".git") { parts[1] = String(parts[1].dropLast(4)) }
+        return "\(parts[0])/\(parts[1])"
+    }
+
     /// `git@host:owner/repo.git` / `https://host/owner/repo(.git)` →
     /// `https://host/owner/repo/commit/<sha>`; непонятный remote — nil.
     static func commitURL(remote: String, sha: String) -> String? {

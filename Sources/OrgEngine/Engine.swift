@@ -144,6 +144,29 @@ public enum Engine {
         needsAttention(run, "Конфликт rebase перед merge")
     }
 
+    /// Ручное перемещение на этап (drag-and-drop): доступно, когда этап
+    /// не исполняется ({ждёт гейта, требует внимания}); счётчик возвратов
+    /// НЕ трогается — человек сам решил. Путь: этап уже пройден —
+    /// обрезка до него, впереди — дописывается. join как цель
+    /// игнорируется (его судьбу решают дети).
+    public static func move(_ run: OrganizationRun, to stageID: UUID, now: Date) -> OrganizationRun {
+        guard run.status == .waitingGate || run.status == .needsAttention,
+              let target = run.flow.stage(stageID),
+              target.kind != .join,
+              stageID != run.currentStageID
+        else { return run }
+        var run = run
+        if let index = run.path.firstIndex(of: stageID) {
+            run.path = Array(run.path.prefix(through: index))
+        } else {
+            run.path.append(stageID)
+        }
+        run.currentStageID = stageID
+        run.status = target.kind == .merge ? .waitingGate : .running
+        run.statusReason = ""
+        return run
+    }
+
     /// Отмена человеком.
     public static func cancel(_ run: OrganizationRun, now: Date) -> OrganizationRun {
         var run = run

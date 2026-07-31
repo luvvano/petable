@@ -93,6 +93,7 @@ final class OrganizationController: ObservableObject {
     func connect(document: PetableDocument) async {
         self.document = document
         if transport != nil { return }
+        EngineSettings.applyLocalOverrides() // ручные пути CLI — до поиска
 
         let xpc = XPCTransport()
         if let version = await xpc.handshake(), version == WireEnvelope.protocolVersion {
@@ -100,21 +101,21 @@ final class OrganizationController: ObservableObject {
             mode = .daemon
         } else {
             var adapters: [any AgentAdapter] = []
-            if let claude = CLIDiscovery.locate("claude") {
-                adapters.append(CLIProcessAdapter.claude(executable: claude))
-            }
-            if let codex = CLIDiscovery.locate("codex") {
-                adapters.append(CLIProcessAdapter.codex(
-                    executable: codex, schemaPath: Self.writeVerdictSchema()
-                ))
-            }
+            if let claude = Self.makeAdapter("claude") { adapters.append(claude) }
+            if let codex = Self.makeAdapter("codex") { adapters.append(codex) }
             guard !adapters.isEmpty else {
                 mode = .unavailable("Не найден ни один CLI (claude, codex) — установите и войдите")
                 return
             }
             let store = EventStore(root: EventStore.defaultRoot())
+            // Fallback: промах реестра переискивает CLI — установка после
+            // старта приложения не требует его перезапуска.
+            let registry = AdapterRegistry(adapters, fallback: { name in
+                CLIDiscovery.reset()
+                return Self.makeAdapter(name)
+            })
             transport = InProcessTransport(
-                core: DaemonCore(store: store, registry: AdapterRegistry(adapters))
+                core: DaemonCore(store: store, registry: registry)
             )
             mode = .inProcess
         }
@@ -183,14 +184,17 @@ final class OrganizationController: ObservableObject {
 
     // MARK: Jira (слайс 7, П4″)
 
-    /// Передаёт секреты движку (Jira + GitHub-токен для агентного
-    /// создания репозиториев, №5) — при коннекте и после сохранения
-    /// настроек. Демон держит их только в памяти.
+    /// Передаёт движку секреты (Jira + GitHub-токен, №5) и настройку
+    /// оркестратора (инструкции, выбор флоу LLM) — при коннекте и после
+    /// сохранения настроек. Секреты демон держит только в памяти.
     func configureJira() {
-        let config = JiraSettingsStore.config()
-        let token = GitHubSettingsStore.token
-        guard config != nil || token != nil else { return }
-        send(.configure, ConfigureCommand(jira: config, githubToken: token))
+        send(.configure, ConfigureCommand(
+            jira: JiraSettingsStore.config(),
+            githubToken: GitHubSettingsStore.token,
+            orchestratorInstructions: OrchestratorSettings.instructions,
+            orchestratorFlowByLLM: OrchestratorSettings.flowByLLM,
+            cliPaths: EngineSettings.cliPathOverrides()
+        ))
     }
 
     /// OAuth-коннектор (правка автора): браузер → «Согласен» → готово;
@@ -269,8 +273,20 @@ final class OrganizationController: ObservableObject {
             let result = JiraImporter.map(
                 issues: issues, organization: organization, existingKeys: existing
             )
-            if !result.tasks.isEmpty {
-                document.updateOrganization { $0.tasks.append(contentsOf: result.tasks) }
+            // Новые задачи — в бэклог; у существующих освежается статус
+            // Jira (дедуп по jiraKey статус не трогает).
+            let statuses = Dictionary(
+                issues.map { ($0.key, $0.status) },
+                uniquingKeysWith: { first, _ in first }
+            )
+            document.updateOrganization { org in
+                for index in org.tasks.indices {
+                    guard let status = statuses[org.tasks[index].jiraKey],
+                          !status.isEmpty, org.tasks[index].jiraStatus != status
+                    else { continue }
+                    org.tasks[index].jiraStatus = status
+                }
+                org.tasks.append(contentsOf: result.tasks)
             }
             var parts = ["Импортировано: \(result.tasks.count)"]
             if !result.skipped.isEmpty {
@@ -448,6 +464,8 @@ final class OrganizationController: ObservableObject {
             Действия: retry — перезапустить этап, дав сотруднику конкретный совет,
             как обойти проблему; cancel — отменить задачу (проблема не решается
             автоматикой); wait — оставить человеку (нужно его решение).
+            \(OrchestratorSettings.instructions.isEmpty
+                ? "" : "Инструкции оркестратору: \(OrchestratorSettings.instructions)\n")\
             Ничего не делай с кодом. Ответь ТОЛЬКО JSON-блоком:
             {"status":"done","note":"<retry|cancel|wait>: <совет сотруднику или пояснение>"}
             """
@@ -616,7 +634,9 @@ final class OrganizationController: ObservableObject {
             }
         }
         send(.startRun, StartRunCommand(
-            organization: organization,
+            // Дефолтные модели движка: сотрудник без своей модели едет
+            // на модели по умолчанию его CLI (снапшот, документ не трогаем).
+            organization: organization.applyingDefaultModels(EngineSettings.defaultModels()),
             taskID: task.id,
             candidates: candidates.isEmpty ? nil : candidates
         ))
@@ -626,13 +646,20 @@ final class OrganizationController: ObservableObject {
     func shadowRun(task: OrgTask, flowID: UUID) {
         guard let organization = document?.organization else { return }
         send(.shadowRun, ShadowRunCommand(
-            organization: organization, taskID: task.id, flowID: flowID
+            organization: organization.applyingDefaultModels(EngineSettings.defaultModels()),
+            taskID: task.id,
+            flowID: flowID
         ))
     }
 
     /// Fork запуска с override модели (12, ⌥Enter).
     func forkRun(_ runID: UUID, model: String) {
         send(.forkRun, ForkRunCommand(runID: runID, model: model))
+    }
+
+    /// Drag-and-drop: задача руками на этап (без счётчика возвратов).
+    func moveRun(_ runID: UUID, to stageID: UUID) {
+        send(.moveRun, MoveRunCommand(runID: runID, stageID: stageID))
     }
 
     func approve(_ runID: UUID) { send(.approve, runID) }
@@ -661,8 +688,39 @@ final class OrganizationController: ObservableObject {
         }
     }
 
+    /// Адаптер CLI по имени; nil — не найден (переискивается fallback'ом).
+    nonisolated private static func makeAdapter(_ name: String) -> (any AgentAdapter)? {
+        guard let executable = CLIDiscovery.locate(name) else { return nil }
+        switch name {
+        case "claude": return CLIProcessAdapter.claude(executable: executable)
+        case "codex": return CLIProcessAdapter.codex(
+            executable: executable, schemaPath: writeVerdictSchema()
+        )
+        default: return nil
+        }
+    }
+
+    /// Перезапуск движка после установки CLI (план устранения ошибки
+    /// «исполнитель не установлен»): демон — bootout+bootstrap (свежий
+    /// процесс переищет CLI), in-process — сброс кэша поиска и реконнект.
+    func restartEngine() async {
+        engineStatus = "Перезапускаю движок…"
+        CLIDiscovery.reset()
+        if mode == .daemon {
+            do {
+                try await Task.detached { try DaemonManager.restart() }.value
+            } catch {
+                engineStatus = "Перезапуск движка: \(error.localizedDescription)"
+                return
+            }
+        }
+        transport = nil
+        engineStatus = "Движок перезапущен — исполнители переисканы"
+        if let document { await connect(document: document) }
+    }
+
     /// Схема вердикта для codex (T5) — рядом с хранилищем.
-    private static func writeVerdictSchema() -> String? {
+    nonisolated private static func writeVerdictSchema() -> String? {
         let root = EventStore.defaultRoot()
         let url = root.appendingPathComponent("verdict-schema.json")
         let schema = """

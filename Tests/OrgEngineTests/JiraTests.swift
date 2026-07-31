@@ -67,7 +67,7 @@ struct JiraClientTests {
     private let searchFixture = """
     {"issues":[
       {"key":"DN-101","fields":{"summary":"Починить парсер","description":"Детали",
-       "issuetype":{"name":"Bug"},"project":{"key":"DN"}}},
+       "issuetype":{"name":"Bug"},"project":{"key":"DN"},"status":{"name":"In Progress"}}},
       {"key":"OPS-7","fields":{"summary":"Фича","description":null,
        "issuetype":{"name":"Story"},"project":{"key":"OPS"}}}
     ]}
@@ -90,7 +90,7 @@ struct JiraClientTests {
 
         #expect(issues == [
             JiraIssue(key: "DN-101", summary: "Починить парсер", description: "Детали",
-                      typeName: "Bug", projectKey: "DN"),
+                      typeName: "Bug", projectKey: "DN", status: "In Progress"),
             JiraIssue(key: "OPS-7", summary: "Фича", description: "",
                       typeName: "Story", projectKey: "OPS"),
         ])

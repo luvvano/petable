@@ -19,6 +19,7 @@
 		3AC5D72F0299A596AE1926B9 /* ResearchViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F11456C586746FF698A909A /* ResearchViews.swift */; };
 		49CCBD5C8181CD3F83390558 /* MechanicPaletteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6459D748ADC3C00C1AE5A9C /* MechanicPaletteView.swift */; };
 		50E82C33EBB43877BD0C18EE /* PetableDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5784A5AD0A8680F74738F4F5 /* PetableDocument.swift */; };
+		5522BC5A43FC10A86AD039EE /* StageActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF86806769BECE6EA6BBCA7A /* StageActivityView.swift */; };
 		5EF50B53413A1EFAF4B2ADA0 /* UpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82EFC37AA58788E77160B2A6 /* UpdateService.swift */; };
 		66ACAE8195976D7C719E5D32 /* CanvasRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C70377BEAC79F596245F8956 /* CanvasRootView.swift */; };
 		7B55BEE04721BA91D1D33F2C /* AgentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E62A45FA71D4D0DD484A33F5 /* AgentService.swift */; };
@@ -26,6 +27,7 @@
 		7CA5AF489D5849BAE4BD256F /* MechanicPaletteUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A16AD5F31A553C1F92C9B595 /* MechanicPaletteUITests.swift */; };
 		82184708D4ACED543534C1D3 /* GraphCore in Frameworks */ = {isa = PBXBuildFile; productRef = 36C73F57FA1089A82679D3FD /* GraphCore */; };
 		8375C6C2F813DCD849E9A245 /* OrganizationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBCAB0B7A981DB7D71A04004 /* OrganizationView.swift */; };
+		85E9413D44F52D0084483398 /* CLICatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4507BE5A5595925384CC2D9A /* CLICatalog.swift */; };
 		88A1C648540F9840B24425AC /* PipelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07A8413C3F50E96E8C8A1DAE /* PipelineView.swift */; };
 		8CD193EA4E65C5142B10BD61 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2868A061FB43B50F42D5122B /* Assets.xcassets */; };
 		900E3D2ADF383CAD72DF5DC8 /* ExportImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1331AC4697E53BAD68A9316F /* ExportImport.swift */; };
@@ -63,6 +65,7 @@
 		2BDCCD39A977C740B0701381 /* OrganizationController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizationController.swift; sourceTree = "<group>"; };
 		2F11456C586746FF698A909A /* ResearchViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResearchViews.swift; sourceTree = "<group>"; };
 		2FEBA89EB1ABD5AE0D0A3553 /* CopyPasteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopyPasteUITests.swift; sourceTree = "<group>"; };
+		4507BE5A5595925384CC2D9A /* CLICatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLICatalog.swift; sourceTree = "<group>"; };
 		50A7B7850B3D4727BC24D751 /* MechanicPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MechanicPreviewView.swift; sourceTree = "<group>"; };
 		52B817033A06DD9CB5F87525 /* AgentViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentViews.swift; sourceTree = "<group>"; };
 		5569EF7D17D2C3983BED72E8 /* AgentChatViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentChatViews.swift; sourceTree = "<group>"; };
@@ -82,6 +85,7 @@
 		AFA44484780ECA08BBAAC77D /* GraphSnapshotView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphSnapshotView.swift; sourceTree = "<group>"; };
 		BBCAB0B7A981DB7D71A04004 /* OrganizationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizationView.swift; sourceTree = "<group>"; };
 		BD15B5C36F969484C7736B95 /* SegmentViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SegmentViews.swift; sourceTree = "<group>"; };
+		BF86806769BECE6EA6BBCA7A /* StageActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageActivityView.swift; sourceTree = "<group>"; };
 		C118770D8716012B071DA6E7 /* JobCardUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobCardUITests.swift; sourceTree = "<group>"; };
 		C70377BEAC79F596245F8956 /* CanvasRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasRootView.swift; sourceTree = "<group>"; };
 		D48D8C6ACF85E367BFD35260 /* CanvasHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasHostView.swift; sourceTree = "<group>"; };
@@ -133,6 +137,7 @@
 				52B817033A06DD9CB5F87525 /* AgentViews.swift */,
 				D48D8C6ACF85E367BFD35260 /* CanvasHostView.swift */,
 				C70377BEAC79F596245F8956 /* CanvasRootView.swift */,
+				4507BE5A5595925384CC2D9A /* CLICatalog.swift */,
 				19ACB25414799E8B2D80DDCA /* CommentsViews.swift */,
 				9507A81C4742E301AD752D85 /* DaemonManager.swift */,
 				5EFCAFE61983C6AFD3BDCEE4 /* DebuggerView.swift */,
@@ -153,6 +158,7 @@
 				D79E12F8644248968D9CD2C3 /* ProjectsView.swift */,
 				2F11456C586746FF698A909A /* ResearchViews.swift */,
 				BD15B5C36F969484C7736B95 /* SegmentViews.swift */,
+				BF86806769BECE6EA6BBCA7A /* StageActivityView.swift */,
 				82EFC37AA58788E77160B2A6 /* UpdateService.swift */,
 			);
 			name = Sources;
@@ -247,7 +253,8 @@
 						TestTargetID = 8EF89814BE13DD3F5B98AD19;
 					};
 					8EF89814BE13DD3F5B98AD19 = {
-						ProvisioningStyle = Automatic;
+						DevelopmentTeam = AL84K6U294;
+						ProvisioningStyle = Manual;
 					};
 				};
 			};
@@ -303,7 +310,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\n/usr/bin/env -i HOME=\"$HOME\" PATH=\"/usr/bin:/bin:/usr/local/bin\" \\\n  /usr/bin/xcrun swift build -c release --product petable-daemon \\\n  --package-path \"$PROJECT_DIR\"\nRES=\"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nmkdir -p \"$RES\"\ncp \"$PROJECT_DIR/.build/release/petable-daemon\" \"$RES/petable-daemon\"\n";
+			shellScript = "set -e\n/usr/bin/env -i HOME=\"$HOME\" PATH=\"/usr/bin:/bin:/usr/local/bin\" \\\n  /usr/bin/xcrun swift build -c release --product petable-daemon \\\n  --package-path \"$PROJECT_DIR\"\nRES=\"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nmkdir -p \"$RES\"\ncp \"$PROJECT_DIR/.build/release/petable-daemon\" \"$RES/petable-daemon\"\n# Демон — той же стабильной подписью, что и приложение (иначе\n# его TCC-разрешения слетали бы при каждой пересборке).\ncodesign --force --sign \"Apple Development\" \"$RES/petable-daemon\" 2>/dev/null \\\n  || codesign --force --sign - \"$RES/petable-daemon\"\n";
 		};
 		6449190CA146BFABD1F936C6 /* Embed build SHA */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -346,6 +353,7 @@
 				A6F3D1C110EF637FA99C4AE0 /* AgentChatViews.swift in Sources */,
 				7B55BEE04721BA91D1D33F2C /* AgentService.swift in Sources */,
 				A946A0CE79277B538609A251 /* AgentViews.swift in Sources */,
+				85E9413D44F52D0084483398 /* CLICatalog.swift in Sources */,
 				257681894B444D2784735B69 /* CanvasHostView.swift in Sources */,
 				66ACAE8195976D7C719E5D32 /* CanvasRootView.swift in Sources */,
 				A86588359D034340588FE72A /* CommentsViews.swift in Sources */,
@@ -368,6 +376,7 @@
 				9D5E004F8ED6D6011C82B12A /* ProjectsView.swift in Sources */,
 				3AC5D72F0299A596AE1926B9 /* ResearchViews.swift in Sources */,
 				BC48987AD696E5470DA2F4AB /* SegmentViews.swift in Sources */,
+				5522BC5A43FC10A86AD039EE /* StageActivityView.swift in Sources */,
 				5EF50B53413A1EFAF4B2ADA0 /* UpdateService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -461,9 +470,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_IDENTITY = "-";
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = AL84K6U294;
 				ENABLE_HARDENED_RUNTIME = NO;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -473,6 +483,7 @@
 					"@executable_path/../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.egorproskurin.petable;
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.0;
 			};
@@ -563,9 +574,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_IDENTITY = "-";
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = AL84K6U294;
 				ENABLE_HARDENED_RUNTIME = NO;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -575,6 +587,7 @@
 					"@executable_path/../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.egorproskurin.petable;
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.0;
 			};

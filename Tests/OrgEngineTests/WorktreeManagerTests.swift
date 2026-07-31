@@ -4,6 +4,16 @@ import Testing
 import GraphCore
 
 /// Живой git в временном каталоге: реальный жизненный цикл worktree.
+@Suite("WorktreeManager: разбор remote")
+struct RemoteParsingTests {
+    @Test("githubOwnerRepo: ssh и https формы → owner/repo; не GitHub — nil")
+    func ownerRepo() {
+        #expect(WorktreeManager.githubOwnerRepo(remote: "git@github.com:luvvano/petable.git") == "luvvano/petable")
+        #expect(WorktreeManager.githubOwnerRepo(remote: "https://github.com/luvvano/petable") == "luvvano/petable")
+        #expect(WorktreeManager.githubOwnerRepo(remote: "https://gitlab.com/x/y.git") == nil)
+    }
+}
+
 @Suite("WorktreeManager: git-жизненный цикл запуска", .serialized)
 struct WorktreeManagerTests {
     private let t0 = Date(timeIntervalSince1970: 7000)

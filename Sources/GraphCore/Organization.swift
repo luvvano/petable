@@ -63,6 +63,22 @@ public struct Organization: Codable, Equatable, Sendable {
         return employees.first(where: { $0.id == id })
     }
 
+    /// Дефолтные модели движка per-CLI (настройки движка): сотрудник
+    /// без своей модели получает дефолт своего CLI; своя — сильнее.
+    /// Применяется на снапшоте старта, документ не мутирует.
+    public func applyingDefaultModels(_ models: [String: String]) -> Organization {
+        let meaningful = models.filter { !$0.value.isEmpty }
+        guard !meaningful.isEmpty else { return self }
+        var updated = self
+        for index in updated.employees.indices
+        where updated.employees[index].adapter.model.isEmpty {
+            if let model = meaningful[updated.employees[index].adapter.cli] {
+                updated.employees[index].adapter.model = model
+            }
+        }
+        return updated
+    }
+
     /// Идемпотентная реконсиляция саммари (П1′): дописывает только новые
     /// runID, существующие не трогает и не дублирует — копия документа
     /// с тем же orgID дубликатов не плодит.
@@ -519,6 +535,9 @@ public struct OrgTask: Codable, Equatable, Identifiable, Sendable {
     public var source: OrgTaskSource
     /// Ключ Jira (`DN-341`); пустой — задача борда.
     public var jiraKey: String
+    /// Статус задачи в Jira на момент последнего импорта («To Do»,
+    /// «In Progress»…); nil — не из Jira или статус не тянули.
+    public var jiraStatus: String?
     public var createdAt: Date
 
     public init(
@@ -529,6 +548,7 @@ public struct OrgTask: Codable, Equatable, Identifiable, Sendable {
         repoID: UUID? = nil,
         source: OrgTaskSource = .board,
         jiraKey: String = "",
+        jiraStatus: String? = nil,
         createdAt: Date = Date()
     ) {
         self.id = id
@@ -538,6 +558,7 @@ public struct OrgTask: Codable, Equatable, Identifiable, Sendable {
         self.repoID = repoID
         self.source = source
         self.jiraKey = jiraKey
+        self.jiraStatus = jiraStatus
         self.createdAt = createdAt
     }
 }
@@ -576,6 +597,8 @@ public struct RunSummary: Codable, Equatable, Identifiable, Sendable {
     /// Experimental-запуск (тень/форк): в истории с пометкой, задачу
     /// с борда не снимает.
     public var experimental: Bool?
+    /// Pull request рабочей ветки.
+    public var prURL: String?
 
     public var id: UUID { runID }
 
@@ -591,7 +614,8 @@ public struct RunSummary: Codable, Equatable, Identifiable, Sendable {
         mergeSHA: String? = nil,
         commitURL: String? = nil,
         diffStat: String? = nil,
-        experimental: Bool? = nil
+        experimental: Bool? = nil,
+        prURL: String? = nil
     ) {
         self.runID = runID
         self.taskTitle = taskTitle
@@ -605,5 +629,6 @@ public struct RunSummary: Codable, Equatable, Identifiable, Sendable {
         self.commitURL = commitURL
         self.diffStat = diffStat
         self.experimental = experimental
+        self.prURL = prURL
     }
 }

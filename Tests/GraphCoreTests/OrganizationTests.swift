@@ -198,6 +198,48 @@ struct OrganizationTests {
         #expect(flow.startStage?.id == decompose.id)
     }
 
+    @Test("Экспорт/импорт сотрудника: JSON-round-trip не теряет ни одного поля конфигурации")
+    func employeeJSONRoundTrip() throws {
+        let employee = Employee(
+            name: "Фронтенд-разработчик",
+            rolePrompt: "Ты пишешь интерфейсы",
+            adapter: AdapterConfig(
+                cli: "claude",
+                model: "opus",
+                effort: "high",
+                allowedTools: ["Edit", "Bash"],
+                limits: StageLimits(maxTokens: 120_000, maxMinutes: 45, maxChatIterations: 3),
+                skills: ["swiftui"],
+                harness: "Следуй DESIGN.md",
+                permissionProfile: "write"
+            ),
+            presetID: "frontend-developer"
+        )
+        let data = try JSONEncoder().encode(employee)
+        let decoded = try JSONDecoder().decode(Employee.self, from: data)
+        #expect(decoded == employee)
+
+        // Импорт создаёт НОВОГО сотрудника: id перегенерируется, всё
+        // остальное совпадает — конфликтов с существующими нет.
+        var imported = decoded
+        imported.id = UUID()
+        #expect(imported.id != employee.id)
+        #expect(imported.adapter == employee.adapter)
+        #expect(imported.rolePrompt == employee.rolePrompt)
+    }
+
+    @Test("Дефолтные модели движка: пустая модель сотрудника получает дефолт своего CLI, своя — сильнее")
+    func defaultModels() {
+        var org = Organization.makeDefault()
+        org.employees[0].adapter.model = "" // claude-разработчик
+        org.employees[1].adapter.model = "своя-модель" // codex-ревьюер
+        let updated = org.applyingDefaultModels(["claude": "opus-x", "codex": "gpt-y"])
+        #expect(updated.employees[0].adapter.model == "opus-x")
+        #expect(updated.employees[1].adapter.model == "своя-модель")
+        // Пустые значения дефолтов ничего не трогают.
+        #expect(org.applyingDefaultModels(["claude": ""]) == org)
+    }
+
     @Test("Версия флоу (2A): старый JSON без поля version читается как v1, свежая пишется")
     func flowVersionBackcompat() throws {
         let flow = OrgFlow(name: "Флоу", stages: [], version: 7)

@@ -65,7 +65,8 @@ public struct CLIProcessAdapter: AgentAdapter {
 
             let stdout = Pipe()
             process.standardOutput = stdout
-            process.standardError = Pipe()
+            let stderr = Pipe()
+            process.standardError = stderr
 
             let state = StreamState(parser: parser, usageLine: usageLine)
 
@@ -83,7 +84,14 @@ public struct CLIProcessAdapter: AgentAdapter {
                 for event in state.consume(trailing, flush: true) {
                     continuation.yield(event)
                 }
-                for event in state.finale(exitCode: process.terminationStatus) {
+                // Хвост stderr — в причину сбоя: «код 2 без вердикта»
+                // без него не диагностируется (находка SCRUM-35).
+                let errData = stderr.fileHandleForReading.readDataToEndOfFile()
+                let errTail = String(data: errData, encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                for event in state.finale(
+                    exitCode: process.terminationStatus, stderrTail: String(errTail.suffix(300))
+                ) {
                     continuation.yield(event)
                 }
                 continuation.finish()
@@ -176,7 +184,7 @@ final class StreamState: @unchecked Sendable {
 
     /// Процесс завершился: если терминального события не было —
     /// вердикт потерян (упал до финала, убит, невалидный вывод).
-    func finale(exitCode: Int32) -> [AgentEvent] {
+    func finale(exitCode: Int32, stderrTail: String = "") -> [AgentEvent] {
         queue.sync {
             if emittedTerminal { return [] }
             if let verdict = pendingVerdict {
@@ -184,7 +192,8 @@ final class StreamState: @unchecked Sendable {
                 return [.finished(verdict, usage: pendingUsage ?? AgentUsage())]
             }
             emittedTerminal = true
-            return [.failed("Процесс завершился (код \(exitCode)) без вердикта")]
+            let detail = stderrTail.isEmpty ? "" : ": \(stderrTail)"
+            return [.failed("Процесс завершился (код \(exitCode)) без вердикта\(detail)")]
         }
     }
 }

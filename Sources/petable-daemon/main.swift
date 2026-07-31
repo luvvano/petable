@@ -8,22 +8,35 @@ import OrgEngine
 
 let store = EventStore(root: EventStore.defaultRoot())
 
-var adapters: [any AgentAdapter] = []
-if let claude = CLIProcessAdapter.find("claude") {
-    adapters.append(CLIProcessAdapter.claude(executable: claude))
-}
-if let codex = CLIProcessAdapter.find("codex") {
-    // Схема вердикта — enforced (T5, находка спайка).
-    let schemaURL = store.root.appendingPathComponent("verdict-schema.json")
-    let schema = """
-    {"type":"object","properties":{"status":{"type":"string","enum":["done","changesRequested","cannotComplete"]},"note":{"type":"string"}},"required":["status","note"],"additionalProperties":false}
-    """
-    try? FileManager.default.createDirectory(at: store.root, withIntermediateDirectories: true)
-    try? schema.write(to: schemaURL, atomically: true, encoding: .utf8)
-    adapters.append(CLIProcessAdapter.codex(executable: codex, schemaPath: schemaURL.path))
+// Схема вердикта — enforced (T5, находка спайка).
+let schemaURL = store.root.appendingPathComponent("verdict-schema.json")
+let schema = """
+{"type":"object","properties":{"status":{"type":"string","enum":["done","changesRequested","cannotComplete"]},"note":{"type":"string"}},"required":["status","note"],"additionalProperties":false}
+"""
+try? FileManager.default.createDirectory(at: store.root, withIntermediateDirectories: true)
+try? schema.write(to: schemaURL, atomically: true, encoding: .utf8)
+
+func makeAdapter(_ name: String) -> (any AgentAdapter)? {
+    guard let executable = CLIProcessAdapter.find(name) else { return nil }
+    switch name {
+    case "claude": return CLIProcessAdapter.claude(executable: executable)
+    case "codex": return CLIProcessAdapter.codex(executable: executable, schemaPath: schemaURL.path)
+    default: return nil
+    }
 }
 
-let core = DaemonCore(store: store, registry: AdapterRegistry(adapters))
+var adapters: [any AgentAdapter] = []
+if let claude = makeAdapter("claude") { adapters.append(claude) }
+if let codex = makeAdapter("codex") { adapters.append(codex) }
+
+// Fallback: CLI, не найденный на старте, переискивается при промахе —
+// launchd мог поднять демона до установки CLI или с урезанным PATH.
+let registry = AdapterRegistry(adapters, fallback: { name in
+    CLIDiscovery.reset()
+    return makeAdapter(name)
+})
+
+let core = DaemonCore(store: store, registry: registry)
 let delegate = DaemonXPCDelegate(core: core)
 let listener = NSXPCListener(machServiceName: petableDaemonMachService)
 listener.delegate = delegate
@@ -34,5 +47,8 @@ listener.resume()
 // уже принимает коннекты.
 Task { await core.recoverAll() }
 
-FileHandle.standardError.write(Data("petable-daemon: слушаю \(petableDaemonMachService)\n".utf8))
+let found = adapters.map(\.cliID).joined(separator: ", ")
+FileHandle.standardError.write(Data(
+    "petable-daemon: слушаю \(petableDaemonMachService) · исполнители: \(found.isEmpty ? "не найдены (переищу при первом этапе)" : found)\n".utf8
+))
 RunLoop.main.run()

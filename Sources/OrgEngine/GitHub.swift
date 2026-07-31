@@ -52,6 +52,31 @@ public struct GitHubClient: Sendable {
         }
     }
 
+    /// Pull request для ветки запуска (правка автора): уже есть PR с этим
+    /// head — возвращается его URL (идемпотентно, повторные заходы на
+    /// гейт дубль не плодят); нет — создаётся. `ownerRepo` — `owner/repo`.
+    public func ensurePullRequest(
+        token: String, ownerRepo: String, head: String, base: String,
+        title: String, body: String
+    ) async throws -> String {
+        let owner = ownerRepo.split(separator: "/").first.map(String.init) ?? ""
+        let existing = try await send(request(
+            token: token,
+            path: "/repos/\(ownerRepo)/pulls?state=all&head=\(owner):\(head)"
+        ))
+        if let found = try decode([PullRequest].self, from: existing).first {
+            return found.html_url
+        }
+        var request = request(token: token, path: "/repos/\(ownerRepo)/pulls")
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: [
+            "title": title, "head": head, "base": base, "body": body,
+        ])
+        let data = try await send(request)
+        return try decode(PullRequest.self, from: data).html_url
+    }
+
     /// Создаёт приватный репозиторий; возвращает https-URL для клона.
     public func createRepo(token: String, name: String) async throws -> String {
         var request = request(token: token, path: "/user/repos")
@@ -91,6 +116,7 @@ public struct GitHubClient: Sendable {
 
     private struct Viewer: Decodable { var login: String }
     private struct Repo: Decodable { var clone_url: String }
+    private struct PullRequest: Decodable { var html_url: String }
 
     private struct RepoListItem: Decodable {
         var name: String

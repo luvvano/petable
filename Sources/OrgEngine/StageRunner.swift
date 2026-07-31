@@ -49,11 +49,16 @@ public struct StageRunner: Sendable {
             )
         }
         guard let adapter = registry.adapter(for: employee.adapter) else {
-            // «CLI не найден» — состояние интерфейса (матрица 4A), не тихий сбой.
+            // «CLI не найден» — состояние интерфейса (матрица 4A), не тихий
+            // сбой. Что движок ВИДИТ — в причину: загадка «у меня же есть
+            // claude» читается сразу.
+            let known = registry.knownCLIs
             return StageResult(
                 run: finish(
                     Engine.stageFailed(
-                        run, reason: "Исполнитель «\(employee.adapter.cli)» не установлен"
+                        run,
+                        reason: "Исполнитель «\(employee.adapter.cli)» не установлен"
+                            + " (движок видит: \(known.isEmpty ? "никого" : known.joined(separator: ", ")))"
                     ),
                     run: run
                 ),

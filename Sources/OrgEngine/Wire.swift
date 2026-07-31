@@ -49,6 +49,8 @@ public enum WireType: String, Sendable {
     case shadowRun
     /// Fork запуска с override модели (слайс 12, ⌥Enter).
     case forkRun
+    /// Ручное перемещение задачи на этап (drag-and-drop по флоу).
+    case moveRun
     // События демон → приложение (EventSink).
     case runState, logBatch, attention, handshake
     /// Активных этапов не осталось — демона можно заменять.
@@ -59,14 +61,31 @@ public enum WireType: String, Sendable {
 /// при коннекте (Безопасность дизайн-дока) — демон держит ТОЛЬКО в памяти,
 /// после рестарта ждёт следующего коннекта, write-back копится в очереди.
 /// `githubToken` — для агентного создания репозиториев под подзадачи
-/// декомпозиции (правка №5).
+/// декомпозиции (правка №5). `orchestratorInstructions` /
+/// `orchestratorFlowByLLM` — настройка оркестратора (правка автора):
+/// инструкции добавляются в его LLM-выборы (флоу, репозиторий).
 public struct ConfigureCommand: Codable, Equatable, Sendable {
     public var jira: JiraConfig?
     public var githubToken: String?
+    public var orchestratorInstructions: String?
+    public var orchestratorFlowByLLM: Bool?
+    /// Ручные пути к CLI из настроек движка (`cli → путь`; пустое
+    /// значение — автопоиск). Смена пути подхватывается fallback-поиском
+    /// реестра; надёжно — «Перезапустить движок».
+    public var cliPaths: [String: String]?
 
-    public init(jira: JiraConfig? = nil, githubToken: String? = nil) {
+    public init(
+        jira: JiraConfig? = nil,
+        githubToken: String? = nil,
+        orchestratorInstructions: String? = nil,
+        orchestratorFlowByLLM: Bool? = nil,
+        cliPaths: [String: String]? = nil
+    ) {
         self.jira = jira
         self.githubToken = githubToken
+        self.orchestratorInstructions = orchestratorInstructions
+        self.orchestratorFlowByLLM = orchestratorFlowByLLM
+        self.cliPaths = cliPaths
     }
 }
 
@@ -129,6 +148,18 @@ public struct ForkRunCommand: Codable, Equatable, Sendable {
     public init(runID: UUID, model: String = "") {
         self.runID = runID
         self.model = model
+    }
+}
+
+/// Перетаскивание задачи на этап (drag-and-drop): человек сам решает,
+/// куда двигаться — без инкремента счётчика возвратов.
+public struct MoveRunCommand: Codable, Equatable, Sendable {
+    public var runID: UUID
+    public var stageID: UUID
+
+    public init(runID: UUID, stageID: UUID) {
+        self.runID = runID
+        self.stageID = stageID
     }
 }
 

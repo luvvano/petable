@@ -94,6 +94,16 @@ enum DaemonManager {
         }
     }
 
+    /// Перезапуск установленного демона БЕЗ замены бинаря: свежий процесс
+    /// переищет CLI (план устранения «исполнитель не установлен»).
+    static func restart() throws {
+        launchctl("bootout", "gui/\(getuid())/\(label)")
+        let result = launchctl("bootstrap", "gui/\(getuid())", plistURL.path)
+        guard result.exitCode == 0 else {
+            throw InstallError.bootstrapFailed(result.output)
+        }
+    }
+
     @discardableResult
     private static func launchctl(_ args: String...) -> (exitCode: Int32, output: String) {
         let process = Process()

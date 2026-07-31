@@ -48,16 +48,19 @@ public struct JiraIssue: Equatable, Sendable {
     public var description: String
     public var typeName: String
     public var projectKey: String
+    /// Имя статуса в Jira («To Do», «In Progress»…).
+    public var status: String
 
     public init(
         key: String, summary: String, description: String = "",
-        typeName: String = "", projectKey: String = ""
+        typeName: String = "", projectKey: String = "", status: String = ""
     ) {
         self.key = key
         self.summary = summary
         self.description = description
         self.typeName = typeName
         self.projectKey = projectKey
+        self.status = status
     }
 }
 
@@ -122,7 +125,7 @@ public struct JiraClient: JiraGateway, Sendable {
     ) async throws -> [JiraIssue] {
         let data = try await get(config, path: "/rest/api/2/search/jql", query: [
             URLQueryItem(name: "jql", value: jql),
-            URLQueryItem(name: "fields", value: "summary,description,issuetype,project"),
+            URLQueryItem(name: "fields", value: "summary,description,issuetype,project,status"),
             URLQueryItem(name: "maxResults", value: "\(maxResults)"),
         ])
         let page = try decode(SearchResponse.self, from: data)
@@ -132,7 +135,8 @@ public struct JiraClient: JiraGateway, Sendable {
                 summary: $0.fields.summary ?? "",
                 description: $0.fields.description ?? "",
                 typeName: $0.fields.issuetype?.name ?? "",
-                projectKey: $0.fields.project?.key ?? ""
+                projectKey: $0.fields.project?.key ?? "",
+                status: $0.fields.status?.name ?? ""
             )
         }
     }
@@ -251,6 +255,7 @@ public struct JiraClient: JiraGateway, Sendable {
             var description: String?
             var issuetype: Named?
             var project: Keyed?
+            var status: Named?
         }
 
         struct Named: Decodable { var name: String? }
@@ -324,7 +329,8 @@ public enum JiraImporter {
                 taskTypeID: taskType.id,
                 repoID: repo?.id,
                 source: .jira,
-                jiraKey: issue.key
+                jiraKey: issue.key,
+                jiraStatus: issue.status.isEmpty ? nil : issue.status
             ))
         }
         return result

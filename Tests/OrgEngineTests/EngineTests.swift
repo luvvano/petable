@@ -90,6 +90,28 @@ struct EngineFlowTests {
         #expect(run.summary?.returnCount == 0)
     }
 
+    @Test("Drag-and-drop (move): назад — путь усечён, вперёд — дописан; счётчик возвратов не трогается; running игнорируется")
+    func manualMove() throws {
+        var run = try started()
+        run = Engine.stageFinished(run, verdict: Verdict(status: .done), now: t0)
+        run = Engine.stageFinished(run, verdict: Verdict(status: .done), now: t0)
+        run = Engine.testPassed(run, now: t0) // на merge-гейте
+        #expect(run.status == .waitingGate)
+
+        let workID = run.path[0]
+        let moved = Engine.move(run, to: workID, now: t0)
+        #expect(moved.currentStageID == workID)
+        #expect(moved.path == [workID]) // путь усечён до цели
+        #expect(moved.status == .running)
+        #expect(moved.returnCount == 0) // человек сам решил — не возврат
+
+        // Вперёд на merge: сразу гейт.
+        let mergeID = run.path.last!
+        let forward = Engine.move(moved, to: mergeID, now: t0)
+        // moved в .running — движок игнорирует перенос работающего этапа.
+        #expect(forward == moved)
+    }
+
     @Test("changesRequested ревьюера: возврат на ближайший work, счётчик растёт, путь усечён")
     func reviewReturn() throws {
         var run = try started()

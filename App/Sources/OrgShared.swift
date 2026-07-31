@@ -110,25 +110,157 @@ enum OrgUI {
     }
 
     /// Причина, по которой «Запустить» недоступна; nil — можно (12A).
+    /// Правка автора: запустить можно ЛЮБУЮ задачу — тип, маршрут и
+    /// невалидный флоу чинит оркестратор на старте (таблица маршрутов →
+    /// LLM-выбор → линейная запаска). Единственный честный блок —
+    /// задаче совсем некуда ехать.
     static func startBlockReason(_ task: OrgTask, organization: Organization) -> String? {
-        guard let typeID = task.taskTypeID,
-              organization.taskTypes.contains(where: { $0.id == typeID })
-        else { return "у задачи нет типа" }
-        guard let flow = organization.flow(for: typeID) else {
-            let typeName = organization.taskTypes.first(where: { $0.id == typeID })?.name ?? "?"
-            return "тип «\(typeName)» не смаршрутизирован на флоу"
-        }
-        let issues = flow.validate()
-        if !issues.isEmpty {
-            return "флоу «\(flow.name)»: \(issues.count) \(issues.count == 1 ? "ошибка" : "ошибки") — Организация → Конвейер"
-        }
-        // Репозиторий не выбран — не блок: возьмётся из реестра или
-        // GitHub-аккаунта агентом на старте (правка автора). Блок только
-        // когда взять неоткуда совсем.
         if organization.repos.isEmpty, GitHubSettingsStore.token == nil {
             return "подключи GitHub или добавь репозиторий — задаче некуда ехать"
         }
         return nil
+    }
+}
+
+/// План устранения ошибки (правка автора: «когда появляется ошибка,
+/// предлагай понятный план»): по причине «требует внимания» — заголовок,
+/// нумерованные шаги и уместные действия-кнопки.
+struct RemediationPlan {
+    var title: String
+    var steps: [String]
+    /// Кнопка «Перезапустить движок» (переискать CLI).
+    var offersEngineRestart = false
+    /// Подсказка, что написать в чат для перезапуска этапа.
+    var retryHint: String?
+}
+
+extension OrgUI {
+    /// Понятный план по известным причинам; nil — универсальной беды нет,
+    /// хватает чата и «Отменить».
+    static func remediation(for reason: String) -> RemediationPlan? {
+        let lower = reason.lowercased()
+        if lower.contains("не установлен") {
+            let cli = reason.contains("«codex»") ? "codex" : "claude"
+            let install = cli == "codex"
+                ? "npm install -g @openai/codex  (или brew install codex)"
+                : "npm install -g @anthropic-ai/claude-code"
+            return RemediationPlan(
+                title: "Движок не нашёл CLI «\(cli)»",
+                steps: [
+                    "Чаще всего движок просто стартовал раньше, чем CLI появился: нажми «Перезапустить движок», затем «Повторить этап».",
+                    "Не помогло — проверь путь: Организация → Движок → Исполнители (зелёный путь у «\(cli)»?); нет — впиши путь руками (например ~/.local/bin/\(cli)).",
+                    "CLI вообще нет — установи и войди: \(install), затем \(cli) login; после установки — «Перезапустить движок».",
+                ],
+                offersEngineRestart: true,
+                retryHint: "продолжай"
+            )
+        }
+        if lower.contains("конфликт rebase") {
+            return RemediationPlan(
+                title: "Ветка запуска разошлась с main",
+                steps: [
+                    "Открой репозиторий и посмотри конфликт: git status в ветке запуска.",
+                    "Проще всего вернуть задачу сотруднику: напиши в чат «перенеси изменения поверх свежего main» — этап перезапустится с чистого worktree от актуальной базы.",
+                    "После доработки понадобится новый «Принять».",
+                ],
+                retryHint: "перенеси изменения поверх свежего main"
+            )
+        }
+        if lower.contains("лимит возвратов") {
+            return RemediationPlan(
+                title: "Задача ходит по кругу (3 возврата)",
+                steps: [
+                    "Прочитай последнюю причину возврата выше — сотрудник не понимает, чего не хватает.",
+                    "Дай в чате ОДНО конкретное указание, что именно исправить.",
+                    "Не помогает — «Отменить» и разбей задачу на меньшие.",
+                ]
+            )
+        }
+        if lower.contains("вопрос сотрудника") {
+            return RemediationPlan(
+                title: "Сотрудник ждёт ответа",
+                steps: ["Ответь в поле чата — этап продолжится с твоим ответом."]
+            )
+        }
+        if lower.contains("без вердикта") {
+            return RemediationPlan(
+                title: "Процесс исполнителя упал, не дав ответа",
+                steps: [
+                    "Причина — в хвосте сообщения выше (stderr процесса) и в логе этапа.",
+                    "Чаще всего помогает «Повторить этап» — процесс перезапустится с чистого worktree.",
+                    "Повторяется — проверь логин CLI в терминале (claude login / codex login) и модель сотрудника.",
+                ],
+                retryHint: "продолжай"
+            )
+        }
+        if lower.contains("git:") {
+            return RemediationPlan(
+                title: "Git-операция не прошла",
+                steps: [
+                    "Проверь путь репозитория: Организация → Интеграции → Репозитории.",
+                    "Убедись, что каталог существует и это git-клон (внутри есть .git).",
+                    "Почини путь и напиши в чат «продолжай» — этап перезапустится.",
+                ],
+                retryHint: "продолжай"
+            )
+        }
+        if lower.contains("декомпозиция без подзадач") || lower.contains("не нашёлся тип") {
+            return RemediationPlan(
+                title: "Декомпозиция не разобрала задачу",
+                steps: [
+                    "Уточни постановку: напиши в чат, на какие подзадачи (и в какие репозитории) делить.",
+                    "Проверь «Типы задач» — имена типов должны совпадать с теми, что называет архитектор.",
+                ]
+            )
+        }
+        return nil
+    }
+}
+
+/// Карточка плана устранения: шаги + действия. Живёт под причиной
+/// «требует внимания» в панели этапа.
+struct RemediationView: View {
+    let plan: RemediationPlan
+    let runID: UUID
+    @ObservedObject var controller: OrganizationController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(plan.title, systemImage: "lifepreserver")
+                .font(.system(size: 11, weight: .semibold))
+            ForEach(Array(plan.steps.enumerated()), id: \.offset) { index, step in
+                HStack(alignment: .top, spacing: 6) {
+                    Text("\(index + 1).")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Text(step)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                }
+            }
+            HStack(spacing: 8) {
+                if plan.offersEngineRestart {
+                    Button("Перезапустить движок") {
+                        Task { await controller.restartEngine() }
+                    }
+                    .controlSize(.small)
+                }
+                if let hint = plan.retryHint {
+                    Button("Повторить этап") {
+                        controller.chat(runID, text: hint)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .help("Перезапускает этап с чистого worktree")
+                }
+            }
+            .padding(.top, 2)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.orange.opacity(0.07)))
     }
 }
 

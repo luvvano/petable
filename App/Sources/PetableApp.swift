@@ -6,6 +6,29 @@ struct PetableApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @Environment(\.openWindow) private var openWindow
 
+    /// Один экземпляр приложения: свежезапущенный закрывает старые копии
+    /// с тем же bundle id, но другим путём/процессом (запуск из
+    /// /Applications поверх сборки из build/ — раньше в Dock жили две
+    /// иконки). Автосейв документов делает terminate безопасным;
+    /// упёршийся процесс добивается через 3 секунды.
+    init() {
+        let myPID = ProcessInfo.processInfo.processIdentifier
+        let mine = Bundle.main.bundleIdentifier
+        let others = NSWorkspace.shared.runningApplications.filter {
+            $0.bundleIdentifier == mine && $0.processIdentifier != myPID
+        }
+        for app in others {
+            app.terminate()
+        }
+        if !others.isEmpty {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                for app in others where !app.isTerminated {
+                    app.forceTerminate()
+                }
+            }
+        }
+    }
+
     var body: some Scene {
         // Первая сцена — то, что открывается при запуске: хаб проектов,
         // а не системный диалог открытия файла от DocumentGroup.

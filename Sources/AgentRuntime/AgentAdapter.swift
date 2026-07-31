@@ -39,16 +39,26 @@ public protocol AgentAdapter: Sendable {
 /// Реестр адаптеров: конфигурация сотрудника → адаптер.
 public struct AdapterRegistry: Sendable {
     private let adapters: [String: any AgentAdapter]
+    /// Повторный поиск при промахе: процесс мог стартовать ДО установки
+    /// CLI (launchd-демон) — «не установлен» не приговор до рестарта.
+    private let fallback: (@Sendable (String) -> (any AgentAdapter)?)?
 
-    public init(_ adapters: [any AgentAdapter]) {
+    public init(
+        _ adapters: [any AgentAdapter],
+        fallback: (@Sendable (String) -> (any AgentAdapter)?)? = nil
+    ) {
         self.adapters = Dictionary(uniqueKeysWithValues: adapters.map { ($0.cliID, $0) })
+        self.fallback = fallback
     }
 
     /// nil — исполнитель не установлен/не зарегистрирован: этап
     /// «требует внимания» с причиной, не тихий провал (матрица 4A).
     public func adapter(for config: AdapterConfig) -> (any AgentAdapter)? {
-        adapters[config.cli]
+        adapters[config.cli] ?? fallback?(config.cli)
     }
+
+    /// Кто есть в реестре — для диагностики в тексте ошибки.
+    public var knownCLIs: [String] { adapters.keys.sorted() }
 }
 
 /// Аргументы запуска обоих CLI — вынесены из процессного кода, чтобы
@@ -72,12 +82,18 @@ public enum CLIInvocation {
     /// `codex exec --json --skip-git-repo-check` (worktree всегда git,
     /// но флаг делает адаптер нечувствительным к cwd — находка спайка).
     /// Вердикт enforced схемой: `--output-schema` (strict: все properties
-    /// в required — вторая находка спайка).
+    /// в required — вторая находка спайка). Подкоманда `exec resume` НЕ
+    /// принимает `-s` (exit 2 — находка SCRUM-35): sandbox для resume
+    /// уходит конфигом `-c sandbox_mode=…`.
     public static func codexArguments(_ request: AgentRequest, schemaPath: String?) -> [String] {
         var args = ["exec"]
-        if let session = request.resumeSessionID { args += ["resume", session] }
-        args += [request.prompt, "--json", "--skip-git-repo-check"]
-        args += ["-s", request.config.permissionProfile == "readOnly" ? "read-only" : "workspace-write"]
+        let sandbox = request.config.permissionProfile == "readOnly" ? "read-only" : "workspace-write"
+        if let session = request.resumeSessionID {
+            args += ["resume", session, request.prompt, "--json", "--skip-git-repo-check"]
+            args += ["-c", "sandbox_mode=\"\(sandbox)\""]
+        } else {
+            args += [request.prompt, "--json", "--skip-git-repo-check", "-s", sandbox]
+        }
         if !request.config.model.isEmpty { args += ["-m", request.config.model] }
         if !request.config.effort.isEmpty {
             args += ["-c", "model_reasoning_effort=\"\(request.config.effort)\""]

@@ -176,6 +176,76 @@ struct DaemonCoreTests {
         try await core.handle(JSONEncoder().encode(unknown)) // не бросает
     }
 
+    @Test("Оркестратор на старте: тип без маршрута — LLM выбирает флоу по типу и Jira-статусу; задача едет")
+    func orchestratorPicksFlow() async throws {
+        let done: [AgentEvent] = [.finished(Verdict(status: .done), usage: AgentUsage())]
+        let pick: [AgentEvent] = [
+            .finished(Verdict(status: .done, note: "беру Хотфикс"), usage: AgentUsage()),
+        ]
+        let (core, org, task, _) = try makeWorld(
+            claudeScripts: [pick, done], codexScripts: []
+        )
+        var custom = org
+        let developer = custom.employees[0]
+        let merge = OrgStage(name: "Merge", kind: .merge, gate: .human)
+        let work = OrgStage(name: "Фикс", kind: .work, employeeID: developer.id, next: [merge.id])
+        custom.flows.append(OrgFlow(name: "Хотфикс", stages: [work, merge]))
+        let bugType = OrgTaskType(name: "Баг") // маршрута на флоу НЕТ
+        custom.taskTypes.append(bugType)
+        custom.tasks[0].taskTypeID = bugType.id
+        custom.tasks[0].jiraStatus = "In Progress"
+
+        try await send(core, .startRun, StartRunCommand(organization: custom, taskID: task.id))
+        let runID = try #require(await core.runID(forTask: task.id))
+        let run = try #require(await core.run(runID))
+        #expect(run.flow.name == "Хотфикс")
+        #expect(run.status == .waitingGate)
+        #expect(run.currentStage?.kind == .merge)
+    }
+
+    @Test("Переписка этапа персистентна (П9): chat и комментарий Вернуть пишутся в журнал chatMessage-событиями")
+    func chatPersistsInJournal() async throws {
+        let done: [AgentEvent] = [.finished(Verdict(status: .done), usage: AgentUsage())]
+        let (core, org, task, store) = try makeWorld(
+            claudeScripts: [done, done, done], codexScripts: [done, done]
+        )
+        try await send(core, .startRun, StartRunCommand(organization: org, taskID: task.id))
+        let runID = try #require(await core.runID(forTask: task.id))
+        #expect(await core.run(runID)?.status == .waitingGate) // merge-гейт
+
+        try await send(core, .reject, ChatCommand(runID: runID, text: "поправь отступы"))
+        // Возврат довёл до гейта снова — чат с гейта.
+        try await send(core, .chat, ChatCommand(runID: runID, text: "и переименуй функцию"))
+
+        let run = try #require(await core.run(runID))
+        guard case let .events(events) = store.load(orgID: run.orgID, runID: runID) else {
+            Issue.record("журнал не читается")
+            return
+        }
+        let messages = events
+            .filter { $0.kindValue == .chatMessage }
+            .compactMap(\.text)
+        #expect(messages == ["поправь отступы", "и переименуй функцию"])
+    }
+
+    @Test("Оркестратор: валидных флоу нет совсем — линейная запаска из пресетов, запуск не блокируется")
+    func orchestratorFallbackFlow() async throws {
+        let done: [AgentEvent] = [.finished(Verdict(status: .done), usage: AgentUsage())]
+        let (core, org, task, _) = try makeWorld(
+            claudeScripts: [done], codexScripts: [done]
+        )
+        var custom = org
+        custom.flows = [OrgFlow(name: "Битый", stages: [])]
+        custom.routes = [OrgRoute(taskTypeID: custom.taskTypes[0].id, flowID: custom.flows[0].id)]
+
+        try await send(core, .startRun, StartRunCommand(organization: custom, taskID: task.id))
+        let runID = try #require(await core.runID(forTask: task.id))
+        let run = try #require(await core.run(runID))
+        #expect(run.flow.name.contains("запаска"))
+        #expect(run.status == .waitingGate)
+        #expect(run.currentStage?.kind == .merge)
+    }
+
     @Test("Drain (П0): новые этапы не начинаются, drained уходит подписчику; recoverAll свежего демона доводит запуск")
     func drainThenRecoverAll() async throws {
         let done: [AgentEvent] = [.finished(Verdict(status: .done), usage: AgentUsage())]

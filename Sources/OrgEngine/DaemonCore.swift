@@ -23,6 +23,11 @@ public actor DaemonCore {
     /// GitHub-токен — тоже только в памяти: агентное создание
     /// репозиториев под подзадачи декомпозиции (правка №5).
     private var githubToken: String?
+    /// Инструкции оркестратору от человека — добавляются в его
+    /// LLM-выборы (флоу, репозиторий).
+    private var orchestratorInstructions = ""
+    /// false — выбор флоу без LLM (таблица маршрутов → первый валидный).
+    private var flowByLLM = true
     /// Очередь write-back в Jira: финалы, случившиеся без секретов
     /// (демон рестартовал, приложение закрыто), уходят при коннекте.
     private var pendingJira: [JiraWriteBack] = []
@@ -87,6 +92,14 @@ public actor DaemonCore {
             await continueMergeIfNeeded(runID)
         case .reject:
             let payload = try envelope.payload(as: ChatCommand.self)
+            // Комментарий возврата — тоже переписка с сотрудником (П9).
+            if !payload.text.isEmpty, let run = runs[payload.runID] {
+                try? store.append(
+                    RunEvent(seq: 0, date: now(), kind: .chatMessage,
+                             stageID: run.currentStageID, text: payload.text),
+                    orgID: run.orgID, runID: run.id
+                )
+            }
             await transition(payload.runID) {
                 Engine.reject($0, comment: payload.text, now: self.now())
             }
@@ -102,6 +115,16 @@ public actor DaemonCore {
             let payload = try envelope.payload(as: ConfigureCommand.self)
             jiraConfig = payload.jira
             if let token = payload.githubToken { githubToken = token }
+            if let instructions = payload.orchestratorInstructions {
+                orchestratorInstructions = instructions
+            }
+            if let byLLM = payload.orchestratorFlowByLLM { flowByLLM = byLLM }
+            if let paths = payload.cliPaths {
+                for (name, path) in paths {
+                    CLIDiscovery.setOverride(name, path: path)
+                }
+                CLIDiscovery.reset()
+            }
             await flushJiraQueue()
         case .drain:
             draining = true
@@ -112,6 +135,12 @@ public actor DaemonCore {
         case .forkRun:
             let command = try envelope.payload(as: ForkRunCommand.self)
             try await startFork(command)
+        case .moveRun:
+            let command = try envelope.payload(as: MoveRunCommand.self)
+            await transition(command.runID) {
+                Engine.move($0, to: command.stageID, now: self.now())
+            }
+            await continueRunIfRunning(command.runID)
         case .subscribe, .runState, .logBatch, .attention, .handshake, .drained, nil:
             break
         }
@@ -123,11 +152,16 @@ public actor DaemonCore {
         guard let picked = command.organization.tasks.first(where: { $0.id == command.taskID }) else {
             return
         }
+        // Оркестратор на старте (правка автора): задача попадает к нему
+        // ВСЕГДА — он чинит тип/маршрут/флоу, затем репозиторий.
+        let (routed, routedOrganization) = await resolveFlowIfNeeded(
+            picked, organization: command.organization
+        )
         let (task, organization) = await resolveRepoIfNeeded(
-            picked, organization: command.organization, candidates: command.candidates ?? []
+            routed, organization: routedOrganization, candidates: command.candidates ?? []
         )
         var run = try Engine.startRun(organization: organization, task: task, now: now())
-        organizations[run.orgID] = command.organization
+        organizations[run.orgID] = organization // с починенными маршрутом/репо
         try store.append(
             RunEvent(seq: 0, date: now(), kind: .runStarted), orgID: run.orgID, runID: run.id
         )
@@ -244,6 +278,88 @@ public actor DaemonCore {
         await continueRunIfRunning(fork.id)
     }
 
+    /// Оркестратор выбирает конвейер (правка автора: «запустить можно
+    /// любую задачу»). Порядок правил: тип чинится (нет/битый → первый,
+    /// пустой список типов пополняется) → валидный маршрут таблицы
+    /// «Типы задач → Флоу» — как есть → иначе выбор из валидных флоу:
+    /// LLM по типу и Jira-статусу задачи (выключаемо) или первый →
+    /// валидных нет совсем — линейная запаска из пресетов. Выбранный
+    /// маршрут записывается в организацию демона.
+    private func resolveFlowIfNeeded(
+        _ task: OrgTask, organization: Organization
+    ) async -> (OrgTask, Organization) {
+        var task = task
+        var organization = organization
+        if task.taskTypeID == nil
+            || !organization.taskTypes.contains(where: { $0.id == task.taskTypeID }) {
+            if organization.taskTypes.isEmpty {
+                organization.taskTypes.append(OrgTaskType(name: "Задача"))
+            }
+            task.taskTypeID = organization.taskTypes[0].id
+        }
+        guard let typeID = task.taskTypeID else { return (task, organization) }
+        if let routed = organization.flow(for: typeID), routed.validate().isEmpty {
+            return (task, organization)
+        }
+
+        var candidates = organization.flows.filter { $0.validate().isEmpty }
+        if candidates.isEmpty {
+            candidates = [organization.makeFallbackFlow()]
+        }
+        let chosen: OrgFlow
+        if candidates.count == 1 || !flowByLLM {
+            chosen = candidates[0]
+        } else {
+            let typeName = organization.taskTypes.first(where: { $0.id == typeID })?.name ?? ""
+            let picked = await pickFlowName(
+                candidates: candidates, task: task, typeName: typeName,
+                organization: organization
+            )
+            chosen = candidates.first {
+                $0.name.caseInsensitiveCompare(picked ?? "") == .orderedSame
+            } ?? candidates[0]
+        }
+        organization.routes.removeAll { $0.taskTypeID == typeID }
+        organization.routes.append(OrgRoute(taskTypeID: typeID, flowID: chosen.id))
+        return (task, organization)
+    }
+
+    /// Короткий LLM-выбор флоу по типу и статусу задачи; не распознан —
+    /// первый кандидат.
+    private func pickFlowName(
+        candidates: [OrgFlow], task: OrgTask, typeName: String, organization: Organization
+    ) async -> String? {
+        let config = organization.employees.first?.adapter ?? AdapterConfig()
+        guard let adapter = registry.adapter(for: config) else { return candidates.first?.name }
+        let options = candidates.map { flow in
+            "- \(flow.name) (этапы: \(flow.stages.map(\.name).joined(separator: " → ")))"
+        }
+        let prompt = """
+        Ты — оркестратор конвейера ИИ-сотрудников. Выбери конвейер (флоу) \
+        для задачи. Варианты:
+        \(options.joined(separator: "\n"))
+
+        Задача \(task.jiraKey.isEmpty ? "" : "[\(task.jiraKey)] ")«\(task.title)».
+        Тип: «\(typeName)».\(task.jiraStatus.map { " Статус в Jira: «\($0)»." } ?? "")
+        \(task.details.isEmpty ? "" : task.details + "\n")\
+        \(orchestratorInstructions.isEmpty ? "" : "Инструкции оркестратору: \(orchestratorInstructions)\n")\
+        Ничего не делай с кодом. Ответь ТОЛЬКО JSON-блоком:
+        {"status": "done", "note": "<имя флоу из списка>"}
+        """
+        try? FileManager.default.createDirectory(at: store.root, withIntermediateDirectories: true)
+        var picked: String?
+        for await event in adapter.run(AgentRequest(
+            prompt: prompt, workingDirectory: store.root, config: config
+        )) {
+            if case let .finished(verdict, _) = event {
+                picked = candidates.map(\.name).first {
+                    verdict.note.localizedCaseInsensitiveContains($0)
+                }
+            }
+        }
+        return picked ?? candidates.first?.name
+    }
+
     /// Задача без репозитория (правка автора: ничего не привязывать
     /// руками): реестр есть — один берётся сам, из нескольких выбирает
     /// короткий LLM-вызов по тексту задачи; реестр ПУСТ — выбор из
@@ -318,6 +434,7 @@ public actor DaemonCore {
 
         Задача \(task.jiraKey.isEmpty ? "" : "[\(task.jiraKey)] ")«\(task.title)».
         \(task.details.isEmpty ? "" : task.details + "\n")\
+        \(orchestratorInstructions.isEmpty ? "" : "Инструкции оркестратору: \(orchestratorInstructions)\n")\
         Ничего не делай с кодом. Ответь ТОЛЬКО JSON-блоком:
         {"status": "done", "note": "<имя репозитория из списка>"}
         """
@@ -386,8 +503,67 @@ public actor DaemonCore {
             publishState(run)
             await syncJiraStage(run)
         }
+        await ensurePullRequestIfReady(runID)
         await settleParentIfNeeded(of: runID)
         publishDrainedIfIdle()
+    }
+
+    /// Токен дошёл до merge-гейта → рабочая ветка пушится в origin и
+    /// открывается pull request (правка автора): человек ревьюит по
+    /// ссылке до «Принять». Идемпотентно (PR ищется по head-ветке);
+    /// experimental и уже созданный — пропуск; нет GitHub-токена или
+    /// remote — тихий лог, не блокер.
+    private func ensurePullRequestIfReady(_ runID: UUID) async {
+        guard var run = runs[runID],
+              run.status == .waitingGate, run.currentStage?.kind == .merge,
+              !run.isExperimental, run.prURL == nil,
+              FileManager.default.fileExists(atPath: run.repo.path)
+        else { return }
+        guard let token = githubToken else {
+            try? store.append(
+                RunEvent(seq: 0, date: now(), kind: .log,
+                         text: "PR не создан: GitHub не подключён (Интеграции)"),
+                orgID: run.orgID, runID: run.id
+            )
+            return
+        }
+        guard let ownerRepo = worktrees.pushBranchForPullRequest(run: run) else {
+            try? store.append(
+                RunEvent(seq: 0, date: now(), kind: .log,
+                         text: "PR не создан: remote не GitHub или push не прошёл"),
+                orgID: run.orgID, runID: run.id
+            )
+            return
+        }
+        let defaultBranch = (try? worktrees.git(
+            URL(fileURLWithPath: run.repo.path), "rev-parse", "--abbrev-ref", "HEAD"
+        )) ?? "main"
+        do {
+            let title = run.task.jiraKey.isEmpty
+                ? run.task.title : "\(run.task.jiraKey): \(run.task.title)"
+            let url = try await github.ensurePullRequest(
+                token: token, ownerRepo: ownerRepo,
+                head: run.branchName, base: defaultBranch,
+                title: title,
+                body: "Автосоздан Petable.\n\(Self.jiraMarker(run.id))"
+            )
+            run.prURL = url
+            runs[runID] = run
+            try? store.append(
+                RunEvent(seq: 0, date: now(), kind: .log, text: "Pull request: \(url)"),
+                orgID: run.orgID, runID: run.id
+            )
+            try? store.append(
+                RunEvent(seq: 0, date: now(), kind: .snapshot, run: run),
+                orgID: run.orgID, runID: run.id
+            )
+            publishState(run)
+        } catch {
+            try? store.append(
+                RunEvent(seq: 0, date: now(), kind: .log, text: "PR не создался: \(error)"),
+                orgID: run.orgID, runID: run.id
+            )
+        }
     }
 
     // MARK: Декомпозиция (слайс 8)
@@ -762,6 +938,12 @@ public actor DaemonCore {
               var run = runs[command.runID],
               run.status == .waitingGate || run.status == .needsAttention
         else { return }
+        // Сообщение человека — в журнал: переписка этапа персистентна (П9).
+        try? store.append(
+            RunEvent(seq: 0, date: now(), kind: .chatMessage,
+                     stageID: run.currentStageID, text: command.text),
+            orgID: run.orgID, runID: run.id
+        )
         run.status = .running
         run.statusReason = ""
         runs[command.runID] = run
