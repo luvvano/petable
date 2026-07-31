@@ -11,6 +11,7 @@ public actor DaemonCore {
     let registry: AdapterRegistry
     let worktrees: WorktreeManager
     let jira: any JiraGateway
+    let github: GitHubClient
     let now: @Sendable () -> Date
 
     /// Активные запуски в памяти; источник правды — event-store.
@@ -19,6 +20,9 @@ public actor DaemonCore {
     /// Секреты Jira — ТОЛЬКО в памяти (Безопасность дизайн-дока);
     /// приходят ConfigureCommand при коннекте приложения.
     private var jiraConfig: JiraConfig?
+    /// GitHub-токен — тоже только в памяти: агентное создание
+    /// репозиториев под подзадачи декомпозиции (правка №5).
+    private var githubToken: String?
     /// Очередь write-back в Jira: финалы, случившиеся без секретов
     /// (демон рестартовал, приложение закрыто), уходят при коннекте.
     private var pendingJira: [JiraWriteBack] = []
@@ -28,29 +32,43 @@ public actor DaemonCore {
     /// Wire-сообщения. Один клиент-владелец на orgID — T6 (упрощение v1:
     /// один подписчик на демона).
     private var sink: (@Sendable (Data) -> Void)?
+    /// Drain перед обновлением (П0): новые этапы не начинаются, текущие
+    /// дорабатывают. Снимается только рестартом демона.
+    private var draining = false
+    /// Исполняющиеся сейчас LLM-этапы — drain ждёт нуля.
+    private var activeStageCount = 0
 
     public init(
         store: EventStore,
         registry: AdapterRegistry,
         worktrees: WorktreeManager? = nil,
         jira: any JiraGateway = JiraClient(),
+        github: GitHubClient = GitHubClient(),
         now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.store = store
         self.registry = registry
         self.worktrees = worktrees ?? WorktreeManager(root: store.root)
         self.jira = jira
+        self.github = github
         self.now = now
     }
 
     public func subscribe(_ sink: @escaping @Sendable (Data) -> Void) {
         self.sink = sink
+        // Reconnect = снапшот состояния запусков (П0): канвас догоняет
+        // сразу, не ждёт следующего события.
+        for run in Array(runs.values) {
+            publishState(run)
+        }
     }
 
     public func run(_ id: UUID) -> OrganizationRun? { runs[id] }
 
     public func runID(forTask taskID: UUID) -> UUID? {
-        runs.values.first(where: { $0.task.id == taskID })?.id
+        // Primary приоритетнее теней/форков той же задачи.
+        runs.values.first(where: { $0.task.id == taskID && !$0.isExperimental })?.id
+            ?? runs.values.first(where: { $0.task.id == taskID })?.id
     }
 
     public func allRuns() -> [OrganizationRun] { Array(runs.values) }
@@ -83,8 +101,18 @@ public actor DaemonCore {
         case .configure:
             let payload = try envelope.payload(as: ConfigureCommand.self)
             jiraConfig = payload.jira
+            if let token = payload.githubToken { githubToken = token }
             await flushJiraQueue()
-        case .subscribe, .runState, .logBatch, .attention, .handshake, nil:
+        case .drain:
+            draining = true
+            publishDrainedIfIdle()
+        case .shadowRun:
+            let command = try envelope.payload(as: ShadowRunCommand.self)
+            try await startShadow(command)
+        case .forkRun:
+            let command = try envelope.payload(as: ForkRunCommand.self)
+            try await startFork(command)
+        case .subscribe, .runState, .logBatch, .attention, .handshake, .drained, nil:
             break
         }
     }
@@ -118,6 +146,102 @@ public actor DaemonCore {
         )
         await syncJiraStage(run)
         await continueRunIfRunning(run.id)
+    }
+
+    // MARK: Experimental: тени (слайс 13) и форки (слайс 12)
+
+    /// Теневой запуск: та же задача по экспериментальному флоу.
+    /// Experimental по построению: Jira/push выключены, merge недостижим
+    /// (Принять на финальном гейте закрывает итогом для сравнения).
+    private func startShadow(_ command: ShadowRunCommand) async throws {
+        guard let task = command.organization.tasks.first(where: { $0.id == command.taskID }),
+              let flow = command.organization.flows.first(where: { $0.id == command.flowID })
+        else { return }
+        // Организация с маршрутом типа задачи на экспериментальный флоу —
+        // остальная механика старта общая.
+        var experimental = command.organization
+        if let typeID = task.taskTypeID {
+            experimental.routes.removeAll { $0.taskTypeID == typeID }
+            experimental.routes.append(OrgRoute(taskTypeID: typeID, flowID: flow.id))
+        }
+        let (resolved, organization) = await resolveRepoIfNeeded(
+            task, organization: experimental, candidates: []
+        )
+        var run = try Engine.startRun(organization: organization, task: resolved, now: now())
+        run.experimental = true
+        run.shadowOf = runID(forTask: task.id)
+        run.branchName = run.branchName.replacingOccurrences(of: "org/", with: "org/shadow/")
+        organizations[run.orgID] = organization
+        try store.append(
+            RunEvent(seq: 0, date: now(), kind: .runStarted), orgID: run.orgID, runID: run.id
+        )
+        if FileManager.default.fileExists(atPath: run.repo.path) {
+            do {
+                run.baseSHA = try worktrees.createWorktree(run: run)
+            } catch {
+                run = Engine.stageFailed(run, reason: "git: \(error)")
+            }
+        }
+        runs[run.id] = run
+        publishState(run)
+        try store.append(
+            RunEvent(seq: 0, date: now(), kind: .snapshot, run: run),
+            orgID: run.orgID, runID: run.id
+        )
+        await continueRunIfRunning(run.id)
+    }
+
+    /// Fork запуска (⌥Enter): продолжить с ТЕКУЩЕГО этапа источника в
+    /// свежем worktree от точки форка (baseSHA источника, пин
+    /// refs/petable) с override модели у всех сотрудников снапшота.
+    private func startFork(_ command: ForkRunCommand) async throws {
+        guard let source = runs[command.runID] else { return }
+        var fork = source
+        fork.id = UUID()
+        fork.experimental = true
+        fork.forkOf = source.id
+        fork.shadowOf = nil
+        // Fork на merge-этапе ждёт гейта сразу (вход в merge = гейт, П5).
+        fork.status = source.currentStage?.kind == .merge ? .waitingGate : .running
+        fork.statusReason = ""
+        fork.startedAt = now()
+        fork.finishedAt = nil
+        fork.outcome = nil
+        fork.costEstimate = 0
+        fork.stageSessions = [:]
+        fork.childRunIDs = nil
+        fork.mergeSHA = nil
+        fork.commitURL = nil
+        fork.diffStat = nil
+        fork.pushFailed = nil
+        let key = fork.task.jiraKey.isEmpty
+            ? fork.task.id.uuidString.prefix(8).lowercased()
+            : fork.task.jiraKey
+        fork.branchName = "org/fork/\(key)-\(fork.id.uuidString.prefix(6).lowercased())"
+        if !command.model.isEmpty {
+            fork.employees = fork.employees.map { employee in
+                var updated = employee
+                updated.adapter.model = command.model
+                return updated
+            }
+        }
+        try store.append(
+            RunEvent(seq: 0, date: now(), kind: .runStarted), orgID: fork.orgID, runID: fork.id
+        )
+        if FileManager.default.fileExists(atPath: fork.repo.path) {
+            do {
+                fork.baseSHA = try worktrees.createWorktree(run: fork, from: source.baseSHA)
+            } catch {
+                fork = Engine.stageFailed(fork, reason: "git: \(error)")
+            }
+        }
+        runs[fork.id] = fork
+        publishState(fork)
+        try store.append(
+            RunEvent(seq: 0, date: now(), kind: .snapshot, run: fork),
+            orgID: fork.orgID, runID: fork.id
+        )
+        await continueRunIfRunning(fork.id)
     }
 
     /// Задача без репозитория (правка автора: ничего не привязывать
@@ -211,14 +335,22 @@ public actor DaemonCore {
 
     /// Гоняет LLM/тест-этапы, пока запуск в `.running` (гейты и
     /// «требует внимания» останавливают цикл до команд человека).
+    /// При drain цикл останавливается ПЕРЕД новым этапом: запуск остаётся
+    /// `.running`, свежий демон доведёт его через recovery (П0).
     private func continueRunIfRunning(_ runID: UUID) async {
         while var run = runs[runID], run.status == .running, let stage = run.currentStage {
+            if draining { break }
             switch stage.kind {
             case .work, .review, .decompose:
                 let runner = StageRunner(store: store, registry: registry, now: now)
+                activeStageCount += 1
                 let result = await runner.runCurrentStage(
-                    run, worktree: worktrees.worktreeURL(runID: run.id)
+                    run, worktree: worktrees.worktreeURL(runID: run.id),
+                    onEvent: { [weak self] in
+                        Task { await self?.heartbeat(runID) }
+                    }
                 )
+                activeStageCount -= 1
                 run = result.run
                 // Артефакт work-этапа — коммит при done (П5).
                 if stage.kind == .work, run.status != .needsAttention,
@@ -255,17 +387,20 @@ public actor DaemonCore {
             await syncJiraStage(run)
         }
         await settleParentIfNeeded(of: runID)
+        publishDrainedIfIdle()
     }
 
     // MARK: Декомпозиция (слайс 8)
 
     /// Спавн дочерних запусков из подзадач вердикта: тип и репозиторий
-    /// резолвятся по именам из организации; нерезолв — родитель «требует
-    /// внимания» (вопрос человеку, Модель данных). Дети едут
-    /// последовательно (лимит параллелизма v1 = 1).
+    /// резолвятся по именам из организации; незнакомое имя репозитория
+    /// при наличии GitHub-токена создаётся и клонируется агентно
+    /// (правка №5 — сотрудник задал scope, движок обеспечил); нерезолв
+    /// типа — родитель «требует внимания». Дети едут последовательно
+    /// (лимит параллелизма v1 = 1).
     private func spawnChildren(parent parentID: UUID, subtasks: [Verdict.Subtask]) async {
         guard var parent = runs[parentID],
-              let organization = organizations[parent.orgID]
+              var organization = organizations[parent.orgID]
         else { return }
 
         var childIDs: [UUID] = []
@@ -273,9 +408,9 @@ public actor DaemonCore {
             let taskType = organization.taskTypes.first {
                 $0.name.caseInsensitiveCompare(subtask.taskType) == .orderedSame
             } ?? organization.taskTypes.first
-            let repo = organization.repos.first {
-                $0.name.caseInsensitiveCompare(subtask.repo) == .orderedSame
-            } ?? parent.repo
+            let repo = await resolveChildRepo(
+                named: subtask.repo, organization: &organization, parent: parent
+            )
             guard let taskType else {
                 parent = Engine.stageFailed(parent, reason: "Подзадаче «\(subtask.title)» не нашёлся тип")
                 runs[parentID] = parent
@@ -317,6 +452,7 @@ public actor DaemonCore {
             }
         }
 
+        organizations[parent.orgID] = organization // созданные репо видны дальше
         parent.childRunIDs = childIDs
         runs[parentID] = parent
         try? store.append(
@@ -329,6 +465,49 @@ public actor DaemonCore {
             await continueRunIfRunning(childID)
         }
         await settleChildren(of: parentID)
+    }
+
+    /// Репозиторий подзадачи (правка №5): имя из реестра — как есть;
+    /// незнакомое имя при GitHub-токене — создаётся приватный репозиторий
+    /// и клонируется в хранилище демона (контроллер допишет его в реестр
+    /// документа, увидев незнакомый run.repo); иначе — репозиторий
+    /// родителя.
+    private func resolveChildRepo(
+        named name: String, organization: inout Organization, parent: OrganizationRun
+    ) async -> RepoRef {
+        if let existing = organization.repos.first(where: {
+            $0.name.caseInsensitiveCompare(name) == .orderedSame
+        }) {
+            return existing
+        }
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, let token = githubToken else { return parent.repo }
+        let root = store.root.appendingPathComponent("repos", isDirectory: true)
+        let target = root.appendingPathComponent(trimmed, isDirectory: true)
+        if FileManager.default.fileExists(atPath: target.path) {
+            let repo = RepoRef(name: trimmed, path: target.path)
+            organization.repos.append(repo)
+            return repo
+        }
+        do {
+            let cloneURL = try await github.createRepo(token: token, name: trimmed)
+            let path = try RepoProvisioner.clone(url: cloneURL, into: root, name: trimmed)
+            let repo = RepoRef(name: trimmed, path: path)
+            organization.repos.append(repo)
+            try? store.append(
+                RunEvent(seq: 0, date: now(), kind: .log,
+                         text: "создан репозиторий «\(trimmed)» под подзадачу"),
+                orgID: parent.orgID, runID: parent.id
+            )
+            return repo
+        } catch {
+            try? store.append(
+                RunEvent(seq: 0, date: now(), kind: .log,
+                         text: "репозиторий «\(trimmed)» не создался: \(error) — подзадача едет в \(parent.repo.name)"),
+                orgID: parent.orgID, runID: parent.id
+            )
+            return parent.repo
+        }
     }
 
     /// Ребёнок пришёл к терминалу — проверить, не закрылся ли родитель.
@@ -375,7 +554,9 @@ public actor DaemonCore {
     /// Принято на финальном гейте: intent-журнал (T2) → rebase → повторные
     /// тесты → merge.
     private func continueMergeIfNeeded(_ runID: UUID) async {
-        guard var run = runs[runID], run.status == .merging else { return }
+        // Experimental сюда не попадает (approve закрывает до merge) —
+        // страховка от будущих путей.
+        guard var run = runs[runID], run.status == .merging, !run.isExperimental else { return }
         guard FileManager.default.fileExists(atPath: run.repo.path) else {
             run = Engine.mergeSucceeded(run, now: now()) // мир без git — тесты ядра
             runs[runID] = run
@@ -430,6 +611,11 @@ public actor DaemonCore {
                     )
                 }
                 let diffStat = worktrees.diffStat(run: run, sha: sha)
+                // Итог merge — в запуск: терминальная карточка (6A).
+                run.mergeSHA = sha
+                run.commitURL = commitURL
+                run.diffStat = diffStat
+                run.pushFailed = commitURL == nil
                 run = Engine.mergeSucceeded(run, now: now())
                 await enqueueJiraWriteBack(
                     run, sha: sha, commitURL: commitURL, diffStat: diffStat
@@ -460,7 +646,8 @@ public actor DaemonCore {
         _ run: OrganizationRun, sha: String, commitURL: String?, diffStat: String
     ) async {
         guard run.outcome == .merged, run.task.source == .jira,
-              !run.task.jiraKey.isEmpty, run.parentRunID == nil
+              !run.task.jiraKey.isEmpty, run.parentRunID == nil,
+              !run.isExperimental // side effects — только у primary (П5)
         else { return }
         var lines = ["Задача смёржена Petable."]
         if let commitURL {
@@ -516,22 +703,44 @@ public actor DaemonCore {
 
     /// Статус в Jira следует за конвейером (правка автора №7): при
     /// переходе задачи на этап — ближайший по смыслу статус, не 1:1.
-    /// Best-effort: без секретов или похожего статуса — пропуск, следующий
-    /// переход догонит; гарантированный Done при финале идёт intent-очередью.
+    /// Конфигурируемый маппинг организации (`jiraStatusMap`) приоритетнее
+    /// эвристики; эвристика остаётся fallback'ом. Best-effort: без
+    /// секретов или похожего статуса — пропуск, следующий переход
+    /// догонит; гарантированный Done при финале идёт intent-очередью.
     private func syncJiraStage(_ run: OrganizationRun) async {
         guard let config = jiraConfig, config.isComplete,
               run.task.source == .jira, !run.task.jiraKey.isEmpty,
-              run.parentRunID == nil,
+              run.parentRunID == nil, !run.isExperimental,
               run.status == .running || run.status == .waitingGate,
               let stage = run.currentStage,
               jiraStageSync[run.id] != stage.id
         else { return }
         jiraStageSync[run.id] = stage.id
         let hints = Self.jiraStatusHints(for: stage.kind)
+        let custom = Self.customStatus(
+            for: stage.kind, map: organizations[run.orgID]?.jiraStatusMap
+        )
         try? await jira.transitionBestMatch(
             config, issueKey: run.task.jiraKey,
-            hints: hints.names, category: hints.category
+            hints: (custom.map { [$0] } ?? []) + hints.names,
+            category: hints.category
         )
+    }
+
+    /// Кастомный статус вида этапа из маппинга организации (№7);
+    /// decompose/join наследуют work, merge — review, если своего нет.
+    static func customStatus(for kind: StageKind, map: [String: String]?) -> String? {
+        guard let map else { return nil }
+        func value(_ kind: StageKind) -> String? {
+            let raw = map[kind.rawValue]?.trimmingCharacters(in: .whitespaces)
+            return (raw?.isEmpty ?? true) ? nil : raw
+        }
+        if let own = value(kind) { return own }
+        switch kind {
+        case .decompose, .join: return value(.work)
+        case .merge: return value(.review)
+        default: return nil
+        }
     }
 
     /// Подсказки подбора статуса по виду этапа (порядок = приоритет).
@@ -549,18 +758,24 @@ public actor DaemonCore {
     /// Чат с сотрудником (П9): рестарт-с-контекстом текущего этапа в
     /// состояниях {ждёт гейта, требует внимания}; пройденные — read-only.
     private func chat(_ command: ChatCommand) async {
-        guard var run = runs[command.runID],
+        guard !draining,
+              var run = runs[command.runID],
               run.status == .waitingGate || run.status == .needsAttention
         else { return }
         run.status = .running
         run.statusReason = ""
         runs[command.runID] = run
         let runner = StageRunner(store: store, registry: registry, now: now)
+        activeStageCount += 1
         let result = await runner.runCurrentStage(
             run,
             worktree: worktrees.worktreeURL(runID: run.id),
-            extraContext: "Сообщение человека: \(command.text)"
+            extraContext: "Сообщение человека: \(command.text)",
+            onEvent: { [weak self] in
+                Task { await self?.heartbeat(command.runID) }
+            }
         )
+        activeStageCount -= 1
         runs[command.runID] = result.run
         publishState(result.run)
         // Чат на decompose-этапе тоже может выдать подзадачи.
@@ -572,6 +787,18 @@ public actor DaemonCore {
     }
 
     // MARK: Восстановление (П0)
+
+    /// Рестарт демона: поднять ВСЕ организации из хранилища — активные
+    /// запуски (в т.ч. прерванные drain'ом при обновлении) продолжаются
+    /// до первого коннекта приложения.
+    public func recoverAll() async {
+        for orgID in store.listOrgIDs() {
+            await recover(orgID: orgID)
+        }
+        for run in runs.values where run.status == .running {
+            await continueRunIfRunning(run.id)
+        }
+    }
 
     /// Рестарт демона: поднять запуски из журналов, убить осиротевшие
     /// процессы, прерванные этапы — с чистого worktree.
@@ -617,8 +844,28 @@ public actor DaemonCore {
     }
 
     private func publishState(_ run: OrganizationRun) {
+        // Каждая публикация — событие запуска: штамп для «последнее
+        // событие N сек назад» и пульса (6A).
+        var stamped = run
+        stamped.lastEventAt = now()
+        runs[run.id] = stamped
         guard let sink,
-              let data = try? WireEnvelope.pack(.runState, RunStateMessage(run: run))
+              let data = try? WireEnvelope.pack(.runState, RunStateMessage(run: stamped))
+        else { return }
+        sink(data)
+    }
+
+    /// Пульс этапа (6A): события адаптера коалесцируются до ~1 Гц.
+    private func heartbeat(_ runID: UUID) {
+        guard let run = runs[runID], run.status == .running else { return }
+        if let last = run.lastEventAt, now().timeIntervalSince(last) < 1 { return }
+        publishState(run)
+    }
+
+    /// Drain дошёл до нуля активных этапов — демона можно заменять.
+    private func publishDrainedIfIdle() {
+        guard draining, activeStageCount == 0, let sink,
+              let data = try? WireEnvelope.pack(.drained, 0)
         else { return }
         sink(data)
     }

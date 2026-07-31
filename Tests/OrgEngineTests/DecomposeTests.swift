@@ -34,7 +34,8 @@ struct DecomposeTests {
     /// подзадачи типа «Задача» едут дефолтным линейным флоу.
     private func makeWorld(
         claudeScripts: [[AgentEvent]],
-        codexScripts: [[AgentEvent]]
+        codexScripts: [[AgentEvent]],
+        github: GitHubClient = GitHubClient()
     ) throws -> (DaemonCore, Organization, OrgTask, EventStore) {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("petable-decompose-\(UUID().uuidString)")
@@ -71,6 +72,7 @@ struct DecomposeTests {
                 QueueAdapter(cliID: "claude", scripts: claudeScripts),
                 QueueAdapter(cliID: "codex", scripts: codexScripts),
             ]),
+            github: github,
             now: { self.t0 }
         )
         return (core, org, task, store)
@@ -163,5 +165,52 @@ struct DecomposeTests {
         let parent = try #require(await core.run(parentID))
         #expect(parent.status == .needsAttention)
         #expect(parent.statusReason.contains("не merge"))
+    }
+
+    @Test("Правка №5: подзадача с незнакомым репо — репозиторий создаётся через GitHub (фейк) и клонируется в хранилище")
+    func decomposeCreatesRepo() async throws {
+        // Живой git-источник — «GitHub» отдаёт его путь как clone_url.
+        let src = FileManager.default.temporaryDirectory
+            .appendingPathComponent("petable-ghsrc-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: src, withIntermediateDirectories: true)
+        _ = DaemonCore.shell(
+            "git init -q -b main && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m init",
+            cwd: src
+        )
+
+        let decomposeVerdict = Verdict(
+            status: .done,
+            subtasks: [.init(title: "Новый сервис", taskType: "Задача", repo: "svc-new")]
+        )
+        let done: [AgentEvent] = [.finished(Verdict(status: .done), usage: AgentUsage())]
+        let (core, org, task, store) = try makeWorld(
+            claudeScripts: [[.finished(decomposeVerdict, usage: AgentUsage())], done],
+            codexScripts: [done],
+            github: GitHubClient(transport: FakeGitHubTransport(cloneURL: src.path))
+        )
+        try await send(core, .configure, ConfigureCommand(githubToken: "t"))
+        try await send(core, .startRun, StartRunCommand(organization: org, taskID: task.id))
+
+        let parentID = try #require(await core.runID(forTask: task.id))
+        let childID = try #require(await core.run(parentID)?.childRunIDs?.first)
+        let child = try #require(await core.run(childID))
+        #expect(child.repo.name == "svc-new")
+        #expect(child.repo.path.hasPrefix(
+            store.root.appendingPathComponent("repos").path
+        ))
+        #expect(FileManager.default.fileExists(atPath: child.repo.path + "/.git"))
+    }
+}
+
+/// «GitHub», отдающий фиксированный clone_url на createRepo.
+private final class FakeGitHubTransport: JiraHTTPTransport, @unchecked Sendable {
+    let cloneURL: String
+
+    init(cloneURL: String) {
+        self.cloneURL = cloneURL
+    }
+
+    func send(_ request: URLRequest) async throws -> (Data, Int) {
+        (Data("{\"clone_url\":\"\(cloneURL)\"}".utf8), 201)
     }
 }

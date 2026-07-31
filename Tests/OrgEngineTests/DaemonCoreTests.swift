@@ -172,8 +172,43 @@ struct DaemonCoreTests {
         let run = try #require(await core.run(runID))
         #expect(run.outcome == .cancelled)
 
-        let unknown = WireEnvelope(type: "shadowRun", payload: Data("{}".utf8))
+        let unknown = WireEnvelope(type: "quantumRun", payload: Data("{}".utf8))
         try await core.handle(JSONEncoder().encode(unknown)) // не бросает
+    }
+
+    @Test("Drain (П0): новые этапы не начинаются, drained уходит подписчику; recoverAll свежего демона доводит запуск")
+    func drainThenRecoverAll() async throws {
+        let done: [AgentEvent] = [.finished(Verdict(status: .done), usage: AgentUsage())]
+        let (core, org, task, store) = try makeWorld(
+            claudeScripts: [done], codexScripts: [done]
+        )
+        let states = StateCollector()
+        await core.subscribe { states.collect($0) }
+
+        try await send(core, .drain, 0)
+        #expect(states.drainedCount() == 1) // этапов нет — drained сразу
+
+        try await send(core, .startRun, StartRunCommand(organization: org, taskID: task.id))
+        let runID = try #require(await core.runID(forTask: task.id))
+        let run = try #require(await core.run(runID))
+        #expect(run.status == .running)   // остался на старте:
+        #expect(run.path.count == 1)      // drain не пустил в первый этап
+        #expect(states.drainedCount() >= 2)
+
+        // «Рестарт демона»: свежее ядро с теми же журналами — recoverAll
+        // поднимает запуск и доводит до финального гейта.
+        let fresh = DaemonCore(
+            store: store,
+            registry: AdapterRegistry([
+                ScriptedAdapter(cliID: "claude", scripts: [done]),
+                ScriptedAdapter(cliID: "codex", scripts: [done]),
+            ]),
+            now: { self.t0 }
+        )
+        await fresh.recoverAll()
+        let recovered = try #require(await fresh.run(runID))
+        #expect(recovered.status == .waitingGate)
+        #expect(recovered.currentStage?.kind == .merge)
     }
 }
 
@@ -197,5 +232,13 @@ private final class StateCollector: @unchecked Sendable {
             else { return nil }
             return message.run
         }
+    }
+
+    func drainedCount() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return messages.filter { data in
+            (try? WireEnvelope.unpack(data))?.type == .drained
+        }.count
     }
 }

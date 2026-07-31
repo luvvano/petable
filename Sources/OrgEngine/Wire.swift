@@ -42,18 +42,31 @@ public struct WireEnvelope: Codable, Equatable, Sendable {
 public enum WireType: String, Sendable {
     // Команды приложение → демон.
     case startRun, approve, reject, cancel, chat, subscribe, configure
+    /// Drain перед обновлением движка (П0): новые этапы не начинаются,
+    /// текущие дорабатывают; демон отвечает событием `drained`.
+    case drain
+    /// Теневой запуск задачи по экспериментальному флоу (слайс 13).
+    case shadowRun
+    /// Fork запуска с override модели (слайс 12, ⌥Enter).
+    case forkRun
     // События демон → приложение (EventSink).
     case runState, logBatch, attention, handshake
+    /// Активных этапов не осталось — демона можно заменять.
+    case drained
 }
 
 /// Секреты внешних сервисов: приложение читает Keychain и передаёт демону
 /// при коннекте (Безопасность дизайн-дока) — демон держит ТОЛЬКО в памяти,
 /// после рестарта ждёт следующего коннекта, write-back копится в очереди.
+/// `githubToken` — для агентного создания репозиториев под подзадачи
+/// декомпозиции (правка №5).
 public struct ConfigureCommand: Codable, Equatable, Sendable {
     public var jira: JiraConfig?
+    public var githubToken: String?
 
-    public init(jira: JiraConfig? = nil) {
+    public init(jira: JiraConfig? = nil, githubToken: String? = nil) {
         self.jira = jira
+        self.githubToken = githubToken
     }
 }
 
@@ -87,6 +100,35 @@ public struct RemoteRepoCandidate: Codable, Equatable, Sendable {
         self.name = name
         self.sshURL = sshURL
         self.httpsURL = httpsURL
+    }
+}
+
+/// Теневой запуск (слайс 13): та же задача по экспериментальному флоу.
+/// Experimental: без Jira write-back, без push, merge недостижим;
+/// результат — для сравнения в дебаггере.
+public struct ShadowRunCommand: Codable, Equatable, Sendable {
+    public var organization: Organization
+    public var taskID: UUID
+    public var flowID: UUID
+
+    public init(organization: Organization, taskID: UUID, flowID: UUID) {
+        self.organization = organization
+        self.taskID = taskID
+        self.flowID = flowID
+    }
+}
+
+/// Fork запуска (слайс 12): продолжить с текущего этапа источника в
+/// свежем worktree от точки форка (baseSHA, пин refs/petable) с
+/// override модели у всех сотрудников; experimental.
+public struct ForkRunCommand: Codable, Equatable, Sendable {
+    public var runID: UUID
+    /// Модель для всех сотрудников снапшота; пустая — без override.
+    public var model: String
+
+    public init(runID: UUID, model: String = "") {
+        self.runID = runID
+        self.model = model
     }
 }
 

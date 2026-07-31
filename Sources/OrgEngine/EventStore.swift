@@ -135,6 +135,16 @@ public struct EventStore: Sendable {
         return .events(events)
     }
 
+    /// Организации, у которых есть запуски в хранилище, — вход
+    /// recovery демона после рестарта (каталоги `runs/<orgID>`).
+    public func listOrgIDs() -> [UUID] {
+        let runsDir = root.appendingPathComponent("runs")
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: runsDir.path) else {
+            return []
+        }
+        return names.compactMap(UUID.init(uuidString:))
+    }
+
     /// Все запуски организации; нечитаемый каталог не роняет остальные.
     public func listRuns(orgID: UUID) -> [UUID: LoadedRun] {
         let orgDir = root.appendingPathComponent("runs").appendingPathComponent(orgID.uuidString)

@@ -128,6 +128,7 @@ struct AppShellView: View {
         case segmentMap
         case organization
         case organizationSettings
+        case organizationDebugger
     }
 
     /// Фильтр артефактов по происхождению: все / человек / агент.
@@ -293,6 +294,12 @@ struct AppShellView: View {
                         }
                         .tag(SidebarItem.organizationSettings)
                         .help("Типы задач · сотрудники · редактор флоу · интеграции")
+                        HStack {
+                            Label("Дебаггер", systemImage: "clock.arrow.circlepath")
+                            Spacer()
+                        }
+                        .tag(SidebarItem.organizationDebugger)
+                        .help("Replay запусков по событиям · fork с другой моделью · сравнение · тени")
                     } else {
                         newItemRow(
                             "Создать организацию",
@@ -450,6 +457,8 @@ struct AppShellView: View {
             PipelineView(document: document, controller: document.organizationController)
         case .organizationSettings:
             OrganizationView(document: document, controller: document.organizationController)
+        case .organizationDebugger:
+            DebuggerView(document: document, controller: document.organizationController)
         case nil:
             CanvasRootView(document: document)
         }
@@ -488,7 +497,7 @@ struct AppShellView: View {
                 }
                 .help("Поделиться шаблоном или экспортировать: файл, буфер обмена")
             }
-        case .segment, .segmentMap, .organization, .organizationSettings:
+        case .segment, .segmentMap, .organization, .organizationSettings, .organizationDebugger:
             EmptyView()
         case nil:
             if let stage = document.graphStages.first(where: { $0.id == document.selectedGraphID }) {
@@ -564,6 +573,7 @@ struct AppShellView: View {
                 case .segmentMap: return .segmentMap
                 case .organization: return .organization
                 case .organizationSettings: return .organizationSettings
+                case .organizationDebugger: return .organizationDebugger
                 case nil: return document.selectedGraphID.map(SidebarItem.graph)
                 }
             },
@@ -576,6 +586,7 @@ struct AppShellView: View {
                 case .segmentMap: document.selectResearch(.segmentMap)
                 case .organization: document.selectResearch(.organization)
                 case .organizationSettings: document.selectResearch(.organizationSettings)
+                case .organizationDebugger: document.selectResearch(.organizationDebugger)
                 case nil: break
                 }
             }

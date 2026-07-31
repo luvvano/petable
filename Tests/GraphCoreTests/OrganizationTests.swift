@@ -197,4 +197,20 @@ struct OrganizationTests {
         #expect(flow.validate().isEmpty)
         #expect(flow.startStage?.id == decompose.id)
     }
+
+    @Test("Версия флоу (2A): старый JSON без поля version читается как v1, свежая пишется")
+    func flowVersionBackcompat() throws {
+        let flow = OrgFlow(name: "Флоу", stages: [], version: 7)
+        let data = try JSONEncoder().encode(flow)
+        let roundTrip = try JSONDecoder().decode(OrgFlow.self, from: data)
+        #expect(roundTrip.version == 7)
+
+        var json = try #require(
+            try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        json["version"] = nil
+        let stripped = try JSONSerialization.data(withJSONObject: json)
+        let legacy = try JSONDecoder().decode(OrgFlow.self, from: stripped)
+        #expect(legacy.version == 1)
+    }
 }

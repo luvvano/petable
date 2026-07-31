@@ -101,11 +101,16 @@ public enum Engine {
     }
 
     /// Принять на гейте. На merge-этапе — в очередь merge (Approve →
-    /// rebase → повторные тесты → merge, П5).
+    /// rebase → повторные тесты → merge, П5). Experimental-запуски
+    /// (тени/форки) терминальны ДО merge: Принять закрывает их итогом
+    /// для сравнения, два merge одной задачи невозможны по построению.
     public static func approve(_ run: OrganizationRun, now: Date) -> OrganizationRun {
         guard run.status == .waitingGate, let stage = run.currentStage else { return run }
         var run = run
         if stage.kind == .merge {
+            if run.isExperimental {
+                return close(run, now: now)
+            }
             run.status = .merging
             run.statusReason = ""
             return run

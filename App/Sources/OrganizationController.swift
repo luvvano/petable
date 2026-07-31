@@ -42,6 +42,16 @@ final class OrganizationController: ObservableObject {
     @Published var githubLogin = GitHubSettingsStore.login
     /// Статус последней операции интеграций (клон, создание репо…).
     @Published var integrationStatus: String?
+    /// Сводка при открытии после отсутствия: «пока вас не было — N задач
+    /// ждут» (5A). Гаснет при первом взаимодействии со списком.
+    @Published var awaySummary: String?
+
+    /// Движок пора обновить: бинарь демона в бандле новее установленного.
+    @Published private(set) var engineUpdateAvailable = false
+    /// Статус установки/обновления движка (мини-прогресс, матрица 4A).
+    @Published var engineStatus: String?
+    /// Ожидание drained-события демона при обновлении (П0).
+    private var drainContinuation: CheckedContinuation<Void, Never>?
 
     /// Цикл оркестратора (правки №8/№9) и дедуп его нотификаций.
     private var orchestratorTask: Task<Void, Never>?
@@ -51,15 +61,30 @@ final class OrganizationController: ObservableObject {
     private var transport: (any EngineTransport)?
 
     /// Запуски, требующие человека, — очередь внимания (N/P, Dock-бейдж).
+    /// Experimental не зовут: их итог живёт в дебаггере.
     var attentionRuns: [OrganizationRun] {
         runs.values
-            .filter { $0.status == .needsAttention || $0.status == .waitingGate }
+            .filter {
+                ($0.status == .needsAttention || $0.status == .waitingGate)
+                    && !$0.isExperimental
+            }
             .sorted { $0.startedAt < $1.startedAt }
     }
 
     func run(forTask taskID: UUID) -> OrganizationRun? {
-        runs.values.first(where: { $0.task.id == taskID && $0.status != .finished })
+        // Primary приоритетнее теней/форков (они живут в дебаггере).
+        runs.values.first(where: {
+            $0.task.id == taskID && $0.status != .finished && !$0.isExperimental
+        })
+            ?? runs.values.first(where: { $0.task.id == taskID && !$0.isExperimental })
             ?? runs.values.first(where: { $0.task.id == taskID })
+    }
+
+    /// Experimental-запуски задачи — тени и форки (полупрозрачные, 13).
+    func experimentalRuns(forTask taskID: UUID) -> [OrganizationRun] {
+        runs.values
+            .filter { $0.task.id == taskID && $0.isExperimental }
+            .sorted { $0.startedAt < $1.startedAt }
     }
 
     // MARK: Подключение
@@ -97,20 +122,75 @@ final class OrganizationController: ObservableObject {
         await transport?.subscribe { [weak self] data in
             Task { @MainActor in self?.receive(data) }
         }
+        engineUpdateAvailable = mode == .daemon && DaemonManager.updateAvailable
         // Секреты — демону при коннекте (Безопасность дизайн-дока):
         // он держит их в памяти и разгружает очередь write-back.
         await ensureFreshJira()
         configureJira()
         restartOrchestrator()
+        // Сводка 5A: пауза — снапшоты запусков долетают при подписке.
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(1.5))
+            guard let self, self.awaySummary == nil else { return }
+            let waiting = self.attentionRuns.count
+            if waiting > 0 {
+                self.awaySummary = "Пока вас не было: \(OrgUI.taskCount(waiting)) "
+                    + (waiting == 1 ? "ждёт" : "ждут") + " вашего решения"
+            }
+        }
+    }
+
+    // MARK: Движок: установка и обновление из приложения (П0)
+
+    /// Есть чем ставить: бинарь демона встроен в сборку приложения.
+    var canInstallEngine: Bool { DaemonManager.bundledBinary != nil }
+
+    /// Кнопка «Установить/Обновить движок»: при активных этапах — drain
+    /// (новые этапы не начинаются, текущие дорабатывают), затем bootout →
+    /// копия бинаря → bootstrap → реконнект. Свежий демон доводит
+    /// прерванные запуски через recovery из event-log.
+    func installOrUpdateEngine() async {
+        guard canInstallEngine else {
+            engineStatus = "В сборке приложения нет бинаря демона — пересобери make install"
+            return
+        }
+        if mode == .daemon,
+           runs.values.contains(where: { $0.status == .running || $0.status == .merging }) {
+            engineStatus = "Жду завершения активных этапов (drain)…"
+            send(.drain, 0)
+            await withCheckedContinuation { continuation in
+                drainContinuation = continuation
+                Task { @MainActor in
+                    // Страховка от вечного ожидания: этап длиннее 10 минут —
+                    // recovery свежего демона перезапустит его с чистого worktree.
+                    try? await Task.sleep(for: .seconds(600))
+                    self.drainContinuation?.resume()
+                    self.drainContinuation = nil
+                }
+            }
+        }
+        engineStatus = "Устанавливаю движок…"
+        do {
+            try await Task.detached { try DaemonManager.install() }.value
+            transport = nil
+            engineStatus = "Движок установлен и запущен"
+            engineUpdateAvailable = false
+            if let document { await connect(document: document) }
+        } catch {
+            engineStatus = "Установка движка: \(error.localizedDescription)"
+        }
     }
 
     // MARK: Jira (слайс 7, П4″)
 
-    /// Передаёт учётные данные Jira движку — вызывать при коннекте и
-    /// после сохранения настроек.
+    /// Передаёт секреты движку (Jira + GitHub-токен для агентного
+    /// создания репозиториев, №5) — при коннекте и после сохранения
+    /// настроек. Демон держит их только в памяти.
     func configureJira() {
-        guard let config = JiraSettingsStore.config() else { return }
-        send(.configure, ConfigureCommand(jira: config))
+        let config = JiraSettingsStore.config()
+        let token = GitHubSettingsStore.token
+        guard config != nil || token != nil else { return }
+        send(.configure, ConfigureCommand(jira: config, githubToken: token))
     }
 
     /// OAuth-коннектор (правка автора): браузер → «Согласен» → готово;
@@ -220,6 +300,7 @@ final class OrganizationController: ObservableObject {
             GitHubSettingsStore.login = login
             githubLogin = login
             integrationStatus = "GitHub подключён: \(login)"
+            configureJira() // токен движку — агентные репо (№5)
         } catch let error as GitHubError {
             integrationStatus = error.statusCode == 401
                 ? "GitHub: токен не подошёл"
@@ -330,14 +411,77 @@ final class OrganizationController: ObservableObject {
             }
         }
         // Зависшие: ждут человека — одно напоминание на состояние.
+        // При включённом resolveStuck «требует внимания» сначала разбирает
+        // оркестратор-LLM (правка №8); гейты — человеку всегда (П5).
         for run in attentionRuns where !stuckNotified.contains(run.id) {
             stuckNotified.insert(run.id)
+            if OrchestratorSettings.resolveStuck, run.status == .needsAttention {
+                await resolveStuckRun(run)
+                continue
+            }
             notify(
                 id: "orchestrator-stuck-\(run.id)",
                 title: "Задача ждёт вас: \(run.task.title)",
                 body: run.status == .needsAttention
                     ? run.statusReason
                     : "ждёт решения на гейте «\(run.currentStage?.name ?? "")»"
+            )
+        }
+    }
+
+    /// Оркестратор-LLM (правка №8): смотрит на причину затыка и решает —
+    /// retry (перезапустить этап с советом через чат П9), cancel
+    /// (отменить) или wait (оставить человеку). Не распознали ответ —
+    /// честная нотификация человеку.
+    private func resolveStuckRun(_ run: OrganizationRun) async {
+        var decision: String?
+        if let claude = CLIDiscovery.locate("claude") {
+            let adapter = CLIProcessAdapter.claude(executable: claude)
+            let prompt = """
+            Ты — оркестратор конвейера ИИ-сотрудников. Задача застряла, реши, что делать.
+
+            Задача\(run.task.jiraKey.isEmpty ? "" : " [\(run.task.jiraKey)]"): «\(run.task.title)»
+            Этап: «\(run.currentStage?.name ?? "?")»
+            Причина остановки: \(run.statusReason)
+            Возвратов уже: \(run.returnCount) из 3.
+
+            Действия: retry — перезапустить этап, дав сотруднику конкретный совет,
+            как обойти проблему; cancel — отменить задачу (проблема не решается
+            автоматикой); wait — оставить человеку (нужно его решение).
+            Ничего не делай с кодом. Ответь ТОЛЬКО JSON-блоком:
+            {"status":"done","note":"<retry|cancel|wait>: <совет сотруднику или пояснение>"}
+            """
+            let root = EventStore.defaultRoot()
+            try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            for await event in adapter.run(AgentRequest(
+                prompt: prompt, workingDirectory: root, config: AdapterConfig()
+            )) {
+                if case let .finished(verdict, _) = event { decision = verdict.note }
+            }
+        }
+        let note = (decision ?? "").trimmingCharacters(in: .whitespaces)
+        let lower = note.lowercased()
+        let detail = note.drop(while: { $0 != ":" }).dropFirst()
+            .trimmingCharacters(in: .whitespaces)
+        if lower.hasPrefix("retry"), !detail.isEmpty {
+            chat(run.id, text: detail)
+            notify(
+                id: "orchestrator-retry-\(run.id)",
+                title: "Оркестратор перезапустил этап: \(run.task.title)",
+                body: detail
+            )
+        } else if lower.hasPrefix("cancel") {
+            cancel(run.id)
+            notify(
+                id: "orchestrator-cancel-\(run.id)",
+                title: "Оркестратор отменил: \(run.task.title)",
+                body: detail.isEmpty ? run.statusReason : detail
+            )
+        } else {
+            notify(
+                id: "orchestrator-stuck-\(run.id)",
+                title: "Задача ждёт вас: \(run.task.title)",
+                body: run.statusReason
             )
         }
     }
@@ -375,12 +519,19 @@ final class OrganizationController: ObservableObject {
             notifyIfNeeded(run, previous: previous)
             updateDockBadge()
             if run.status == .finished, let summary = run.summary {
-                // Терминал: саммари в документ, задача уходит с борда.
+                // Терминал: саммари в документ; задача уходит с борда
+                // только по итогу primary — тень/форк её не снимают.
                 document?.reconcileRunSummaries([summary])
-                document?.updateOrganization { org in
-                    org.tasks.removeAll { $0.id == run.task.id }
+                if !run.isExperimental {
+                    document?.updateOrganization { org in
+                        org.tasks.removeAll { $0.id == run.task.id }
+                    }
                 }
             }
+        case .drained:
+            // Демон дорасходовал активные этапы — можно заменять (П0).
+            drainContinuation?.resume()
+            drainContinuation = nil
         default:
             break
         }
@@ -393,7 +544,7 @@ final class OrganizationController: ObservableObject {
     /// приложении баннеров нет (демон headless) — бейдж и сводка при
     /// следующем открытии.
     private func notifyIfNeeded(_ run: OrganizationRun, previous: RunStatus?) {
-        guard run.status != previous else { return }
+        guard run.status != previous, !run.isExperimental else { return }
         let title: String
         let body: String
         switch run.status {
@@ -469,6 +620,19 @@ final class OrganizationController: ObservableObject {
             taskID: task.id,
             candidates: candidates.isEmpty ? nil : candidates
         ))
+    }
+
+    /// Теневой запуск (13): та же задача по экспериментальному флоу.
+    func shadowRun(task: OrgTask, flowID: UUID) {
+        guard let organization = document?.organization else { return }
+        send(.shadowRun, ShadowRunCommand(
+            organization: organization, taskID: task.id, flowID: flowID
+        ))
+    }
+
+    /// Fork запуска с override модели (12, ⌥Enter).
+    func forkRun(_ runID: UUID, model: String) {
+        send(.forkRun, ForkRunCommand(runID: runID, model: model))
     }
 
     func approve(_ runID: UUID) { send(.approve, runID) }

@@ -85,6 +85,30 @@ enum OrgUI {
         }
     }
 
+    /// «1 задача / 2 задачи / 5 задач» — русская плюрализация.
+    static func taskCount(_ count: Int) -> String {
+        let mod10 = count % 10
+        let mod100 = count % 100
+        let word: String
+        if mod10 == 1, mod100 != 11 {
+            word = "задача"
+        } else if (2...4).contains(mod10), !(12...14).contains(mod100) {
+            word = "задачи"
+        } else {
+            word = "задач"
+        }
+        return "\(count) \(word)"
+    }
+
+    /// «последнее событие N сек назад» (6A); nil — штампа нет.
+    static func lastEventText(_ run: OrganizationRun, now: Date) -> String? {
+        guard run.status == .running, let last = run.lastEventAt else { return nil }
+        let seconds = max(0, Int(now.timeIntervalSince(last)))
+        if seconds < 5 { return "последнее событие только что" }
+        if seconds < 120 { return "последнее событие \(seconds) сек назад" }
+        return "последнее событие \(seconds / 60) мин назад"
+    }
+
     /// Причина, по которой «Запустить» недоступна; nil — можно (12A).
     static func startBlockReason(_ task: OrgTask, organization: Organization) -> String? {
         guard let typeID = task.taskTypeID,
@@ -172,6 +196,47 @@ struct StageNodeView: View {
 
     private var ringWidth: CGFloat {
         emphasis == .selected || emphasis == .current ? 2.5 : 2
+    }
+}
+
+/// Баннер состояния движка (матрица 4A): режим in-process — кнопка
+/// «Установить движок»; версии разошлись — «Обновить движок» (drain П0);
+/// строка статуса установки. Общий для конвейера и настроек.
+struct EngineBannerView: View {
+    @ObservedObject var controller: OrganizationController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let banner = controller.mode.banner {
+                HStack(spacing: 8) {
+                    Label(banner, systemImage: "exclamationmark.triangle")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.orange)
+                    if case .inProcess = controller.mode, controller.canInstallEngine {
+                        Button("Установить движок") {
+                            Task { await controller.installOrUpdateEngine() }
+                        }
+                        .font(.system(size: 11))
+                    }
+                }
+            }
+            if controller.engineUpdateAvailable {
+                HStack(spacing: 8) {
+                    Label("Движок отличается от версии приложения", systemImage: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.orange)
+                    Button("Обновить движок") {
+                        Task { await controller.installOrUpdateEngine() }
+                    }
+                    .font(.system(size: 11))
+                }
+            }
+            if let status = controller.engineStatus {
+                Text(status)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 }
 

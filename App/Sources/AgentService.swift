@@ -313,6 +313,16 @@ enum OrchestratorSettings {
         get { UserDefaults.standard.bool(forKey: autoStartKey) }
         set { UserDefaults.standard.set(newValue, forKey: autoStartKey) }
     }
+
+    private static let resolveStuckKey = "orchestrator.resolveStuck"
+
+    /// true — зависшие («требует внимания») сначала разбирает
+    /// оркестратор-LLM: перезапуск с советом или отмена; гейты
+    /// остаются человеку всегда (П5).
+    static var resolveStuck: Bool {
+        get { UserDefaults.standard.bool(forKey: resolveStuckKey) }
+        set { UserDefaults.standard.set(newValue, forKey: resolveStuckKey) }
+    }
 }
 
 // MARK: - NMT-промпт

@@ -13,6 +13,7 @@
 		1FF0B197461697A81BA29481 /* OrganizationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BDCCD39A977C740B0701381 /* OrganizationController.swift */; };
 		2182349EFAF633AE04318EDE /* JobCardUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C118770D8716012B071DA6E7 /* JobCardUITests.swift */; };
 		257681894B444D2784735B69 /* CanvasHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D48D8C6ACF85E367BFD35260 /* CanvasHostView.swift */; };
+		29751D39D8B54446F96EE41D /* DaemonManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9507A81C4742E301AD752D85 /* DaemonManager.swift */; };
 		301D78B093CF673A5EFF57F2 /* MechanicPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50A7B7850B3D4727BC24D751 /* MechanicPreviewView.swift */; };
 		31E314912EF3116B4C826AFC /* AgentRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = E51CEF3AEB39594A291DFC9F /* AgentRuntime */; };
 		3AC5D72F0299A596AE1926B9 /* ResearchViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F11456C586746FF698A909A /* ResearchViews.swift */; };
@@ -38,6 +39,7 @@
 		BC2E5ECFEA80278D956B6A8D /* LevelColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DCB7854D3BB308FACCA6CA8 /* LevelColors.swift */; };
 		BC48987AD696E5470DA2F4AB /* SegmentViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD15B5C36F969484C7736B95 /* SegmentViews.swift */; };
 		C052A9F13CF86A28F23F7E24 /* CopyPasteUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FEBA89EB1ABD5AE0D0A3553 /* CopyPasteUITests.swift */; };
+		C8B785F6FBFF2B94E2A56FC3 /* DebuggerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EFCAFE61983C6AFD3BDCEE4 /* DebuggerView.swift */; };
 		D0D86A1C5D5226B88F0BC93B /* ProjectStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 047B9837F8FEFE53EDB0338C /* ProjectStore.swift */; };
 		F3F141C896EEF6B7E6DB28BC /* KeyboardFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9569C7DB8D26BBD48DECBDA9 /* KeyboardFlowUITests.swift */; };
 /* End PBXBuildFile section */
@@ -66,12 +68,14 @@
 		5569EF7D17D2C3983BED72E8 /* AgentChatViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentChatViews.swift; sourceTree = "<group>"; };
 		5784A5AD0A8680F74738F4F5 /* PetableDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetableDocument.swift; sourceTree = "<group>"; };
 		5EB6C462D7DAA6E097ACD327 /* petableUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = petableUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		5EFCAFE61983C6AFD3BDCEE4 /* DebuggerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebuggerView.swift; sourceTree = "<group>"; };
 		66F677C38136504A3ADFEE31 /* OrgShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrgShared.swift; sourceTree = "<group>"; };
 		6A3B916C8B868F1AFF2FCF9B /* GraphGroupingUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphGroupingUITests.swift; sourceTree = "<group>"; };
 		6A3EE239B459EE503E0DFB00 /* JiraOAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JiraOAuth.swift; sourceTree = "<group>"; };
 		82EFC37AA58788E77160B2A6 /* UpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateService.swift; sourceTree = "<group>"; };
 		84D258FBEF767A24F6E72BA5 /* effervescent-squishing-valley */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "effervescent-squishing-valley"; path = .; sourceTree = SOURCE_ROOT; };
 		8DCB7854D3BB308FACCA6CA8 /* LevelColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LevelColors.swift; sourceTree = "<group>"; };
+		9507A81C4742E301AD752D85 /* DaemonManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DaemonManager.swift; sourceTree = "<group>"; };
 		9569C7DB8D26BBD48DECBDA9 /* KeyboardFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardFlowUITests.swift; sourceTree = "<group>"; };
 		98C30A1BAAAF4FDF1990FED8 /* petable.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = petable.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A16AD5F31A553C1F92C9B595 /* MechanicPaletteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MechanicPaletteUITests.swift; sourceTree = "<group>"; };
@@ -130,6 +134,8 @@
 				D48D8C6ACF85E367BFD35260 /* CanvasHostView.swift */,
 				C70377BEAC79F596245F8956 /* CanvasRootView.swift */,
 				19ACB25414799E8B2D80DDCA /* CommentsViews.swift */,
+				9507A81C4742E301AD752D85 /* DaemonManager.swift */,
+				5EFCAFE61983C6AFD3BDCEE4 /* DebuggerView.swift */,
 				E6DADB00ADC81C9ACD5DD30C /* EdgeShape.swift */,
 				1331AC4697E53BAD68A9316F /* ExportImport.swift */,
 				AFA44484780ECA08BBAAC77D /* GraphSnapshotView.swift */,
@@ -211,6 +217,7 @@
 				DA467A911BE9A0D35A0D3A9C /* Sources */,
 				1A94F7FB56B6B1B8CD8004D0 /* Resources */,
 				72326585BBE2C40A34F8699A /* Frameworks */,
+				62294DFE6B0AB4DD2AB2527B /* Embed daemon */,
 				6449190CA146BFABD1F936C6 /* Embed build SHA */,
 			);
 			buildRules = (
@@ -279,6 +286,25 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		62294DFE6B0AB4DD2AB2527B /* Embed daemon */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed daemon";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\n/usr/bin/env -i HOME=\"$HOME\" PATH=\"/usr/bin:/bin:/usr/local/bin\" \\\n  /usr/bin/xcrun swift build -c release --product petable-daemon \\\n  --package-path \"$PROJECT_DIR\"\nRES=\"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nmkdir -p \"$RES\"\ncp \"$PROJECT_DIR/.build/release/petable-daemon\" \"$RES/petable-daemon\"\n";
+		};
 		6449190CA146BFABD1F936C6 /* Embed build SHA */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -323,6 +349,8 @@
 				257681894B444D2784735B69 /* CanvasHostView.swift in Sources */,
 				66ACAE8195976D7C719E5D32 /* CanvasRootView.swift in Sources */,
 				A86588359D034340588FE72A /* CommentsViews.swift in Sources */,
+				29751D39D8B54446F96EE41D /* DaemonManager.swift in Sources */,
+				C8B785F6FBFF2B94E2A56FC3 /* DebuggerView.swift in Sources */,
 				9DDC7ACAB3123B16C752B7CE /* EdgeShape.swift in Sources */,
 				900E3D2ADF383CAD72DF5DC8 /* ExportImport.swift in Sources */,
 				9A1A09F8C6438DB47574E315 /* GraphSnapshotView.swift in Sources */,
@@ -437,6 +465,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -538,6 +567,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

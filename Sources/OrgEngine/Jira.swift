@@ -114,10 +114,13 @@ public struct JiraClient: JiraGateway, Sendable {
 
     // MARK: Импорт
 
+    /// Поиск — новым endpoint'ом `/search/jql` (старый `/search` удалён
+    /// Atlassian в 2025, HTTP 410 — CHANGE-2046). Поля обязательны явно:
+    /// без `fields` новый endpoint отдаёт только id.
     public func searchIssues(
         _ config: JiraConfig, jql: String, maxResults: Int = 50
     ) async throws -> [JiraIssue] {
-        let data = try await get(config, path: "/rest/api/2/search", query: [
+        let data = try await get(config, path: "/rest/api/2/search/jql", query: [
             URLQueryItem(name: "jql", value: jql),
             URLQueryItem(name: "fields", value: "summary,description,issuetype,project"),
             URLQueryItem(name: "maxResults", value: "\(maxResults)"),

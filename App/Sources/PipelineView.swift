@@ -23,6 +23,9 @@ struct PipelineView: View {
     /// Память позиций токенов — распознаёт возврат (9A).
     @State private var stageMemo: [UUID: Int] = [:]
     @State private var flashedStages: Set<UUID> = []
+    /// Тихий пульс токена: реакция на событие этапа, не вечная анимация (6A).
+    @State private var lastEventMemo: [UUID: Date] = [:]
+    @State private var pulsingRuns: Set<UUID> = []
 
     var body: some View {
         Group {
@@ -61,10 +64,15 @@ struct PipelineView: View {
     private func content(_ organization: Organization) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                if let banner = controller.mode.banner {
-                    Label(banner, systemImage: "exclamationmark.triangle")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.orange)
+                EngineBannerView(controller: controller)
+                if let away = controller.awaySummary {
+                    HStack(spacing: 8) {
+                        Label(away, systemImage: "moon.zzz")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                        Button("Понятно") { controller.awaySummary = nil }
+                            .font(.system(size: 11))
+                    }
                 }
                 if let selected = selectedItem(organization) {
                     taskDetail(selected.task, run: selected.run, organization: organization)
@@ -222,6 +230,7 @@ struct PipelineView: View {
     private func open(taskID: UUID, run: OrganizationRun?) {
         selectedTaskID = taskID
         selectedStageID = run?.currentStageID
+        controller.awaySummary = nil // человек вернулся к списку (5A)
     }
 
     private func addTask() {
@@ -259,6 +268,10 @@ struct PipelineView: View {
                         Text("≈$\(summary.costEstimate, specifier: "%.2f")")
                             .font(.system(size: 10))
                             .foregroundStyle(.tertiary)
+                    }
+                    if let commitURL = summary.commitURL, let url = URL(string: commitURL) {
+                        Link("коммит", destination: url)
+                            .font(.system(size: 10))
                     }
                 }
                 .padding(.vertical, 2)
@@ -305,6 +318,16 @@ struct PipelineView: View {
                     .font(.system(size: 13, weight: .semibold))
                 Spacer()
                 if let run, run.status != .finished {
+                    Menu("Тень") {
+                        ForEach(organization.flows) { flow in
+                            Button(flow.name) {
+                                controller.shadowRun(task: task, flowID: flow.id)
+                            }
+                        }
+                    }
+                    .font(.system(size: 11))
+                    .fixedSize()
+                    .help("Теневой запуск той же задачи по экспериментальному флоу: Jira/push/merge выключены, результат — в дебаггере (13)")
                     Button("Отменить") { controller.cancel(run.id) }
                         .font(.system(size: 11))
                 } else if run == nil {
@@ -315,6 +338,34 @@ struct PipelineView: View {
                         .help(reason ?? "")
                 }
             }
+            // Тени и форки задачи — полупрозрачные, с пунктирной меткой (13).
+            ForEach(controller.experimentalRuns(forTask: task.id)) { shadow in
+                HStack(spacing: 8) {
+                    Text("эксп.")
+                        .font(.system(size: 9))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .overlay(
+                            Capsule().strokeBorder(
+                                Color.secondary, style: StrokeStyle(lineWidth: 1, dash: [3, 2])
+                            )
+                        )
+                    Text("\(shadow.flow.name) · \(OrgUI.statusText(shadow))")
+                        .font(.system(size: 11))
+                    Spacer()
+                    if shadow.status == .waitingGate {
+                        Button("Завершить") { controller.approve(shadow.id) }
+                            .font(.system(size: 10))
+                            .help("Experimental терминален до merge: закрывается итогом для сравнения")
+                    }
+                    if shadow.status != .finished {
+                        Button("Отменить") { controller.cancel(shadow.id) }
+                            .font(.system(size: 10))
+                    }
+                }
+                .foregroundStyle(.secondary)
+                .opacity(0.8)
+            }
             HStack(spacing: 12) {
                 Circle()
                     .fill(OrgUI.taskColor(run?.status))
@@ -322,12 +373,37 @@ struct PipelineView: View {
                 Text(OrgUI.statusText(run))
                     .font(.system(size: 12))
                     .foregroundStyle(run?.status == .needsAttention ? Color.red : Color.primary)
+                if let run, run.status == .running {
+                    // «Последнее событие N сек назад»; застой дольше двух
+                    // минут — янтарный оттенок (6A).
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        if let text = OrgUI.lastEventText(run, now: context.date) {
+                            Text(text)
+                                .font(.system(size: 10))
+                                .foregroundStyle(staleColor(run, now: context.date))
+                        }
+                    }
+                }
                 Spacer()
                 if let run, run.costEstimate > 0 {
                     Text("≈$\(run.costEstimate, specifier: "%.2f")")
                         .font(.system(size: 10))
                         .foregroundStyle(.tertiary)
                 }
+            }
+            // Бейдж расхождения версий (2A): запуск едет по снапшоту.
+            if let run, run.status != .finished, let pinned = run.flowVersion,
+               let current = organization.flows.first(where: { $0.id == run.flow.id }),
+               current.version != pinned {
+                Text("Запуск идёт по v\(pinned) · текущий флоу v\(current.version)")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(Color.secondary.opacity(0.1)))
+            }
+            if let run, run.status == .finished {
+                terminalCard(run)
             }
             if let flow {
                 flowDiagram(flow, run: run)
@@ -390,7 +466,8 @@ struct PipelineView: View {
     }
 
     /// Переход токена — единственная крупная анимация: ease-out 220 мс,
-    /// Reduce Motion — мгновенно (9A).
+    /// Reduce Motion — мгновенно (9A). Тихий пульс — короткий отклик
+    /// на событие этапа (6A), не вечная пульсация.
     private func runToken(_ run: OrganizationRun, index: Int) -> some View {
         Text(run.task.jiraKey.isEmpty ? String(run.task.title.prefix(12)) : run.task.jiraKey)
             .font(.system(size: 9, weight: .medium))
@@ -398,9 +475,95 @@ struct PipelineView: View {
             .padding(.vertical, 3)
             .background(Capsule().fill(OrgUI.taskColor(run.status).opacity(0.16)))
             .overlay(Capsule().strokeBorder(OrgUI.taskColor(run.status), lineWidth: 1))
+            .scaleEffect(pulsingRuns.contains(run.id) ? 1.12 : 1)
             .position(x: CGFloat(index) * 124 + 48, y: 10)
             .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: index)
+            .animation(
+                reduceMotion ? nil : .easeOut(duration: 0.18),
+                value: pulsingRuns.contains(run.id)
+            )
             .accessibilityLabel("\(run.task.title): \(OrgUI.statusText(run))")
+    }
+
+    /// Терминальная карточка запуска (6A): итог, время, стоимость,
+    /// возвраты, дифф-стат, ссылки; здесь же виден отказ push.
+    private func terminalCard(_ run: OrganizationRun) -> some View {
+        let outcome = run.outcome ?? .closed
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: outcomeIcon(outcome))
+                    .foregroundStyle(outcomeColor(outcome))
+                Text(outcomeTitle(outcome))
+                    .font(.system(size: 13, weight: .semibold))
+                Spacer()
+                if let finished = run.finishedAt {
+                    Text(durationText(from: run.startedAt, to: finished))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            HStack(spacing: 12) {
+                Text(run.returnCount > 0 ? "возврат \(run.returnCount) из 3" : "без возвратов")
+                if run.costEstimate > 0 {
+                    Text("≈$\(run.costEstimate, specifier: "%.2f")")
+                }
+            }
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+            if let diffStat = run.diffStat,
+               !diffStat.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(diffStat.trimmingCharacters(in: .whitespacesAndNewlines))
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+            HStack(spacing: 12) {
+                if let commitURL = run.commitURL, let url = URL(string: commitURL) {
+                    Link("Коммит в origin", destination: url)
+                        .font(.system(size: 11))
+                } else if run.pushFailed == true, let sha = run.mergeSHA {
+                    Label(
+                        "push не прошёл — коммит \(String(sha.prefix(10))) локально",
+                        systemImage: "exclamationmark.triangle"
+                    )
+                    .font(.system(size: 11))
+                    .foregroundStyle(.orange)
+                }
+                if !run.task.jiraKey.isEmpty, let url = jiraBrowseURL(run.task.jiraKey) {
+                    Link(run.task.jiraKey, destination: url)
+                        .font(.system(size: 11))
+                }
+            }
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 8).fill(outcomeColor(outcome).opacity(0.07)))
+        .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+
+    private func outcomeTitle(_ outcome: RunOutcome) -> String {
+        switch outcome {
+        case .merged: return "Смёржено"
+        case .cancelled: return "Отменено"
+        case .closed: return "Закрыто"
+        case .broken: return "Запуск повреждён"
+        }
+    }
+
+    private func durationText(from: Date, to: Date) -> String {
+        let seconds = max(0, Int(to.timeIntervalSince(from)))
+        if seconds < 60 { return "\(seconds) сек" }
+        if seconds < 3600 { return "\(seconds / 60) мин" }
+        return "\(seconds / 3600) ч \((seconds % 3600) / 60) мин"
+    }
+
+    private func staleColor(_ run: OrganizationRun, now: Date) -> Color {
+        guard let last = run.lastEventAt else { return Color.secondary }
+        return now.timeIntervalSince(last) > 120 ? .orange : Color.secondary
+    }
+
+    private func jiraBrowseURL(_ key: String) -> URL? {
+        guard let site = JiraSettingsStore.connectedSiteDisplay else { return nil }
+        let base = site.hasPrefix("http") ? site : "https://\(site)"
+        return URL(string: "\(base)/browse/\(key)")
     }
 
     // MARK: Панель этапа + чат агенту (правка №3, границы П9)
@@ -558,11 +721,22 @@ struct PipelineView: View {
     }
 
     /// Токен поехал назад — возврат: янтарная вспышка узла-получателя (9A).
+    /// Здесь же тихий пульс: свежий lastEventAt — короткий отклик токена (6A).
     private func trackReturns(_ newRuns: [UUID: OrganizationRun]) {
         for run in newRuns.values {
             let index = OrgUI.orderedStages(run.flow)
                 .firstIndex(where: { $0.id == run.currentStageID }) ?? 0
             defer { stageMemo[run.id] = index }
+            if let stamp = run.lastEventAt, lastEventMemo[run.id] != stamp {
+                lastEventMemo[run.id] = stamp
+                if run.status == .running {
+                    pulsingRuns.insert(run.id)
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(250))
+                        _ = pulsingRuns.remove(run.id)
+                    }
+                }
+            }
             guard let previous = stageMemo[run.id], index < previous else { continue }
             let stageID = run.currentStageID
             flashedStages.insert(stageID)

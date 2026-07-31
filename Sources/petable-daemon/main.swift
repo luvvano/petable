@@ -29,5 +29,10 @@ let listener = NSXPCListener(machServiceName: petableDaemonMachService)
 listener.delegate = delegate
 listener.resume()
 
+// Восстановление (П0): поднять запуски прошлой жизни — в том числе
+// прерванные drain'ом при обновлении движка. Асинхронно, слушатель
+// уже принимает коннекты.
+Task { await core.recoverAll() }
+
 FileHandle.standardError.write(Data("petable-daemon: слушаю \(petableDaemonMachService)\n".utf8))
 RunLoop.main.run()

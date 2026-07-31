@@ -55,6 +55,26 @@ public struct OrganizationRun: Codable, Equatable, Identifiable, Sendable {
     public var parentRunID: UUID?
     /// Дочерние запуски decompose-этапа; nil/пусто — детей нет.
     public var childRunIDs: [UUID]?
+    /// Момент последнего события запуска — «последнее событие N сек
+    /// назад» и тихий пульс активного этапа (6A). Опционал: старые
+    /// журналы поля не знают.
+    public var lastEventAt: Date?
+    /// Версия флоу на момент снапшота — бейдж «Запуск идёт по vN» (2A).
+    public var flowVersion: Int?
+    /// Итог merge для терминальной карточки (6A): SHA, ссылка (nil при
+    /// отказе push — деградация до хеша, T7.4), дифф-стат.
+    public var mergeSHA: String?
+    public var commitURL: String?
+    public var diffStat: String?
+    public var pushFailed: Bool?
+    /// Experimental-запуски (тени и форки, слайсы 12–13): без Jira
+    /// write-back, без push, терминальны до финального гейта — merge
+    /// недостижим по построению (side effects только у primary).
+    public var experimental: Bool?
+    /// Primary-запуск, копией которого едет тень; nil — не тень.
+    public var shadowOf: UUID?
+    /// Запуск, из которого сделан fork (⌥Enter дебаггера); nil — не форк.
+    public var forkOf: UUID?
 
     public init(
         id: UUID = UUID(),
@@ -87,7 +107,18 @@ public struct OrganizationRun: Codable, Equatable, Identifiable, Sendable {
         self.outcome = nil
         self.parentRunID = nil
         self.childRunIDs = nil
+        self.lastEventAt = nil
+        self.flowVersion = flow.version
+        self.mergeSHA = nil
+        self.commitURL = nil
+        self.diffStat = nil
+        self.pushFailed = nil
+        self.experimental = nil
+        self.shadowOf = nil
+        self.forkOf = nil
     }
+
+    public var isExperimental: Bool { experimental == true }
 
     public var currentStage: OrgStage? { flow.stage(currentStageID) }
 
@@ -107,7 +138,11 @@ public struct OrganizationRun: Codable, Equatable, Identifiable, Sendable {
             startedAt: startedAt,
             finishedAt: finishedAt,
             returnCount: returnCount,
-            costEstimate: costEstimate
+            costEstimate: costEstimate,
+            mergeSHA: mergeSHA,
+            commitURL: commitURL,
+            diffStat: diffStat,
+            experimental: experimental
         )
     }
 }

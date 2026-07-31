@@ -25,6 +25,10 @@ public struct Organization: Codable, Equatable, Sendable {
     /// Саммари завершённых запусков; пишутся идемпотентно по runID при
     /// реконсиляции (открытие документа/коннект), НЕ undoable.
     public var runSummaries: [RunSummary]
+    /// Конфигурируемый маппинг статусной модели Jira (правка №7):
+    /// вид этапа (StageKind.rawValue) → имя статуса Jira. Пусто/nil —
+    /// подбор по смыслу (эвристика hints движка).
+    public var jiraStatusMap: [String: String]?
 
     public init(
         orgID: UUID = UUID(),
@@ -34,7 +38,8 @@ public struct Organization: Codable, Equatable, Sendable {
         routes: [OrgRoute] = [],
         repos: [RepoRef] = [],
         tasks: [OrgTask] = [],
-        runSummaries: [RunSummary] = []
+        runSummaries: [RunSummary] = [],
+        jiraStatusMap: [String: String]? = nil
     ) {
         self.orgID = orgID
         self.employees = employees
@@ -44,6 +49,7 @@ public struct Organization: Codable, Equatable, Sendable {
         self.repos = repos
         self.tasks = tasks
         self.runSummaries = runSummaries
+        self.jiraStatusMap = jiraStatusMap
     }
 
     /// Флоу для типа задачи; nil — маршрута нет (вопрос человеку).
@@ -246,11 +252,25 @@ public struct OrgFlow: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var name: String
     public var stages: [OrgStage]
+    /// Версия определения: бампается при содержательной правке — бейдж
+    /// «Запуск идёт по v12 · текущий флоу v14» (2A). Активные запуски
+    /// едут по своему снапшоту (П3).
+    public var version: Int
 
-    public init(id: UUID = UUID(), name: String, stages: [OrgStage] = []) {
+    public init(id: UUID = UUID(), name: String, stages: [OrgStage] = [], version: Int = 1) {
         self.id = id
         self.name = name
         self.stages = stages
+        self.version = version
+    }
+
+    /// Старые документы/журналы без поля version читаются как v1.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        stages = try container.decode([OrgStage].self, forKey: .stages)
+        version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
     }
 
     public func stage(_ id: UUID) -> OrgStage? {
@@ -546,6 +566,16 @@ public struct RunSummary: Codable, Equatable, Identifiable, Sendable {
     public var returnCount: Int
     /// Отображаемая оценка стоимости в долларах; 0 — адаптер не отдал usage.
     public var costEstimate: Double
+    /// SHA merge-коммита (терминальная карточка 6A); nil — не merged.
+    public var mergeSHA: String?
+    /// Ссылка на коммит в origin; nil — remote нет или push не прошёл
+    /// (ссылка деградирует до хеша, T7.4).
+    public var commitURL: String?
+    /// Краткий дифф-стат merge.
+    public var diffStat: String?
+    /// Experimental-запуск (тень/форк): в истории с пометкой, задачу
+    /// с борда не снимает.
+    public var experimental: Bool?
 
     public var id: UUID { runID }
 
@@ -557,7 +587,11 @@ public struct RunSummary: Codable, Equatable, Identifiable, Sendable {
         startedAt: Date,
         finishedAt: Date,
         returnCount: Int = 0,
-        costEstimate: Double = 0
+        costEstimate: Double = 0,
+        mergeSHA: String? = nil,
+        commitURL: String? = nil,
+        diffStat: String? = nil,
+        experimental: Bool? = nil
     ) {
         self.runID = runID
         self.taskTitle = taskTitle
@@ -567,5 +601,9 @@ public struct RunSummary: Codable, Equatable, Identifiable, Sendable {
         self.finishedAt = finishedAt
         self.returnCount = returnCount
         self.costEstimate = costEstimate
+        self.mergeSHA = mergeSHA
+        self.commitURL = commitURL
+        self.diffStat = diffStat
+        self.experimental = experimental
     }
 }

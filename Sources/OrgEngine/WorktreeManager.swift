@@ -27,13 +27,20 @@ public struct WorktreeManager: Sendable {
     /// Создаёт ветку от текущего default и worktree запуска.
     /// Возвращает base SHA (пин T4).
     @discardableResult
-    public func createWorktree(run: OrganizationRun) throws -> String {
+    /// `from` — базовый SHA (fork стартует от точки форка источника,
+    /// пин refs/petable держит её от GC); nil/пусто — HEAD репозитория.
+    public func createWorktree(run: OrganizationRun, from baseSHA: String? = nil) throws -> String {
         let repo = URL(fileURLWithPath: run.repo.path)
         let worktree = worktreeURL(runID: run.id)
         try FileManager.default.createDirectory(
             at: worktree.deletingLastPathComponent(), withIntermediateDirectories: true
         )
-        let base = try git(repo, "rev-parse", "HEAD")
+        let base: String
+        if let baseSHA, !baseSHA.isEmpty {
+            base = baseSHA
+        } else {
+            base = try git(repo, "rev-parse", "HEAD")
+        }
         try git(repo, "worktree", "add", "-b", run.branchName, worktree.path, base)
         // Пин от GC: точка форка живёт и после удаления ветки (T4).
         try git(repo, "update-ref", "refs/petable/\(run.id.uuidString)", base)

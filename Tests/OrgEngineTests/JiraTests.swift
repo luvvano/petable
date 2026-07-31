@@ -81,7 +81,9 @@ struct JiraClientTests {
 
         let request = try #require(transport.requests.first)
         let url = try #require(request.url?.absoluteString)
-        #expect(url.hasPrefix("https://team.atlassian.net/rest/api/2/search?"))
+        // Новый endpoint /search/jql: старый /search удалён Atlassian
+        // (HTTP 410, CHANGE-2046).
+        #expect(url.hasPrefix("https://team.atlassian.net/rest/api/2/search/jql?"))
         #expect(url.contains("jql=project"))
         let auth = try #require(request.value(forHTTPHeaderField: "Authorization"))
         #expect(auth == "Basic \(Data("e@x.com:tok".utf8).base64EncodedString())")
@@ -197,7 +199,7 @@ struct JiraClientTests {
         let request = try #require(transport.requests.first)
         #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer BR")
         #expect(request.url?.absoluteString.hasPrefix(
-            "https://api.atlassian.com/ex/jira/cloud1/rest/api/2/search"
+            "https://api.atlassian.com/ex/jira/cloud1/rest/api/2/search/jql"
         ) == true)
     }
 
@@ -442,6 +444,31 @@ struct JiraWriteBackTests {
         let runID = try #require(await core.runID(forTask: task.id))
         try await send(core, .approve, runID)
         #expect(gateway.transitioned == ["DN-7"])
+    }
+
+    @Test("Кастомный маппинг статусов (№7): имя из jiraStatusMap приоритетнее эвристики; merge наследует review")
+    func customStatusMapSync() async throws {
+        let gateway = FakeJiraGateway()
+        let (core, org, task, _) = try makeWorld(gateway: gateway)
+        var custom = org
+        custom.jiraStatusMap = ["work": "В доработке", "review": "Код-ревью"]
+
+        try await send(core, .configure, ConfigureCommand(jira: config))
+        try await send(core, .startRun, StartRunCommand(organization: custom, taskID: task.id))
+
+        let hintFirsts = gateway.stageTransitions.map { $0.hints.first ?? "" }
+        #expect(hintFirsts == ["В доработке", "Код-ревью", "test", "Код-ревью"])
+    }
+
+    @Test("customStatus: свой вид → как задан; decompose/join наследуют work; пустые значения игнорируются")
+    func customStatusInheritance() {
+        let map = ["work": "В разработке", "review": "Код-ревью", "test": "  "]
+        #expect(DaemonCore.customStatus(for: .work, map: map) == "В разработке")
+        #expect(DaemonCore.customStatus(for: .decompose, map: map) == "В разработке")
+        #expect(DaemonCore.customStatus(for: .join, map: map) == "В разработке")
+        #expect(DaemonCore.customStatus(for: .merge, map: map) == "Код-ревью")
+        #expect(DaemonCore.customStatus(for: .test, map: map) == nil)
+        #expect(DaemonCore.customStatus(for: .work, map: nil) == nil)
     }
 
     @Test("Recovery T2: незакрытый интент восстановлен; факт сверен по маркеру — дубля комментария нет")

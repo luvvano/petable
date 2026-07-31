@@ -45,6 +45,9 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
         /// Настройки организации: типы задач · сотрудники · конвейер ·
         /// интеграции (правка автора №1/№4 — отделены от конвейера).
         case organizationSettings
+        /// Дебаггер запусков (слайс 12): replay по event-log, fork,
+        /// сравнение, тени.
+        case organizationDebugger
     }
 
     /// Контроллер конвейера — ОДИН на документ, общий для «Конвейера» и
@@ -143,7 +146,7 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
             guard research.templates.contains(where: { $0.id == id }) else { return }
         case .segment(let id):
             guard segmentation.segments.contains(where: { $0.id == id }) else { return }
-        case .segmentMap, .organization, .organizationSettings:
+        case .segmentMap, .organization, .organizationSettings, .organizationDebugger:
             break
         }
         selectedResearchItem = item
@@ -173,6 +176,14 @@ final class PetableDocument: ReferenceFileDocument, ObservableObject {
         let before = org
         transform(&org)
         guard org != before else { return }
+        // Версия флоу (2A): содержательная правка бампает version —
+        // бейдж «Запуск идёт по vN · текущий флоу vM» на канвасе.
+        for index in org.flows.indices {
+            if let old = before.flows.first(where: { $0.id == org.flows[index].id }),
+               old.stages != org.flows[index].stages {
+                org.flows[index].version = old.version + 1
+            }
+        }
         organization = org
         registerOrganizationUndo(restoring: before)
     }

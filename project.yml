@@ -42,9 +42,23 @@ targets:
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGN_STYLE: Automatic
         ENABLE_HARDENED_RUNTIME: false
+        ENABLE_USER_SCRIPT_SANDBOXING: false
     # SHA и путь репо сборки — для самообновления (UpdateService):
     # скрипт-фаза бежит ДО подписи, правка Info.plist продукта безопасна.
     postBuildScripts:
+      # Бинарь демона — в ресурсы бандла: установка движка из приложения
+      # (П0) копирует его в ~/Library/Application Support/Petable.
+      # env -i: xcodebuild-окружение ломает вложенный swift build.
+      - name: Embed daemon
+        basedOnDependencyAnalysis: false
+        script: |
+          set -e
+          /usr/bin/env -i HOME="$HOME" PATH="/usr/bin:/bin:/usr/local/bin" \
+            /usr/bin/xcrun swift build -c release --product petable-daemon \
+            --package-path "$PROJECT_DIR"
+          RES="$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH"
+          mkdir -p "$RES"
+          cp "$PROJECT_DIR/.build/release/petable-daemon" "$RES/petable-daemon"
       - name: Embed build SHA
         basedOnDependencyAnalysis: false
         script: |

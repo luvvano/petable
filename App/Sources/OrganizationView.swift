@@ -1,4 +1,5 @@
 import SwiftUI
+import AgentRuntime
 import GraphCore
 import OrgEngine
 
@@ -41,6 +42,9 @@ struct OrganizationView: View {
     @State private var orchestratorEnabled = OrchestratorSettings.enabled
     @State private var orchestratorAuto = OrchestratorSettings.autoStart
     @State private var orchestratorMinutes = OrchestratorSettings.intervalMinutes
+    @State private var orchestratorResolve = OrchestratorSettings.resolveStuck
+    /// Черновики маппинга статусов Jira (правка №7), коммит по ⏎.
+    @State private var jiraStatusDrafts: [String: String] = [:]
 
     var body: some View {
         Group {
@@ -405,7 +409,8 @@ struct OrganizationView: View {
 
     @ViewBuilder
     private func integrationsSection(_ organization: Organization) -> some View {
-        jiraCard
+        engineCard
+        jiraCard(organization)
         githubCard
         reposCard(organization)
         orchestratorCard
@@ -416,7 +421,53 @@ struct OrganizationView: View {
         }
     }
 
-    private var jiraCard: some View {
+    /// Движок-демон (П0): состояние, установка/обновление из приложения.
+    private var engineCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionHeader("ДВИЖОК")
+            HStack(spacing: 8) {
+                switch controller.mode {
+                case .daemon:
+                    Label("Демон запущен — конвейер живёт при закрытом приложении",
+                          systemImage: "checkmark.circle")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.green)
+                case .inProcess:
+                    Label("Движок в приложении — демон не установлен", systemImage: "exclamationmark.triangle")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.orange)
+                    if controller.canInstallEngine {
+                        Button("Установить демон") {
+                            Task { await controller.installOrUpdateEngine() }
+                        }
+                        .controlSize(.small)
+                    }
+                case let .unavailable(reason):
+                    Label(reason, systemImage: "xmark.octagon")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.red)
+                }
+            }
+            if controller.engineUpdateAvailable {
+                HStack(spacing: 8) {
+                    Text("Бинарь демона в этой сборке отличается от установленного.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.orange)
+                    Button("Обновить движок") {
+                        Task { await controller.installOrUpdateEngine() }
+                    }
+                    .controlSize(.small)
+                }
+            }
+            if let status = controller.engineStatus {
+                Text(status)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func jiraCard(_ organization: Organization) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             sectionHeader("JIRA")
             if let site = JiraSettingsStore.connectedSiteDisplay {
@@ -460,6 +511,51 @@ struct OrganizationView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(controller.jiraNeedsReauth ? Color.orange : Color.secondary)
             }
+            if JiraSettingsStore.connectedSiteDisplay != nil {
+                jiraStatusMapEditor(organization)
+            }
+        }
+    }
+
+    /// Маппинг статусной модели (правка №7): вид этапа → имя статуса
+    /// Jira; пусто — подбор по смыслу (эвристика движка). Текст по ⏎.
+    private func jiraStatusMapEditor(_ organization: Organization) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Статусы по этапам (пусто — подбор по смыслу):")
+                .font(.system(size: 10))
+                .foregroundStyle(.tertiary)
+            HStack(spacing: 8) {
+                ForEach([StageKind.work, .review, .test, .merge], id: \.self) { kind in
+                    jiraStatusField(kind, organization: organization)
+                }
+            }
+        }
+        .padding(.top, 2)
+    }
+
+    private func jiraStatusField(_ kind: StageKind, organization: Organization) -> some View {
+        let key = kind.rawValue
+        let current = organization.jiraStatusMap?[key] ?? ""
+        return TextField(
+            OrgUI.kindLabel(kind),
+            text: Binding(
+                get: { jiraStatusDrafts[key] ?? current },
+                set: { jiraStatusDrafts[key] = $0 }
+            )
+        )
+        .textFieldStyle(.roundedBorder)
+        .font(.system(size: 11))
+        .frame(width: 130)
+        .help("Имя статуса Jira для этапов вида «\(OrgUI.kindLabel(kind))», ⏎ — сохранить")
+        .onSubmit {
+            let value = (jiraStatusDrafts[key] ?? current)
+                .trimmingCharacters(in: .whitespaces)
+            document.updateOrganization { org in
+                var map = org.jiraStatusMap ?? [:]
+                map[key] = value.isEmpty ? nil : value
+                org.jiraStatusMap = map.isEmpty ? nil : map
+            }
+            jiraStatusDrafts[key] = nil
         }
     }
 
@@ -618,6 +714,14 @@ struct OrganizationView: View {
                     }
                 }
                 .font(.system(size: 12))
+                Toggle(
+                    "Зависшие разбирает оркестратор-агент: перезапуск с советом или отмена (гейты — всегда вам)",
+                    isOn: $orchestratorResolve
+                )
+                .font(.system(size: 12))
+                .onChange(of: orchestratorResolve) { _, value in
+                    OrchestratorSettings.resolveStuck = value
+                }
             }
         }
     }
@@ -642,8 +746,9 @@ struct OrganizationView: View {
     }
 }
 
-/// Редактор сотрудника (слайс 10 v1): роль, исполнитель, права.
-/// Текст — по ⏎, пикеры — сразу.
+/// Редактор сотрудника (слайс 10): роль, исполнитель, права, effort,
+/// лимиты, tools/skills/harness с пометками непереводимых полей per-CLI
+/// (П8) и итоговым фактическим вызовом. Текст — по ⏎, пикеры — сразу.
 private struct EmployeeEditor: View {
     let employee: Employee
     let onChange: (Employee) -> Void
@@ -652,6 +757,13 @@ private struct EmployeeEditor: View {
     @State private var name: String
     @State private var rolePrompt: String
     @State private var model: String
+    @State private var effort: String
+    @State private var tools: String
+    @State private var skills: String
+    @State private var harness: String
+    @State private var maxTokens: String
+    @State private var maxMinutes: String
+    @State private var maxChat: String
 
     init(employee: Employee, onChange: @escaping (Employee) -> Void, onDelete: @escaping () -> Void) {
         self.employee = employee
@@ -660,6 +772,13 @@ private struct EmployeeEditor: View {
         _name = State(initialValue: employee.name)
         _rolePrompt = State(initialValue: employee.rolePrompt)
         _model = State(initialValue: employee.adapter.model)
+        _effort = State(initialValue: employee.adapter.effort)
+        _tools = State(initialValue: employee.adapter.allowedTools.joined(separator: ", "))
+        _skills = State(initialValue: employee.adapter.skills.joined(separator: ", "))
+        _harness = State(initialValue: employee.adapter.harness)
+        _maxTokens = State(initialValue: "\(employee.adapter.limits.maxTokens)")
+        _maxMinutes = State(initialValue: "\(employee.adapter.limits.maxMinutes)")
+        _maxChat = State(initialValue: "\(employee.adapter.limits.maxChatIterations)")
     }
 
     var body: some View {
@@ -704,6 +823,49 @@ private struct EmployeeEditor: View {
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 200)
                     .onSubmit(commitTexts)
+                TextField("Effort", text: $effort)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 90)
+                    .onSubmit(commitTexts)
+            }
+            if employee.adapter.cli == "claude", employee.adapter.permissionProfile == "readOnly" {
+                unsupportedNote("«Только чтение» не транслируется в claude CLI — права остаются у самого CLI")
+            }
+            HStack(spacing: 8) {
+                limitField("Токены", text: $maxTokens)
+                limitField("Минуты", text: $maxMinutes)
+                limitField("Чат-итерации", text: $maxChat)
+                Text("0 — без лимита; стоимость — оценка, не enforce")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                TextField("Allowlist инструментов через запятую (пусто — дефолт CLI)", text: $tools)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(commitTexts)
+                if employee.adapter.cli == "codex", !employee.adapter.allowedTools.isEmpty {
+                    unsupportedNote("allowlist инструментов не поддерживается исполнителем codex")
+                }
+                TextField("Skills через запятую", text: $skills)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(commitTexts)
+                if !employee.adapter.skills.isEmpty {
+                    unsupportedNote("skills пока не транслируются во флаги CLI")
+                }
+            }
+            Text("ИНСТРУКЦИИ (HARNESS)")
+                .font(.system(size: 9, weight: .medium))
+                .kerning(1)
+                .foregroundStyle(.tertiary)
+            TextEditor(text: $harness)
+                .font(.system(size: 11))
+                .frame(minHeight: 44, maxHeight: 90)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(Color.secondary.opacity(0.25))
+                )
+            if employee.adapter.cli == "codex", !employee.adapter.harness.isEmpty {
+                unsupportedNote("harness не поддерживается исполнителем codex — уйдёт только текстом роли")
             }
             Text("РОЛЕВОЙ ПРОМПТ")
                 .font(.system(size: 9, weight: .medium))
@@ -729,26 +891,91 @@ private struct EmployeeEditor: View {
                         name = reset.name
                         rolePrompt = reset.rolePrompt
                         model = reset.adapter.model
+                        effort = reset.adapter.effort
+                        tools = reset.adapter.allowedTools.joined(separator: ", ")
+                        skills = reset.adapter.skills.joined(separator: ", ")
+                        harness = reset.adapter.harness
+                        maxTokens = "\(reset.adapter.limits.maxTokens)"
+                        maxMinutes = "\(reset.adapter.limits.maxMinutes)"
+                        maxChat = "\(reset.adapter.limits.maxChatIterations)"
                     }
                     .font(.system(size: 10))
                 }
                 Spacer()
                 Button("Сохранить текст") { commitTexts() }
                     .font(.system(size: 11))
-                    .disabled(name == employee.name
-                              && rolePrompt == employee.rolePrompt
-                              && model == employee.adapter.model)
+                    .disabled(!hasTextEdits)
             }
+            Text("ФАКТИЧЕСКИЙ ВЫЗОВ")
+                .font(.system(size: 9, weight: .medium))
+                .kerning(1)
+                .foregroundStyle(.tertiary)
+            Text(effectiveInvocation)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
         }
         .font(.system(size: 12))
         .frame(maxWidth: 560, alignment: .leading)
     }
 
-    private func commitTexts() {
+    private func unsupportedNote(_ text: String) -> some View {
+        Label(text, systemImage: "exclamationmark.triangle")
+            .font(.system(size: 10))
+            .foregroundStyle(.orange)
+    }
+
+    private func limitField(_ label: String, text: Binding<String>) -> some View {
+        TextField(label, text: text)
+            .textFieldStyle(.roundedBorder)
+            .frame(width: 96)
+            .onSubmit(commitTexts)
+            .help("\(label) на этап, ⏎ — сохранить")
+    }
+
+    /// Итоговая effective-конфигурация (П8): фактические аргументы CLI —
+    /// видно, что реально доедет до исполнителя.
+    private var effectiveInvocation: String {
+        let request = AgentRequest(
+            prompt: "…",
+            workingDirectory: URL(fileURLWithPath: "/"),
+            config: employee.adapter
+        )
+        let args = employee.adapter.cli == "codex"
+            ? CLIInvocation.codexArguments(request, schemaPath: nil)
+            : CLIInvocation.claudeArguments(request)
+        return "\(employee.adapter.cli) " + args
+            .map { $0 == "…" ? "«промпт»" : $0 }
+            .joined(separator: " ")
+    }
+
+    private var hasTextEdits: Bool {
+        edited() != employee
+    }
+
+    private func edited() -> Employee {
         var updated = employee
         updated.name = name.trimmingCharacters(in: .whitespaces)
         updated.rolePrompt = rolePrompt
         updated.adapter.model = model.trimmingCharacters(in: .whitespaces)
+        updated.adapter.effort = effort.trimmingCharacters(in: .whitespaces)
+        updated.adapter.allowedTools = tools
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        updated.adapter.skills = skills
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        updated.adapter.harness = harness
+        updated.adapter.limits.maxTokens = Int(maxTokens) ?? employee.adapter.limits.maxTokens
+        updated.adapter.limits.maxMinutes = Int(maxMinutes) ?? employee.adapter.limits.maxMinutes
+        updated.adapter.limits.maxChatIterations = Int(maxChat) ?? employee.adapter.limits.maxChatIterations
+        return updated
+    }
+
+    private func commitTexts() {
+        let updated = edited()
         guard updated != employee, !updated.name.isEmpty else { return }
         onChange(updated)
     }

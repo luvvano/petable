@@ -30,7 +30,8 @@ public struct StageRunner: Sendable {
     public func runCurrentStage(
         _ run: OrganizationRun,
         worktree: URL,
-        extraContext: String = ""
+        extraContext: String = "",
+        onEvent: (@Sendable () -> Void)? = nil
     ) async -> StageResult {
         guard let stage = run.currentStage else {
             return StageResult(
@@ -72,6 +73,7 @@ public struct StageRunner: Sendable {
 
         var updated = run
         for await event in adapter.run(request) {
+            onEvent?() // пульс живого этапа (6A)
             switch event {
             case let .started(sessionID):
                 updated.stageSessions[stage.id] = sessionID
@@ -154,6 +156,8 @@ public struct StageRunner: Sendable {
             return """
             Заверши ответ ровно одним JSON-блоком:
             {"status":"done","subtasks":[{"title":"…","taskType":"…","repo":"…"}]}
+            repo — имя репозитория из реестра ИЛИ новое имя: несуществующий
+            репозиторий будет создан в GitHub и склонирован автоматически.
             """
         default:
             return """
